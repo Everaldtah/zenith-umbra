@@ -4,23 +4,59 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator } from './Animator';
 import { heroModel } from './Assets';
+import { skinsFor, type Skin } from '../data/skins';
 
 const rimChunk = `
   float zuRim = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 2.5);
   totalEmissiveRadiance += zuRimColor * zuRim * zuRimStrength;
+  // legendary / epic skins: flowing energy lines across the body
+  if (zuPattern > 0.0) {
+    float band = sin(zuWorld.y * 7.0 - zuTime * 3.0 + sin(zuWorld.x * 3.0 + zuWorld.z * 2.0) * 1.5);
+    float line = smoothstep(0.93, 1.0, band) * zuPattern;
+    totalEmissiveRadiance += zuPatternColor * (line * 1.6 + zuGlow * 0.35 * zuRim);
+  }
+`;
+const skinChunk = `
+  // skin recolour of the painted texture: hue rotate, saturation/value, tint
+  {
+    vec3 c = diffuseColor.rgb;
+    float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b)), d = mx - mn;
+    float h = 0.0;
+    if (d > 1e-4) { if (mx == c.r) h = mod((c.g - c.b) / d, 6.0); else if (mx == c.g) h = (c.b - c.r) / d + 2.0; else h = (c.r - c.g) / d + 4.0; h /= 6.0; }
+    float s = mx > 0.0 ? d / mx : 0.0, v = mx;
+    h = fract(h + zuHue); s = clamp(s * zuSat, 0.0, 1.0); v = clamp(v * zuVal, 0.0, 1.0);
+    vec3 k = mod(vec3(5.0, 3.0, 1.0) + h * 6.0, 6.0);
+    vec3 rgb = v - v * s * clamp(min(k, 4.0 - k), 0.0, 1.0);
+    diffuseColor.rgb = mix(rgb, rgb * zuTint * 1.6, zuTintAmt);
+  }
 `;
 
-/** inject a team-coloured fresnel rim into a standard material (cheap outline that reads at range) */
-export function addRim(mat: THREE.Material, color: THREE.Color, strength: { value: number }) {
-  const m = mat as THREE.MeshStandardMaterial;
-  if ((m as any).__rim) return;
-  (m as any).__rim = true;
-  m.onBeforeCompile = sh => {
-    sh.uniforms.zuRimColor = { value: color };
-    sh.uniforms.zuRimStrength = strength;
-    sh.fragmentShader = 'uniform vec3 zuRimColor;\nuniform float zuRimStrength;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + rimChunk);
+export interface LookUniforms { [k: string]: { value: any } }
+export function lookUniforms(rim: THREE.Color): LookUniforms {
+  return {
+    zuRimColor: { value: rim }, zuRimStrength: { value: 0 }, zuHue: { value: 0 }, zuSat: { value: 1 }, zuVal: { value: 1 },
+    zuTint: { value: new THREE.Color('#ffffff') }, zuTintAmt: { value: 0 }, zuGlow: { value: 0 }, zuPattern: { value: 0 },
+    zuPatternColor: { value: new THREE.Color('#ffffff') }, zuTime: { value: 0 },
   };
-  m.customProgramCacheKey = () => 'zurim';
+}
+export function applySkin(u: LookUniforms, s: Skin) {
+  u.zuHue.value = s.hue / 360; u.zuSat.value = s.sat; u.zuVal.value = s.val;
+  u.zuTint.value.set(s.tint); u.zuTintAmt.value = s.tintAmt; u.zuGlow.value = s.glow;
+  u.zuPattern.value = s.pattern; u.zuPatternColor.value.set(s.patternColor);
+}
+
+/** inject rim light + skin recolour into a (per-instance) standard material */
+export function addLook(mat: THREE.Material, u: LookUniforms) {
+  const m = mat as THREE.MeshStandardMaterial;
+  if ((m as any).__look) return;
+  (m as any).__look = true;
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'varying vec3 zuWorld;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nzuWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform vec3 zuRimColor; uniform float zuRimStrength; uniform float zuHue; uniform float zuSat; uniform float zuVal; uniform vec3 zuTint; uniform float zuTintAmt; uniform float zuGlow; uniform float zuPattern; uniform vec3 zuPatternColor; uniform float zuTime;\nvarying vec3 zuWorld;\n'
+      + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + skinChunk).replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + rimChunk);
+  };
+  m.customProgramCacheKey = () => 'zulook';
   m.needsUpdate = true;
 }
 
@@ -86,7 +122,9 @@ export class CharacterView {
   model: THREE.Object3D;
   anim: Animator;
   rimColor: THREE.Color;
-  rim = { value: 0.0 };
+  look: LookUniforms;
+  get rim() { return this.look.zuRimStrength; }
+  skin: Skin;
   mats: THREE.Material[] = [];
   real = false;
   shieldMesh: THREE.Mesh;
@@ -95,8 +133,12 @@ export class CharacterView {
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
-  constructor(public actor: Actor, public viewerTeam: string) {
+  constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic') {
     this.rimColor = new THREE.Color(actor.team === viewerTeam ? '#5cc8ff' : '#ff3b5c');
+    this.look = lookUniforms(this.rimColor);
+    const skins = skinsFor(actor.def.id, actor.def.team);
+    this.skin = skins.find(s => s.id === skinId) ?? skins[0];
+    applySkin(this.look, this.skin);
     this.group.add(this.inner);
     this.model = mannequin(actor);
     this.inner.add(this.model);
@@ -127,6 +169,11 @@ export class CharacterView {
     this.loadReal();
   }
 
+  setSkin(id: string) {
+    const s = skinsFor(this.actor.def.id, this.actor.def.team).find(x => x.id === id);
+    if (s) { this.skin = s; applySkin(this.look, s); }
+  }
+
   private hookStep() { this.anim.onStep = (side, heavy) => this.onStep?.(this.actor, side, heavy); }
 
   private collectMats() {
@@ -135,7 +182,10 @@ export class CharacterView {
       const m = o as THREE.Mesh;
       if (m.isMesh) {
         const list = Array.isArray(m.material) ? m.material : [m.material];
-        for (const mt of list) { if ((mt as THREE.MeshStandardMaterial).isMeshStandardMaterial) addRim(mt, this.rimColor, this.rim); this.mats.push(mt); }
+        // per-instance materials: clones of the same hero must not share rim / skin uniforms
+        const own = list.map(mt => (mt as any).__owner === this ? mt : Object.assign(mt.clone(), { __owner: this }));
+        m.material = Array.isArray(m.material) ? own : own[0];
+        for (const mt of own) { if ((mt as THREE.MeshStandardMaterial).isMeshStandardMaterial) addLook(mt, this.look); this.mats.push(mt); }
       }
     });
   }
@@ -173,6 +223,7 @@ export class CharacterView {
 
   update(dt: number, time: number, viewer: { team: string; sees: (a: Actor) => boolean }) {
     const a = this.actor;
+    this.look.zuTime.value = time;
     this.group.position.set(a.pos.x, a.pos.y, a.pos.z);
     this.group.rotation.y = a.yaw;
     this.inner.scale.setScalar(a.scale);

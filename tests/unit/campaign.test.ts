@@ -3,7 +3,8 @@ import { LEVELS } from '../../src/campaign/data';
 import { appendFileSync } from 'node:fs';
 
 describe('campaign levels are beatable by an AI squad', () => {
-  for (const L of LEVELS) {
+  const only = process.env.LEVELS?.split(',');
+  for (const L of LEVELS.filter(l => !only || only.includes(l.id))) {
     it(`${L.id}`, () => {
       const m = createCampaign(L.id, [], 0.85);
       const w = m.world, d = m.director;

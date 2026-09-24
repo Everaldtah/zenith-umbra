@@ -194,6 +194,7 @@ export class Fx {
       case 'zonebreak': this.ring(p, e.r ?? 6, e.color ?? '#9d7bff', now, 0.5); P.emit(p, n(50), c, { speed: 6, life: 0.6, size: 0.3, spread: e.r ?? 4 }); break;
       case 'singularity': P.emit(p, n(30), c, { speed: 3, life: 0.6, size: 0.4, spread: 3 }); break;
       case 'fall': break;
+      case 'bossbeam': if (e.to) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.45); this.beam(p, e.to, '#ffffff', now, 0.07, 0.15); P.emit(e.to, n(3), c, { speed: 4, life: 0.3, size: 0.5 }); } break;
       default: P.emit(p, n(10), c, { speed: 3, life: 0.4, size: 0.25 });
     }
   }
@@ -278,6 +279,37 @@ export class Fx {
       if (z.kind === 'tether') continue;
       seen.add(z.id);
       let m = this.zoneMeshes.get(z.id);
+      if (z.kind === 'tele') {
+        // boss attack warning: a red shape whose inner fill grows until the hit lands
+        const d = z.data;
+        if (!m) {
+          m = new THREE.Group();
+          const geo = d.shape === 'line' ? new THREE.PlaneGeometry(1, 1) : new THREE.CircleGeometry(1, 48);
+          const mat = new THREE.ShaderMaterial({
+            transparent: true, depthWrite: false, side: THREE.DoubleSide,
+            uniforms: { k: { value: 0 }, c: { value: new THREE.Color(d.color ?? '#ff3355') }, line: { value: d.shape === 'line' ? 1 : 0 } },
+            vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+            fragmentShader: `uniform float k; uniform vec3 c; uniform float line; varying vec2 vUv;
+              void main(){ vec2 p=vUv-0.5; float r = line>0.5 ? abs(p.y)*2.0 : length(p)*2.0; if(r>1.0) discard;
+                float edge=smoothstep(0.88,0.97,r); float fill=step(r,k)*0.35; float warn=mix(vec3(1.0,0.15,0.2),c,0.35).r;
+                gl_FragColor=vec4(mix(vec3(1.0,0.12,0.16),c,0.3),(edge*0.9+fill+0.12)); }`,
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.rotation.x = -Math.PI / 2;
+          if (d.shape === 'line') {
+            const L = Math.hypot(d.x2 - d.x, d.z2 - d.z);
+            mesh.scale.set(L, z.r * 2, 1);
+            m.position.set((d.x + d.x2) / 2, z.y + 0.1, (d.z + d.z2) / 2);
+            m.rotation.y = -Math.atan2(d.z2 - d.z, d.x2 - d.x);
+          } else { mesh.scale.setScalar(z.r); m.position.set(z.x, z.y + 0.1, z.z); }
+          m.add(mesh);
+          this.group.add(m); this.zoneMeshes.set(z.id, m);
+        }
+        const k = Math.min(1, (now - z.born) / Math.max(0.01, d.fireAt - z.born));
+        ((m.children[0] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.k.value = k;
+        m.visible = !d.done;
+        continue;
+      }
       const col = new THREE.Color(z.kind === 'seal' || z.kind === 'sanctuary' ? '#ffe28a' : z.kind === 'grievous' ? '#c77dff' : z.kind === 'singularity' ? '#ff2244' : '#ffd27a');
       if (!m) {
         m = new THREE.Group();

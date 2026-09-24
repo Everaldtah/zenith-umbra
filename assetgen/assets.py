@@ -223,3 +223,8 @@ def jobs3():
     for cid, p in CINEMATIC:
         out.append((cid, "keyart", f"{p}, 16:9 widescreen, cinematic lighting, detailed, {KEY_STYLE}", NEG_ART, 1344, 768, 2))
     return out
+
+
+# ---- hex re-render: no puppet stand (pass 2 always drew one standing on the floor beside him)
+HEXFIX = [("model_hex", "model", "sinister anime puppeteer named Hex, cracked white porcelain doll mask, tall thin figure, patchwork violet and black long coat with stitches, glowing violet strings dangling from his fingertips, empty hands, nothing on the floor, " + MODEL2_STYLE, NEG2 + ", stand, tripod, pedestal, puppet, doll on the floor, props", 1024, 1024, 4)]
+def jobs4(): return HEXFIX

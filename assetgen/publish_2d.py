@@ -5,7 +5,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 PUB = os.path.join(HERE, '..', 'public')
 SRC = [os.path.join(HERE, 'out', d, 'img') for d in ('campaign', 'models2', 'pilots', 'concepts')]   # earlier dirs win
-KEY_PICK = {'enra': 0, 'gorgoth': 0, 'hex': 1, 'kagemaru': 0, 'kaien': 1, 'mirei': 1, 'nocturne': 0, 'raijin': 0, 'tenkai': 0, 'yuzu': 1, 'haruto': 0, 'vorn': 1}
+KEY_PICK = {'qelvaris': 1, 'enra': 0, 'gorgoth': 0, 'hex': 1, 'kagemaru': 0, 'kaien': 1, 'mirei': 1, 'nocturne': 0, 'raijin': 0, 'tenkai': 0, 'yuzu': 1, 'haruto': 0, 'vorn': 1}
 MAP_PICK = {'amatsu': 0, 'cathedral': 1, 'hangar': 0, 'kurogane': 1, 'rift': 0, 'training': 0}
 
 def find(name):
@@ -14,10 +14,23 @@ def find(name):
         if os.path.exists(p): return p
     return None
 
+HQ = os.path.join(HERE, 'out', 'hq')
+# web tier (Vercel): smaller + lower quality for fast loads; desktop tier (Windows app): full resolution, high quality
+WEB_MAX = {'img/key_': (640, 70), 'img/map_': (1024, 70), 'img/cine_': (1280, 72), 'img/portrait_': (256, 76), 'env/sky_': (1280, 70), 'env/tex_': (512, 72)}
+
 def save(im, rel, q=84, size=None):
     if size: im = im.copy(); im.thumbnail(size, Image.LANCZOS)
+    # desktop / HQ copy
+    out = os.path.join(HQ, rel); os.makedirs(os.path.dirname(out), exist_ok=True)
+    im.save(out, 'WEBP', quality=92, method=6)
+    # web copy
+    w = im
+    for pre, (mx, wq) in WEB_MAX.items():
+        if rel.startswith(pre):
+            if max(w.size) > mx: w = w.copy(); w.thumbnail((mx, mx), Image.LANCZOS)
+            q = min(q, wq); break
     out = os.path.join(PUB, rel); os.makedirs(os.path.dirname(out), exist_ok=True)
-    im.save(out, 'WEBP', quality=q, method=6)
+    w.save(out, 'WEBP', quality=q, method=6)
 
 n = 0
 for hid, k in KEY_PICK.items():
@@ -41,7 +54,7 @@ for p in sorted(glob.glob(os.path.join(HERE, 'out', 'campaign', 'img', '*.png'))
     if name.startswith(('cine_', 'map_c', 'key_boss')) and k == '0': save(Image.open(p).convert('RGB'), f'img/{name}.webp', 82); n += 1
     elif name.startswith('sky_c'): save(Image.open(p).convert('RGB'), f'env/{name}.webp', 82); n += 1
     elif name.startswith('tex_c'): save(Image.open(p).convert('RGB'), f'env/{name}.webp', 82, (1024, 1024)); n += 1
-    elif name == 'key_qelvaris' and k == '0':
+    elif name == 'key_qelvaris' and k == '1':
         im = Image.open(p).convert('RGB'); W, H = im.size
         save(im, 'img/key_qelvaris.webp', 82); s = int(W * 0.62); x0 = (W - s) // 2
         save(im.crop((x0, int(H * .06), x0 + s, int(H * .06) + s)), 'img/portrait_qelvaris.webp', 85, (256, 256)); n += 2

@@ -108,7 +108,13 @@ export class Hud {
       this.banner.innerHTML = spectating ? `<span>${spectating}</span>` : '';
     }
     // objective
-    if (w.mode !== 'training') {
+    const dir = w.director as any;
+    if (w.mode === 'campaign' && dir) {
+      const b = dir.boss && dir.boss.alive ? dir.boss : null;
+      this.obj.innerHTML = b
+        ? `<div class="bossbar" style="--c:${b.def.glow}"><b>${b.def.name}</b><small>${b.def.title}</small><div><i style="width:${(b.health / b.maxHp * 100).toFixed(1)}%"></i></div><em>Weak point: ${dir.boss.def.weak ?? ''}</em></div>`
+        : `<div class="mid">${dir.level.name.toUpperCase()}<small>${dir.objective}</small></div>`;
+    } else if (w.mode !== 'training') {
       const P = w.point, my = me?.team ?? 'zenith';
       const unlock = Math.max(0, P.unlockAt - t);
       const capTxt = P.contested ? 'CONTESTED' : P.capTeam ? `${P.capTeam === my ? 'CAPTURING' : 'LOSING'} ${P.capture.toFixed(0)}%` : P.owner ? (P.owner === my ? 'HOLDING' : 'ENEMY HOLDS') : 'NEUTRAL';

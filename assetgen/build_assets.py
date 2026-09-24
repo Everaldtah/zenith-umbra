@@ -22,9 +22,9 @@ HEROES = {
     'bot_dummy': (1.9, ['--tris', '12000']), 'bot_sentry': (1.7, ['--mech', '--tris', '12000']),
     # campaign
     'qelvaris': (2.3, []), 'minion_lancer': (2.0, ['--tris', '12000']), 'minion_sentinel': (2.2, ['--mech', '--tris', '12000']),
-    'boss_ironmaw': (14, ['--mech', '--tris', '40000']), 'boss_reaper': (16, ['--mech', '--tris', '40000']), 'boss_genesis': (18, ['--mech', '--tris', '40000']),
+    'boss_ironmaw': (14, ['--mech', '--tris', '40000']), 'boss_leviathan': (16, ['--mech', '--tris', '40000']), 'boss_reaper': (16, ['--mech', '--tris', '40000']), 'boss_genesis': (18, ['--mech', '--tris', '40000']),
 }
-STATIC = {'bot_drone': 1.0, 'minion_swarmer': 1.2, 'minion_bomber': 1.4, 'boss_leviathan': 16, 'boss_phoenix': 15}
+STATIC = {'bot_drone': 1.0, 'minion_swarmer': 1.2, 'minion_bomber': 1.4, 'boss_phoenix': 15}
 
 
 def sources():
@@ -35,10 +35,10 @@ def sources():
     return found
 
 
-def gltf(src: Path, dst: Path, tex: int, simplify: float | None = None):
+def gltf(src: Path, dst: Path, tex: int, simplify: float | None = None, err: float = 0.002):
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = ['npx', '--yes', '@gltf-transform/cli', 'optimize', str(src), str(dst), '--compress', 'draco', '--texture-compress', 'webp', '--texture-size', str(tex)]
-    if simplify: cmd += ['--simplify', 'true', '--simplify-ratio', str(simplify), '--simplify-error', '0.002']
+    if simplify: cmd += ['--simplify', 'true', '--simplify-ratio', str(simplify), '--simplify-error', str(err)]
     else: cmd += ['--simplify', 'false']
     r = subprocess.run(cmd, capture_output=True, text=True, shell=True, encoding='utf-8', errors='replace')
     if r.returncode: print(r.stdout[-500:], r.stderr[-500:])
@@ -85,8 +85,9 @@ def main():
     def opt(j):
         aid, p, kind, h = j
         big = aid.startswith('boss_')
-        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.5 if kind in ('prop', 'static') else None)
-        if kind != 'prop': gltf(p, HQ / f'{aid}.glb', 2048, 0.7 if kind == 'static' else None)
+        # web: props are background dressing -> heavy decimation; desktop keeps far more detail
+        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.12 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.01)
+        gltf(p, HQ / f'{aid}.glb', 2048 if kind != 'prop' else 1024, 0.45 if kind == 'prop' else 0.7 if kind == 'static' else None)
         print(f"{'ok ' if ok else 'ERR'} {aid:24s} {(PUB / f'{aid}.glb').stat().st_size / 1e6 if ok else 0:5.2f} MB", flush=True)
         return j, ok
     with ThreadPoolExecutor(4) as ex:

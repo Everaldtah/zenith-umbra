@@ -9,6 +9,7 @@ const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z
 const WEB = path.resolve(HERE, '..');
 const GAME = path.join(HERE, 'game');
 const HQ = path.join(WEB, 'assetgen', 'out', 'models_hq');
+const HQ2D = path.join(WEB, 'assetgen', 'out', 'hq');
 const run = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'inherit' });
 
 run('npx vite build', WEB);
@@ -16,6 +17,8 @@ fs.rmSync(GAME, { recursive: true, force: true });
 fs.cpSync(path.join(WEB, 'dist'), GAME, { recursive: true });
 // desktop gets the 2K-texture models the web build leaves out
 if (fs.existsSync(HQ)) for (const f of fs.readdirSync(HQ)) if (f.endsWith('.glb')) fs.copyFileSync(path.join(HQ, f), path.join(GAME, 'models', f));
+// ...and full-resolution key art, skies and textures
+if (fs.existsSync(HQ2D)) fs.cpSync(HQ2D, GAME, { recursive: true });
 
 const [appDir] = await packager({
   dir: HERE, out: path.join(HERE, 'out'), overwrite: true, platform: 'win32', arch: 'x64',

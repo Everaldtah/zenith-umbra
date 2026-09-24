@@ -7,9 +7,18 @@ import * as THREE from 'three';
 
 export const BONES = ['root', 'hips', 'spine', 'chest', 'neck', 'head',
   'shoulder_L', 'upperarm_L', 'forearm_L', 'hand_L', 'shoulder_R', 'upperarm_R', 'forearm_R', 'hand_R',
-  'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R'] as const;
+  'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R',
+  'hair_B_1', 'hair_B_2', 'hair_B_3', 'hair_L_1', 'hair_L_2', 'hair_L_3', 'hair_R_1', 'hair_R_2', 'hair_R_3',
+  'skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'skirt_F_1', 'skirt_F_2', 'skirt_F_3'] as const;
 type BoneName = typeof BONES[number];
+/** spring chains: [segment1, segment2, tip marker, parent, stiffness, damping, max angle (rad)] */
+const CHAINS: [BoneName, BoneName, BoneName, BoneName, number, number, number][] = [
+  ['hair_B_1', 'hair_B_2', 'hair_B_3', 'head', 0.1, 0.86, 1.2], ['hair_L_1', 'hair_L_2', 'hair_L_3', 'head', 0.1, 0.86, 1.2], ['hair_R_1', 'hair_R_2', 'hair_R_3', 'head', 0.1, 0.86, 1.2],
+  ['skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'hips', 0.2, 0.8, 0.75], ['skirt_F_1', 'skirt_F_2', 'skirt_F_3', 'hips', 0.26, 0.78, 0.6],
+];
 const CHILD: Partial<Record<BoneName, BoneName>> = {
+  hair_B_1: 'hair_B_2', hair_B_2: 'hair_B_3', hair_L_1: 'hair_L_2', hair_L_2: 'hair_L_3', hair_R_1: 'hair_R_2', hair_R_2: 'hair_R_3',
+  skirt_B_1: 'skirt_B_2', skirt_B_2: 'skirt_B_3', skirt_F_1: 'skirt_F_2', skirt_F_2: 'skirt_F_3',
   hips: 'spine', spine: 'chest', chest: 'neck', neck: 'head', shoulder_L: 'upperarm_L', upperarm_L: 'forearm_L', forearm_L: 'hand_L',
   shoulder_R: 'upperarm_R', upperarm_R: 'forearm_R', forearm_R: 'hand_R', thigh_L: 'shin_L', shin_L: 'foot_L', thigh_R: 'shin_R', shin_R: 'foot_R',
 };
@@ -48,6 +57,72 @@ export class Animator {
   plant: (THREE.Vector3 | null)[] = [null, null];                // world-space planted foot positions
   private swingFrom: (THREE.Vector3 | null)[] = [null, null];
   private restepT = [0, 0];
+  // spring chain state: world-space tip + previous tip per chain segment
+  private spring = new Map<string, { tip: THREE.Vector3; prev: THREE.Vector3 }>();
+  private posCache = new Map<string, THREE.Vector3>();
+  private hipsOffNow = new THREE.Vector3();
+
+  /** current model-space position of a bone head (FK from the deltas applied this frame) */
+  private modelPos(n: BoneName): THREE.Vector3 {
+    const c = this.posCache.get(n); if (c) return c;
+    const R = this.rest[n]!;
+    let p: THREE.Vector3;
+    if (n === 'hips' || !this.bones[n]?.parent) p = R.p.clone().add(this.hipsOffNow);
+    else {
+      const parObj = this.bones[n]!.parent!;
+      const parName = (Object.keys(this.bones) as BoneName[]).find(k => this.bones[k] === parObj);
+      if (!parName || !this.rest[parName]) p = R.p.clone().add(this.hipsOffNow);
+      else {
+        const pq = this.modelQ.get(parObj) ?? this.rest[parName]!.q;
+        const delta = pq.clone().multiply(this.rest[parName]!.q.clone().invert());
+        p = this.modelPos(parName).clone().add(R.p.clone().sub(this.rest[parName]!.p).applyQuaternion(delta));
+      }
+    }
+    this.posCache.set(n, p);
+    return p;
+  }
+
+  private springs(s: AnimState, dt: number) {
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
+    const toW = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * s.scale, s.pos.y + m.y * s.scale, s.pos.z + (-m.x * sy + m.z * cy) * s.scale);
+    const dirToM = (w: THREE.Vector3) => new THREE.Vector3(w.x * cy - w.z * sy, w.y, w.x * sy + w.z * cy).normalize();
+    const f = dt * 60;
+    for (const [b1, b2, b3, par, stiff, damp, maxA] of CHAINS) {
+      if (!this.bones[b1] || !this.rest[b1] || !this.rest[b2]) continue;
+      for (const [seg, next] of [[b1, b2], [b2, b3]] as [BoneName, BoneName][]) {
+        const R = this.rest[seg]!, Rn = this.rest[next];
+        if (!Rn) continue;
+        const len = R.p.distanceTo(Rn.p) * s.scale;
+        const parObj = this.bones[seg]!.parent!;
+        const parName = (Object.keys(this.bones) as BoneName[]).find(k => this.bones[k] === parObj) ?? (seg === b1 ? par : b1);
+        if (!this.rest[parName]) continue;
+        const pq = this.modelQ.get(parObj) ?? this.rest[parName]!.q;
+        const base = pq.clone().multiply(this.rest[parName]!.q.clone().invert());
+        const headW = toW(this.modelPos(seg));
+        const rigidDirM = R.dir.clone().applyQuaternion(base);
+        const rigidDirW = new THREE.Vector3(rigidDirM.x * cy + rigidDirM.z * sy, rigidDirM.y, -rigidDirM.x * sy + rigidDirM.z * cy);
+        const target = headW.clone().addScaledVector(rigidDirW, len);
+        let st = this.spring.get(seg);
+        if (!st || st.tip.distanceTo(target) > len * 3) { st = { tip: target.clone(), prev: target.clone() }; this.spring.set(seg, st); }
+        if (dt > 0) {
+          const vel = st.tip.clone().sub(st.prev).multiplyScalar(Math.pow(damp, f));
+          st.prev.copy(st.tip);
+          st.tip.add(vel);
+          st.tip.y -= 9.8 * 0.35 * dt * dt * 60;                             // gravity (scaled for readable sway)
+          st.tip.x -= s.vel.x * dt * 0.35; st.tip.z -= s.vel.z * dt * 0.35;    // air drag while moving / flying
+          st.tip.lerp(target, 1 - Math.pow(1 - stiff, f));
+          // keep segment length, and never swing further than maxA from the rigid pose
+          const d = st.tip.clone().sub(headW);
+          let dir = d.lengthSq() > 1e-8 ? d.normalize() : rigidDirW.clone();
+          const ang = dir.angleTo(rigidDirW);
+          if (ang > maxA) dir = rigidDirW.clone().lerp(dir, maxA / ang).normalize();
+          st.tip.copy(headW).addScaledVector(dir, len);
+        }
+        this.aimBone(seg, dirToM(st.tip.clone().sub(headW)), base);
+        this.posCache.clear();
+      }
+    }
+  }
 
   constructor(public model: THREE.Object3D) {
     model.traverse(o => {
@@ -333,5 +408,8 @@ export class Animator {
         this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (f - fold))).multiply(rot(Y, side * fold * 0.6)));
       }
     }
+    // ---------------- secondary motion: hair / coat tails / skirts
+    this.hipsOffNow.copy(hipsOff); this.posCache.clear();
+    this.springs(s, dt);
   }
 }

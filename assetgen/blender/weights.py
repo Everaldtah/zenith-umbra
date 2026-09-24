@@ -84,5 +84,5 @@ dmin = Dist.min(1, keepdims=True)
 Wt = np.exp(-((Dist - dmin) / (H * 0.035)) ** 2) / (1 + (Dist / (H * 0.05)) ** 2)
 Wt[Dist > dmin + H * 0.12] = 0
 Wt /= np.maximum(Wt.sum(1, keepdims=True), 1e-8)
-np.savez(sys.argv[2], w=Wt.astype(np.float32))
+np.savez(sys.argv[2], w=Wt.astype(np.float32), nearest=np.argmin(Dist, axis=1).astype(np.int32), dist=Dist.min(1).astype(np.float32))
 print("WEIGHTS_OK", len(coords), "voxels", Wt.shape)

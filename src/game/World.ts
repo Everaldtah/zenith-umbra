@@ -479,7 +479,8 @@ export class World {
     this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire });
   }
 
-  private move(a: Actor, dt: number) {
+  /** movement integration only (also used by co-op clients to predict their own hero) */
+  move(a: Actor, dt: number) {
     const t = this.time, d = a.def, inp = a.input, L = this.level;
     a.yaw = inp.yaw; a.pitch = Math.max(-1.45, Math.min(1.45, inp.pitch));
     const wasGrounded = a.grounded;
@@ -544,9 +545,10 @@ export class World {
     const [X, Z] = L.size;
     a.pos.x = Math.max(-X - 1, Math.min(X + 1, a.pos.x)); a.pos.z = Math.max(-Z - 1, Math.min(Z + 1, a.pos.z));
     // AI walkers never step off a ledge into the void on their own (knockbacks / pulls still can)
-    if (a.controller && !a.isPlayer && wasGrounded && !a.forced && !a.flying && a.def.frame !== 'drone' && a.vel.y <= 0
+    if (a.controller && !a.isPlayer && (wasGrounded || a.isBoss) && (!a.forced || a.isBoss) && !a.flying && a.def.frame !== 'drone' && a.vel.y <= 0
       && L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.3) < a.pos.y - 5) {
       a.pos.x = x0; a.pos.z = z0; a.vel.x = 0; a.vel.z = 0;
+      if (a.isBoss) a.forced = null;    // colossi stop at the edge instead of charging into the void
     }
     // sweep from last frame's height so fast falls can't tunnel through thin floors
     const g = L.groundAt(a.pos.x, a.pos.z, Math.max(a.pos.y, Math.min(y0, a.pos.y + 3)), a.radius);

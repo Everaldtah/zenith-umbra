@@ -2,7 +2,8 @@
 // "rel" is ordered + reliable (events), "fast" is unordered with no retransmits (state snapshots).
 // If a direct connection can't be made within a few seconds (strict NAT/firewall), traffic is relayed
 // through the lobby's MQTT broker instead, and the link keeps trying to go direct in the background.
-import type { Lobby } from './lobby';
+/** anything that can deliver a lobby message to a peer (MQTT lobby or the Vercel node) */
+export interface Signaller { send(to: string, msg: { t: string; [k: string]: unknown }, reliable?: boolean): void; }
 
 export type LinkState = 'connecting' | 'p2p' | 'relay' | 'closed';
 const ICE: RTCIceServer[] = [
@@ -22,7 +23,7 @@ export class PeerLink {
   private lastRecv = Date.now();
   private timers: number[] = [];
 
-  constructor(private lobby: Lobby, readonly peer: string, readonly sid: string, readonly initiator: boolean, forceRelay = false) {
+  constructor(private lobby: Signaller, readonly peer: string, readonly sid: string, readonly initiator: boolean, forceRelay = false) {
     if (!forceRelay && typeof RTCPeerConnection !== 'undefined') {
       try { this.setupRtc(); } catch { /* no WebRTC: relay only */ }
     }

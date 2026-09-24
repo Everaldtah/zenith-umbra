@@ -2,7 +2,7 @@
  "models": {
   "bot_dummy": {
    "height": 1.9,
-   "tris": 12000,
+   "tris": 11999,
    "bones": [
     "humanoid"
    ]
@@ -35,7 +35,7 @@
   },
   "mirei": {
    "height": 1.65,
-   "tris": 26000,
+   "tris": 25999,
    "bones": [
     "humanoid"
    ]
@@ -49,14 +49,14 @@
   },
   "kaien": {
    "height": 1.8,
-   "tris": 26000,
+   "tris": 25999,
    "bones": [
     "humanoid"
    ]
   },
   "raijin": {
    "height": 1.8,
-   "tris": 26000,
+   "tris": 25999,
    "bones": [
     "humanoid"
    ]
@@ -70,14 +70,14 @@
   },
   "hex": {
    "height": 1.95,
-   "tris": 23319,
+   "tris": 24061,
    "bones": [
     "humanoid"
    ]
   },
   "kagemaru": {
    "height": 1.78,
-   "tris": 26000,
+   "tris": 25999,
    "bones": [
     "humanoid"
    ]
@@ -98,10 +98,74 @@
   },
   "vorn": {
    "height": 1.85,
-   "tris": 23357,
+   "tris": 22905,
    "bones": [
     "humanoid"
    ]
+  },
+  "qelvaris": {
+   "height": 2.3,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "minion_lancer": {
+   "height": 2.0,
+   "tris": 11999,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "minion_sentinel": {
+   "height": 2.2,
+   "tris": 12000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "boss_ironmaw": {
+   "height": 14,
+   "tris": 40000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "boss_leviathan": {
+   "height": 16,
+   "tris": 40000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "boss_reaper": {
+   "height": 16,
+   "tris": 40000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "boss_genesis": {
+   "height": 18,
+   "tris": 40000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "minion_swarmer": {
+   "height": 1.2,
+   "tris": 0,
+   "bones": []
+  },
+  "minion_bomber": {
+   "height": 1.4,
+   "tris": 0,
+   "bones": []
+  },
+  "boss_phoenix": {
+   "height": 15,
+   "tris": 0,
+   "bones": []
   }
  },
  "props": {
@@ -156,6 +220,11 @@
  },
  "textures": [
   "env/sky_amatsu.webp",
+  "env/sky_c1_shipyard.webp",
+  "env/sky_c2_lunar.webp",
+  "env/sky_c3_ceres.webp",
+  "env/sky_c4_helios.webp",
+  "env/sky_c5_citadel.webp",
   "env/sky_cathedral.webp",
   "env/sky_hangar.webp",
   "env/sky_kurogane.webp",
@@ -163,6 +232,16 @@
   "env/sky_training.webp",
   "env/tex_amatsu_ground.webp",
   "env/tex_amatsu_wall.webp",
+  "env/tex_c1_shipyard_ground.webp",
+  "env/tex_c1_shipyard_wall.webp",
+  "env/tex_c2_lunar_ground.webp",
+  "env/tex_c2_lunar_wall.webp",
+  "env/tex_c3_ceres_ground.webp",
+  "env/tex_c3_ceres_wall.webp",
+  "env/tex_c4_helios_ground.webp",
+  "env/tex_c4_helios_wall.webp",
+  "env/tex_c5_citadel_ground.webp",
+  "env/tex_c5_citadel_wall.webp",
   "env/tex_cathedral_ground.webp",
   "env/tex_cathedral_wall.webp",
   "env/tex_hangar_ground.webp",

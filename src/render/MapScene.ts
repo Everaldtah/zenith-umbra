@@ -196,8 +196,15 @@ export class MapScene {
     const holder = new THREE.Group();
     holder.position.set(x, gy, z); holder.rotation.y = rot;
     this.group.add(holder);
-    const stand = new THREE.Mesh(new THREE.CylinderGeometry(solid * 0.9, solid, s * 0.9, 8), new THREE.MeshStandardMaterial({ color: this.map.tint, roughness: 0.6 }));
-    stand.position.y = s * 0.45; stand.castShadow = true;
+    // stand-in until (or instead of) a generated model: a glowing crystal cluster in the map's accent colour
+    const stand = new THREE.Group();
+    const cm = new THREE.MeshStandardMaterial({ color: this.map.tint, emissive: new THREE.Color(this.map.tint), emissiveIntensity: 0.6, roughness: 0.15, metalness: 0.1, flatShading: true });
+    for (const [dx, dz, k, tilt] of [[0, 0, 1, 0], [solid * 0.7, 0.2, 0.62, 0.35], [-solid * 0.6, -0.3, 0.5, -0.4], [0.1, solid * 0.7, 0.42, 0.25]] as number[][]) {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(1, 0), cm);
+      c.scale.set(solid * 0.55 * k + 0.1, s * 0.5 * k, solid * 0.55 * k + 0.1);
+      c.position.set(dx, s * 0.45 * k, dz); c.rotation.z = tilt; c.castShadow = true;
+      stand.add(c);
+    }
     holder.add(stand);
     const m = await propModel(id);
     if (!m) return;

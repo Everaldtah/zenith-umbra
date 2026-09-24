@@ -61,6 +61,28 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .pause .tips { opacity: .6; }
 .settings label { display: flex; justify-content: space-between; gap: 30px; width: 420px; font-weight: 700; letter-spacing: .08em; }
 
+/* ---------------- hero viewer */
+.viewer { position: absolute; inset: 0; display: grid; grid-template-columns: 300px 1fr 380px; background: radial-gradient(ellipse at 50% 35%, #2a2f4a 0%, #0c0e18 60%, #05060a 100%); }
+.vlist { overflow: auto; padding: 18px 14px; border-right: 1px solid var(--line); } .vlist h3 { font: 800 14px Orbitron; letter-spacing: .12em; margin: 14px 0 8px; }
+.vrow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.vchip { display: flex; align-items: center; gap: 8px; padding: 4px; clip-path: none; font-size: 14px; letter-spacing: .02em; text-align: left; border: 1px solid transparent; }
+.vchip img { width: 38px; height: 38px; object-fit: cover; object-position: top; border: 1px solid var(--c); } .vchip.sel { border-color: var(--c); background: rgba(255,255,255,.12); }
+.vchip:hover { transform: none; }
+.vstage { position: relative; overflow: hidden; } .vstage canvas { position: absolute; inset: 0; cursor: grab; } .vstage canvas:active { cursor: grabbing; }
+.vname { position: absolute; left: 24px; top: 18px; pointer-events: none; } .vname b { font: 800 40px Orbitron; display: block; text-shadow: 0 0 20px rgba(0,0,0,.6); } .vname small { letter-spacing: .3em; text-transform: uppercase; opacity: .8; }
+.vanims { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.vanims button { padding: 7px 14px; font-size: 14px; } .vanims button.on { background: var(--gold); color: #1a1206; }
+.vhint { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; opacity: .55; pointer-events: none; }
+.vside { overflow: auto; padding: 18px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.vskins h4 { font: 800 14px Orbitron; letter-spacing: .12em; margin: 0 0 8px; } .vskins .dim { opacity: .6; }
+.skin { display: flex; gap: 10px; align-items: center; width: 100%; padding: 6px 10px; margin-bottom: 6px; clip-path: none; text-align: left; font-size: 15px; letter-spacing: .03em; }
+.skin i { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #fff3; flex: none; } .skin span { display: flex; flex-direction: column; } .skin small { font-size: 11px; opacity: .7; letter-spacing: .15em; }
+.skin.sel { outline: 2px solid var(--gold); } .skin:hover { transform: none; }
+.skin.r-rare small { color: #5cc8ff; } .skin.r-epic small { color: #c77dff; } .skin.r-legendary small { color: #ffd76a; }
+.vskins .equip { width: 100%; margin-top: 4px; }
+.vinfo .vmeta { font-size: 13px; letter-spacing: .1em; opacity: .8; } .vab { display: flex; gap: 10px; margin: 8px 0; } .vab p { margin: 2px 0; font-size: 14px; color: #b8c0d8; } .vab .ctr { color: var(--gold); }
+.vback { margin-top: auto; }
+
 /* ---------------- HUD */
 .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-weight: 700; }
 .hud.hurt { box-shadow: inset 0 0 120px rgba(255,30,60,.45); }
@@ -127,3 +149,19 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .dn.crit { color: #ff5252; font-size: 22px; } .dn.heal { color: #8dff9e; }
 .lab { position: fixed; right: 10px; top: 110px; z-index: 11; width: 470px; background: var(--panel); border: 1px solid var(--line); padding: 10px 14px; font-size: 13px; pointer-events: none; }
 .lab h4 { margin: 0 0 6px; font: 800 15px Orbitron; } .lab table { width: 100%; margin: 6px 0; } .lab td, .lab th { padding: 1px 4px; } .lab .ok { color: #7dff9a; font-style: normal; } .lab .bad { color: #ff6b81; font-style: normal; } .lab small { opacity: .6; } .lab .maps { opacity: .8; }
+.bossbar { width: min(760px, 70vw); text-align: center; } .bossbar b { font: 800 22px Orbitron; color: var(--c); text-shadow: 0 0 12px var(--c); letter-spacing: .1em; }
+.bossbar small { display: block; font-size: 13px; letter-spacing: .3em; opacity: .8; } .bossbar div { height: 12px; margin-top: 6px; background: rgba(0,0,0,.6); border: 1px solid var(--c); }
+.bossbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--c), #fff); transition: width .2s; } .bossbar em { font-size: 13px; color: var(--gold); font-style: normal; }
+.campaign-menu { position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 10%, #1d1440, #05060a 70%); padding: 30px 40px; display: flex; flex-direction: column; }
+.campaign-menu h2 { font: 800 30px Orbitron; margin: 0; } .campaign-menu h2 small { display: block; font: 600 16px Rajdhani; opacity: .7; letter-spacing: .15em; }
+.lvls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 18px 0; }
+.lv { position: relative; background: #0d111c; border: 2px solid var(--line); cursor: pointer; } .lv.sel { border-color: var(--gold); } .lv.locked { opacity: .35; pointer-events: none; }
+.lv img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; } .lv b { display: block; padding: 6px 10px 0; font-size: 17px; } .lv small { display: block; padding: 0 10px 8px; color: #aab; }
+.lv .bimg { position: absolute; right: 6px; top: 6px; width: 38%; border: 1px solid var(--line); }
+.squad { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.squad .heroes { display: flex; gap: 8px; } .squad .hc { width: 100px; }
+.coop { flex: 1; min-width: 320px; background: rgba(255,255,255,.04); border: 1px solid var(--line); padding: 12px 16px; }
+.coop h4 { margin: 0 0 6px; font: 800 15px Orbitron; letter-spacing: .1em; } .coop .row2 { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+.coop input { font: 600 16px Rajdhani; background: #111827; color: #fff; border: 1px solid var(--line); padding: 6px 10px; width: 160px; }
+.coop ul { list-style: none; padding: 0; margin: 6px 0; max-height: 160px; overflow: auto; } .coop li { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.coop li button { padding: 4px 12px; font-size: 14px; } .coop .st { font-size: 13px; opacity: .7; } .coop .ok { color: #7dff9a; } .coop .bad { color: #ff6b81; }

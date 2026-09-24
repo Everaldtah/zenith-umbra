@@ -55,6 +55,19 @@ for o in parts:
         if not (min(v.x for v in bb) < cb.x < max(v.x for v in bb)) or cb.z < min(v.z for v in bb) + (max(v.z for v in bb) - min(v.z for v in bb)) * 0.15:
             bpy.data.objects.remove(o)
 parts = [o for o in scene.objects if o.type == "MESH"]
+# pieces hovering in the air (reconstruction artefacts) - anything not touching the main body is dropped
+from mathutils.kdtree import KDTree
+kd = KDTree(len(big.data.vertices))
+for i, v in enumerate(big.data.vertices): kd.insert(big.matrix_world @ v.co, i)
+kd.balance()
+hover = 0
+for o in parts:
+    if o is big or len(o.data.vertices) > 0.03 * nb: continue
+    step = max(1, len(o.data.vertices) // 200)
+    dmin = min(kd.find(o.matrix_world @ o.data.vertices[i].co)[2] for i in range(0, len(o.data.vertices), step))
+    if dmin > db * 0.1: bpy.data.objects.remove(o); hover += 1
+LOG["hovering_removed"] = hover
+parts = [o for o in scene.objects if o.type == "MESH"]
 for o in scene.objects: o.select_set(o in parts)
 bpy.context.view_layer.objects.active = big
 if len(parts) > 1: bpy.ops.object.join()
@@ -115,7 +128,7 @@ P = pose_of(tmp)
 Pb = pose_of(front_render(tmp.replace("_front", "_back"), flip=True) and tmp.replace("_front", "_back"))
 LOG["pose_front"] = round(P.get("score", 0), 3); LOG["pose_back"] = round(Pb.get("score", 0), 3)
 nose_front = P.get("pts", {}).get("nose", [0, 0, 0])[2]; nose_back = Pb.get("pts", {}).get("nose", [0, 0, 0])[2]
-if Pb.get("ok") and (nose_back > nose_front + 0.25) and Pb["score"] > P.get("score", 0) * 0.9:
+if a.yaw == 999:   # auto-flip disabled: TRELLIS always puts the concept's front toward -Y, and the pose test misfired on mechs
     # the model faces +Y: spin it round so the front is -Y (three.js +Z) and use the rear detection mirrored
     co = verts(); co[:, 0] *= -1; co[:, 1] *= -1; set_verts(co); LOG["flipped"] = True
     P = {**Pb, "pts": {k: [1 - v[0], v[1], v[2]] for k, v in Pb["pts"].items()}}
@@ -309,6 +322,72 @@ if a.wings:
         bones[f"wing_{S_}"] = (Vector((sg * sh_x * 0.35, back_y, chest.z + H * 0.04)), Vector((sg * W * 0.45, back_y + H * 0.05, chest.z + H * 0.14)), "chest")
 LOG["joints"] = {k: [round(float(v), 3) for v in J[k]] for k in J}
 
+# ---------------------------------------------------------------- secondary-motion chains (hair, coat tails, skirts)
+# Geodesic analysis: which bone does each vertex "hang from"? Hair below the neck that hangs from the head, and cloth
+# below the hips that hangs from the hips/spine (not the legs) get their own 2-segment spring chains.
+def geodesic(bnames, bdict):
+    tmpn = os.path.abspath(a.out)[:-4] + "_g"
+    faces = np.array([list(p.vertices)[:3] for p in obj.data.polygons], dtype=np.int64)
+    np.savez(tmpn + "_in.npz", verts=verts(), faces=faces,
+             bones_a=np.array([list(bdict[n][0]) for n in bnames], dtype=np.float32), bones_b=np.array([list(bdict[n][1]) for n in bnames], dtype=np.float32))
+    r = subprocess.run([a.python, os.path.join(HERE, "weights.py"), tmpn + "_in.npz", tmpn + "_out.npz"], capture_output=True, text=True)
+    out = None
+    if "WEIGHTS_OK" in r.stdout:
+        with np.load(tmpn + "_out.npz") as res: out = {k: res[k] for k in res.files}
+    for f in (tmpn + "_in.npz", tmpn + "_out.npz"):
+        if os.path.exists(f): os.remove(f)
+    return out
+chains = []
+if not a.static and not a.mech:
+    names0 = [n for n in bones if n != "root"]
+    g = geodesic(names0, bones)
+    if g is not None:
+        near = g["nearest"]
+        idx_of = {n: i for i, n in enumerate(names0)}
+        co = verts()
+        def chain(prefix, mask, parent, min_verts=120):
+            if mask.sum() < min_verts: return
+            P = co[mask]
+            ztop, zbot = np.percentile(P[:, 2], 92), np.percentile(P[:, 2], 3)
+            if ztop - zbot < H * 0.1: return
+            top = P[P[:, 2] >= ztop].mean(0); bot = P[P[:, 2] <= np.percentile(P[:, 2], 8)].mean(0)
+            mid = P[(P[:, 2] > (ztop + zbot) / 2 - H * 0.03) & (P[:, 2] < (ztop + zbot) / 2 + H * 0.03)]
+            midp = mid.mean(0) if len(mid) else (top + bot) / 2
+            bones[f"{prefix}_1"] = (Vector(top), Vector(midp), parent)
+            bones[f"{prefix}_2"] = (Vector(midp), Vector(bot), f"{prefix}_1")
+            tipdir = (Vector(bot) - Vector(midp)).normalized()
+            bones[f"{prefix}_3"] = (Vector(bot), Vector(bot) + tipdir * H * 0.02, f"{prefix}_2")   # non-deforming tip marker
+            chains.append(prefix)
+        neck_z = bones["neck"][0].z; hz = bones["hips"][0].z; hy = bones["hips"][0].y
+        sx = abs(bones["shoulder_L"][1].x); chest = bones["chest"][0]
+        # distance of every vertex (in the ground plane) from the nearest leg bone line
+        def seg_d(A, B):
+            A = np.array(A); B = np.array(B); AB = B - A
+            t = np.clip(((co - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
+            P = A + t[:, None] * AB
+            return np.hypot(co[:, 0] - P[:, 0], co[:, 1] - P[:, 1])
+        legd = np.min(np.stack([seg_d(bones[f"{b}_{s}"][0], bones[f"{b}_{s}"][1]) for b in ("thigh", "shin") for s in ("L", "R")]), 0)
+        leg_r = H * (0.12 if a.mech else 0.075)
+        def seg3(A, B):
+            A = np.array(A); B = np.array(B); AB = B - A
+            t = np.clip(((co - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
+            return np.linalg.norm(co - (A + t[:, None] * AB), axis=1)
+        armd = np.min(np.stack([seg3(bones[f"{b}_{s}"][0], bones[f"{b}_{s}"][1]) for b in ("forearm", "hand") for s in ("L", "R")]), 0)
+        # coat tails / skirts / gowns: below the hips, outside both legs, away from the hanging hands and weapons
+        cloth = (co[:, 2] < hz - H * 0.07) & (co[:, 2] > H * 0.06) & (legd > leg_r) & (armd > H * 0.12)
+        chain("skirt_B", cloth & (co[:, 1] > hy + H * 0.01), "hips")      # behind (the model faces -Y)
+        chain("skirt_F", cloth & (co[:, 1] < hy - H * 0.03), "hips")
+        # capes / long coats hanging behind the torso
+        back_plane = float(np.percentile(co[(co[:, 2] > hz) & (co[:, 2] < chest.z) & (np.abs(co[:, 0]) < sx * 0.5), 1], 80)) if len(co) else chest.y
+        cape = (co[:, 1] > back_plane + H * 0.02) & (co[:, 2] < neck_z - H * 0.05) & (co[:, 2] > hz - H * 0.25) & (np.abs(co[:, 0]) < sx * 1.1)
+        if cape.sum() > 150: chain("hair_B", cape, "chest")
+        else:
+            # long hair: mass behind the head that hangs below the neck
+            head = bones["head"][0]
+            hair = (co[:, 1] > head.y + H * 0.03) & (co[:, 2] < neck_z) & (co[:, 2] > hz) & (np.abs(co[:, 0]) < sx * 1.2)
+            chain("hair_B", hair, "head")
+LOG["chains"] = chains
+
 # ---------------------------------------------------------------- armature
 arm_data = bpy.data.armatures.new("Rig"); arm = bpy.data.objects.new("Rig", arm_data); scene.collection.objects.link(arm)
 bpy.ops.object.select_all(action="DESELECT"); arm.select_set(True); bpy.context.view_layer.objects.active = arm
@@ -320,7 +399,7 @@ for n, (hd, tl, par) in bones.items():
     if par and n not in ("hips", "shoulder_L", "shoulder_R", "thigh_L", "thigh_R", "wing_L", "wing_R"): arm_data.edit_bones[n].use_connect = False
 bpy.ops.object.mode_set(mode="OBJECT")
 for b in arm_data.bones:
-    if b.name == "root": b.use_deform = False
+    if b.name == "root" or b.name.endswith("_3"): b.use_deform = False
 
 # ---------------------------------------------------------------- weights: bone heat on a watertight proxy, transferred to the mesh
 def zero_weight_fraction(o):
@@ -342,7 +421,7 @@ bpy.ops.object.duplicate(); proxy = bpy.context.view_layer.objects.active; proxy
 for m in list(proxy.modifiers): proxy.modifiers.remove(m)
 method = "heat"
 zf = 1.0 if a.geodesic else heat_on(proxy)
-deform_names = [n for n in bones if n != "root"]
+deform_names = [n for n in bones if n != "root" and not n.endswith("_3")]
 for g in list(obj.vertex_groups): obj.vertex_groups.remove(g)
 for n in deform_names: obj.vertex_groups.new(name=n)
 if zf <= 0.03:
@@ -372,7 +451,7 @@ else:
         dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
         bpy.ops.object.modifier_apply(modifier="dt")
     else:
-        Wg = np.load(tmpn + "_out.npz")["w"]
+        with np.load(tmpn + "_out.npz") as res: Wg = res["w"]
         for bi, n in enumerate(deform_names):
             vg = obj.vertex_groups[n]; col = Wg[:, bi]; nz = np.where(col > 1e-3)[0]
             q = np.round(col[nz] * 50) / 50
@@ -426,6 +505,42 @@ if lost.any():
     Wt[idx, bi] = 1
 tot = Wt.sum(1, keepdims=True); Wt /= np.maximum(tot, 1e-6)
 LOG["unweighted_fixed"] = int(lost.sum())
+# ---- loose islands (armour plates, ribbons, accessories) move rigidly with their dominant bones - no tearing
+fa = np.array([list(p.vertices)[:3] for p in obj.data.polygons], dtype=np.int64)
+parent = np.arange(len(co))
+def find(i):
+    r = i
+    while parent[r] != r: r = parent[r]
+    while parent[i] != r: parent[i], i = r, parent[i]
+    return r
+for f0, f1, f2 in fa:
+    for u, v in ((f0, f1), (f1, f2)):
+        ru, rv = find(u), find(v)
+        if ru != rv: parent[ru] = rv
+roots = np.array([find(i) for i in range(len(co))])
+uniq, inv, counts = np.unique(roots, return_inverse=True, return_counts=True)
+rigid = 0
+for k, cnt in enumerate(counts):
+    if cnt >= 0.15 * len(co) or cnt < 3: continue
+    m = inv == k
+    # held items (swords, bows, staffs, orbs): anything within reach of a hand is carried by that hand
+    held = None
+    for s in ("L", "R"):
+        hn = f"hand_{s}"
+        if hn not in gi: continue
+        A, B = np.array(bones[hn][0]), np.array(bones[hn][1])
+        AB = B - A; P = co[m]
+        t = np.clip(((P - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
+        dmin = float(np.min(np.linalg.norm(P - (A + t[:, None] * AB), axis=1)))
+        if dmin < H * 0.07 and (held is None or dmin < held[1]): held = (gi[hn], dmin)
+    if held is not None:
+        w2 = np.zeros(Wt.shape[1], dtype=Wt.dtype); w2[held[0]] = 1
+        Wt[m] = w2; rigid += 1; continue
+    avg = Wt[m].mean(0)
+    top2 = np.argsort(-avg)[:2]
+    w2 = np.zeros_like(avg); w2[top2] = avg[top2]; w2 /= max(w2.sum(), 1e-6)
+    Wt[m] = w2; rigid += 1
+LOG["rigid_islands"] = rigid
 for g in list(obj.vertex_groups): obj.vertex_groups.remove(g)
 for n in names:
     vg = obj.vertex_groups.new(name=n)
@@ -437,6 +552,19 @@ for n in names:
 obj.parent = arm
 for m in list(obj.modifiers):
     if m.type == "ARMATURE": obj.modifiers.remove(m)
+# smooth weight transitions on the body (removes single-vertex spikes), keep 4 influences, renormalise
+bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+try:
+    bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+    bpy.ops.object.vertex_group_smooth(group_select_mode="ALL", factor=0.5, repeat=2)
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    LOG["smoothed"] = True
+except Exception as e:
+    LOG["smooth_error"] = str(e)[:120]
+    try: bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception: pass
 am = obj.modifiers.new("Armature", "ARMATURE"); am.object = arm
 
 # ---------------------------------------------------------------- deformation self-test: swing the limbs, look for exploding verts

@@ -6,22 +6,31 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { PLAY_MAPS } from '../data/maps';
 import { HEROES, HERO } from '../data/heroes';
-import { createMatch, type Match } from '../game/setup';
-import type { Mode } from '../game/World';
+import { createMatch, createCampaign, type Match } from '../game/setup';
+import { bossCard } from '../campaign/Cinematic';
+import type { Director } from '../campaign/Director';
+import { ENEMIES, BOSSES, LEVEL } from '../campaign/data';
+import type { Coop } from '../net/Coop';
+import { HostSync, ClientSync } from '../net/NetSync';
+import { World as WorldCls } from '../game/World';
+import { Nav } from '../ai/Nav';
+import type { Mode, GameEvent } from '../game/World';
 import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
+import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
 import { loadManifest } from '../render/Assets';
 import { sfx } from '../audio/Sfx';
 import { Input, KEYS } from './Input';
 import { Hud } from './Hud';
 import { AiLab } from './AiLab';
-import { PRESETS, type Settings } from './Settings';
+import { PRESETS, IS_DESKTOP, type Settings } from './Settings';
 
-const DT = 1 / 60;
+// physics rate: the desktop build simulates at 120 Hz (finer collisions, snappier input); the web build at 60 Hz
+const DT = 1 / (IS_DESKTOP ? 120 : 60);
 
-export interface StartOpts { mode: Mode; map: string; hero: string | null; }
+export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; }
 
 export class Game {
   renderer: THREE.WebGLRenderer;
@@ -48,6 +57,12 @@ export class Game {
   timeScale = 1;
   labMapIdx = 0;
   galleryAngle = 0;
+  framesRendered = 0;
+  bossCam: { actor: Actor; until: number; t0: number } | null = null;
+  hostSync: HostSync | null = null;
+  clientSync: ClientSync | null = null;
+  onCampaignEnd: ((won: boolean) => void) | null = null;
+  get director(): Director | null { return (this.match?.world.director as Director) ?? null; }
   onExit: (() => void) | null = null;
   onPause: ((p: boolean) => void) | null = null;
   onEnd: (() => void) | null = null;
@@ -109,7 +124,20 @@ export class Game {
     const q = PRESETS[this.settings.preset];
     this.scene = new THREE.Scene();
     if (this.composer) (this.composer.passes[0] as RenderPass).scene = this.scene;
-    this.match = createMatch(o.map, o.mode, o.hero, this.settings.difficulty);
+    this.hostSync = null; this.clientSync = null;
+    if (o.net?.role === 'client') {
+      // co-op client: an empty mirror world, filled from the host's snapshots
+      const w = new WorldCls(LEVEL[o.map].map, 'campaign');
+      Object.assign(w.extraDefs, ENEMIES, BOSSES);
+      this.match = { world: w, nav: new Nav(w.level), player: null, bots: [] };
+      this.clientSync = new ClientSync(w, o.net.coop, e => this.handleEvent(e), LEVEL[o.map]);
+    } else {
+      this.match = o.mode === 'campaign'
+        ? createCampaign(o.map, o.squad ?? [{ hero: o.hero ?? 'tenkai', netId: 'local' }], this.settings.difficulty)
+        : createMatch(o.map, o.mode, o.hero, this.settings.difficulty);
+      if (o.net?.role === 'host') this.hostSync = new HostSync(this.match.world, o.net.coop);
+    }
+    this.bossCam = null;
     const w = this.match.world;
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
     this.fx = new Fx(this.scene, q.fxCap);
@@ -127,7 +155,7 @@ export class Game {
   }
 
   private addView(a: Actor, viewerTeam: string) {
-    const v = new CharacterView(a, viewerTeam);
+    const v = new CharacterView(a, viewerTeam, a.isPlayer ? equippedSkin(a.def.id) : 'classic');
     v.onStep = (act, _side, heavy) => {
       if (!this.match) return;
       sfx.play(heavy ? 'mechstep' : 'step', act.pos, heavy ? 1 : 0.6);
@@ -177,27 +205,35 @@ export class Game {
     const m = this.match;
     if (!this.running || !m || !this.mapScene || !this.fx) { this.input.endFrame(); return; }
     const w = m.world;
+    if (this.clientSync) m.player = this.clientSync.me;
     const me = m.player;
+    const online = !!(this.clientSync || this.hostSync);
     // ---- input
     if (this.input.once('Escape') && me && !this.paused) this.setPaused(true);
     if (this.input.once(KEYS.view)) { this.settings.view = this.settings.view === 'third' ? 'first' : 'third'; }
     if (w.mode === 'training' && me && !this.paused && this.input.once(KEYS.swap)) { this.paused = true; this.input.unlock(); (window as any).__zu.openSwap?.(); }
-    if (!me) this.spectatorKeys();
-    // ---- simulate
-    if (!this.paused) {
+    if (!me && !online) this.spectatorKeys();
+    // ---- simulate (a shared co-op world never pauses)
+    if (!this.paused || online) {
       if (me) {
         this.camYaw = this.input.yaw; this.camPitch = this.input.pitch;
         const aim = this.solveAim(me);
         this.input.apply(me, aim.yaw, aim.pitch);
-        if (!this.input.locked) { me.input.fire = false; me.input.alt = false; }
+        if (!this.input.locked || this.paused) { me.input.fire = false; me.input.alt = false; me.input.mx = me.input.mz = 0; }
       }
-      this.acc += dt * this.timeScale;
-      let steps = 0;
-      while (this.acc >= DT && steps < 8 * Math.max(1, this.timeScale)) {
-        w.step(DT); this.acc -= DT; steps++;
-        this.dispatch();
+      if (this.clientSync) {
+        this.clientSync.apply(dt, me ? me.input : null);
+        if (me && me.alive) { w.time += 0; w.move(me, Math.min(dt, 0.05)); }
+      } else {
+        this.acc += dt * this.timeScale;
+        let steps = 0;
+        while (this.acc >= DT && steps < 16 * Math.max(1, this.timeScale)) {
+          w.step(DT); this.acc -= DT; steps++;
+          this.dispatch();
+        }
+        if (steps >= 16) this.acc = 0;
+        this.hostSync?.flush();
       }
-      if (steps >= 8) this.acc = 0;
     }
     // ---- views
     const viewer = { team: me?.team ?? 'zenith', sees: (a: Actor) => !me || w.perceivable(me, a) };
@@ -213,15 +249,22 @@ export class Game {
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     // ---- render
     if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.showFps ? this.fpsAvg : 0, this.input.keys.has(KEYS.score), this.spectateLabel());
     if (this.lab && w.mode === 'aitest') {
       this.lab.frame(w, this.views, this.fx, dt * this.timeScale, this.renderer);
       if (Math.round(w.time * 60) % 30 === 0) this.lab.render();
     }
+    // ---- campaign cues (boss intros)
+    const dir = this.director;
+    if (dir && !this.clientSync) for (const ev of dir.events.splice(0)) {
+      if (ev.t === 'bossintro') { this.bossIntro(ev.id); this.hostSync?.events.push({ t: 'bossintro', id: ev.id }); }
+    }
     // ---- match end
     if (w.winner && !(w as any).__ended) {
       (w as any).__ended = true;
-      if (w.mode === 'aitest') {
+      if (w.mode === 'campaign') setTimeout(() => { this.input.unlock(); this.onCampaignEnd?.(w.winner === 'zenith'); }, 2500);
+      else if (w.mode === 'aitest') {
         this.lab!.endMap(w, m.bots);
         setTimeout(() => this.nextLabMap(), 2500);
       } else setTimeout(() => { this.input.unlock(); this.onEnd?.(); }, 3500);
@@ -237,22 +280,33 @@ export class Game {
   }
 
   private dispatch() {
-    const m = this.match!, w = m.world, me = m.player;
+    const w = this.match!.world;
     const ev = w.events; w.events = [];
-    for (const e of ev) {
-      this.lab?.onEvent(e);
-      if (e.t === 'fx') this.fx!.onEvent(e, w.time, this.camPos);
-      else if (e.t === 'sfx') {
-        // own weapon sounds play un-positioned (in your head), everything else in 3D
-        const own = me && e.actor === me;
-        sfx.play(e.id, own ? undefined : e.pos, own ? 0.8 : 1);
-      } else {
-        this.hud.event(e, me, w.time);
-        if (e.t === 'counter') sfx.play('counter');
-        if (e.t === 'kill' && me && e.src === me) sfx.play('kill');
-        if (e.t === 'cast' && e.id === e.actor.def.ult.id && me && e.actor.team === me.team) void 0;
-      }
+    this.hostSync?.capture(ev);
+    for (const e of ev) this.handleEvent(e);
+  }
+
+  handleEvent(e: GameEvent | { t: 'bossintro'; id: string }) {
+    const m = this.match; if (!m || !this.fx) return;
+    const w = m.world, me = m.player;
+    if (e.t === 'bossintro') { this.bossIntro(e.id); return; }
+    this.lab?.onEvent(e);
+    if (e.t === 'fx') this.fx.onEvent(e, w.time, this.camPos);
+    else if (e.t === 'sfx') {
+      // own weapon sounds play un-positioned (in your head), everything else in 3D
+      const own = me && e.actor === me;
+      sfx.play(e.id, own ? undefined : e.pos, own ? 0.8 : 1);
+    } else {
+      this.hud.event(e, me, w.time);
+      if (e.t === 'counter') sfx.play('counter');
+      if (e.t === 'kill' && me && e.src === me) sfx.play('kill');
     }
+  }
+
+  private bossIntro(id: string) {
+    bossCard(id);
+    const b = this.match?.world.actors.find(x => x.def.id === id && x.alive);
+    if (b) this.bossCam = { actor: b, t0: performance.now(), until: performance.now() + 3200 };
   }
 
   /** third person: find what the crosshair covers and aim the hero's eye at it (so shots land on the reticle) */
@@ -312,6 +366,16 @@ export class Game {
       cam.position.set(a.pos.x + Math.sin(t) * r, a.pos.y + a.height * 0.75, a.pos.z + Math.cos(t) * r);
       cam.lookAt(a.pos.x, a.pos.y + a.height * 0.5, a.pos.z);
     } else this.spectatorCamera(dt);
+    // boss intro fly-by overrides the gameplay camera for a few seconds (the sim keeps running)
+    if (this.bossCam) {
+      const bc = this.bossCam, now = performance.now();
+      if (now > bc.until || !bc.actor.alive) this.bossCam = null;
+      else {
+        const a = bc.actor, k = (now - bc.t0) / (bc.until - bc.t0), ang = a.yaw + 0.6 - k * 1.4, r = a.height * 1.3;
+        cam.position.set(a.pos.x + Math.sin(ang) * r, a.pos.y + a.height * (0.25 + 0.3 * k), a.pos.z + Math.cos(ang) * r);
+        cam.lookAt(a.pos.x, a.pos.y + a.height * 0.65, a.pos.z);
+      }
+    }
     if (shake > 0.002) { cam.position.x += (Math.random() - 0.5) * shake; cam.position.y += (Math.random() - 0.5) * shake; cam.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
     this.camPos.copy(cam.position);
   }
