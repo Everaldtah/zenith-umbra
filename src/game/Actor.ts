@@ -5,9 +5,10 @@ export interface Input {
   mx: number; mz: number;          // local move: right / forward, -1..1
   jump: boolean; jumpHeld: boolean; descend: boolean;
   fire: boolean; alt: boolean; a1: boolean; a2: boolean; ult: boolean; reload: boolean;
+  melee: boolean;                  // quick melee (C)
   yaw: number; pitch: number;
 }
-export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, yaw: 0, pitch: 0 });
+export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, melee: false, yaw: 0, pitch: 0 });
 
 export interface Forced { vx: number; vy: number; vz: number; until: number; kind: string; ignoreGravity?: boolean; onEnd?: () => void; }
 export interface Shield { amt: number; until: number; kind: string; }
@@ -28,7 +29,7 @@ export class Actor {
   sv: Record<string, number> = {};        // status values
   src: Record<string, Actor | undefined> = {};
   cd: Record<string, number> = {};        // ability id -> ready at
-  ammo: number; reloadUntil = 0; nextShot = 0; nextAlt = 0; charge = 0; charging = false;
+  ammo: number; reloadUntil = 0; nextShot = 0; nextAlt = 0; nextMelee = 0; charge = 0; charging = false;
   ult = 0;
   forced: Forced | null = null;
   barrier = { hp: 0, max: 0, up: false, regenAt: 0, brokenUntil: 0 };
@@ -38,7 +39,7 @@ export class Actor {
   // stats
   kills = 0; deaths = 0; dmgDone = 0; healDone = 0; assists = 0;
   // animation cues read by the renderer
-  anim = { attackAt: -9, attackKind: 'primary' as string, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0 };
+  anim = { attackAt: -9, attackKind: 'primary' as string, attackSide: 1, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0 };
   isPlayer = false;
   isRobot = false;
   noRespawn = false;
@@ -58,6 +59,10 @@ export class Actor {
   get health() { return this.hp + this.armor; }
   get height() { return this.def.height * this.scale; }
   get radius() { return this.def.radius * this.scale; }
+  // level collision capsule: a grown giant (Tenkai-Oh's ult) still fits through doors and under arches - the model may
+  // clip scenery for a minute, but it never gets wedged
+  get colRadius() { return this.def.radius * Math.min(this.scale, 1.5); }
+  get colHeight() { return this.def.height * Math.min(this.scale, 1.35); }
   get eye(): V3 { return { x: this.pos.x, y: this.pos.y + this.height * (this.def.frame === 'mech' ? 0.78 : 0.9), z: this.pos.z }; }
   get center(): V3 { return { x: this.pos.x, y: this.pos.y + this.height * 0.55, z: this.pos.z }; }
   get shieldAmt() { return this.shields.reduce((s, x) => s + x.amt, 0); }

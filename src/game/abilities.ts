@@ -110,6 +110,24 @@ const I: Record<string, Impl> = {
     });
     return true;
   },
+  colossus(w, a) {
+    // Dawn Colossus Awakening: a pillar of dawnlight, a hop while the frame grows (World scales it up), a landing stomp
+    const t = w.time;
+    a.set('titan', t, 60);
+    a.set('ccimmune', t, 1.4);
+    a.maxArmor = a.def.armor + 800; a.armor = Math.min(a.maxArmor, a.armor + 800);
+    a.forced = { vx: 0, vy: 7, vz: 0, until: t + 0.45, kind: 'ascend' };
+    w.sfx('ultcall', a.center, a); w.sfx('mechjump', a.pos, a);
+    w.fx('ultflash', a.center, { color: '#ffd76a', actor: a }); w.fx('burst', a.center, { r: 5, color: '#ffd76a' });
+    w.emit({ t: 'msg', text: 'TENKAI-OH · DAWN COLOSSUS AWAKENS', color: '#ffd76a' });
+    w.after(1.1, () => {
+      if (!a.alive) return;
+      const p = { ...a.pos };
+      for (const x of w.enemies(a)) if (dist3(x.pos, p) < 9) { w.damage(a, x, 120, { kind: 'ability' }); applyCC(w, a, x, 'stun', 1); }
+      w.fx('slam', p, { r: 9, color: '#ffd76a', actor: a }); w.sfx('slam', p, a); w.sfx('mechland', p, a);
+    });
+    return true;
+  },
   // ================================================================ Mirei
   constellation(w, a) {
     const linked = w.allies(a).filter(x => dist3(x.pos, a.pos) < 15 && w.level.lineOfSight(a.eye, x.center));

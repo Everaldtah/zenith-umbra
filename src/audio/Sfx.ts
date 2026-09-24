@@ -29,6 +29,8 @@ const R: Record<string, Layer[]> = {
   flame: [{ n: true, d: 0.12, v: 0.12, lp: 900 }],
   flamestart: [{ n: true, d: 0.35, v: 0.35, lp: 400, lp1: 1600 }, { w: 'sawtooth', f: 60, d: 0.3, v: 0.1, lp: 300 }],
   punch: [{ w: 'sine', f: 140, f1: 45, d: 0.2, v: 0.55 }, { n: true, d: 0.12, v: 0.3, lp: 1500 }],
+  // rocket hammer: a rising thruster roar through the wind-up, a heavy whoosh as the head comes round
+  hammer: [{ n: true, d: 0.3, v: 0.22, bp: 500, q: 0.7 }, { w: 'sawtooth', f: 70, f1: 150, d: 0.28, v: 0.08, lp: 600 }, { n: true, d: 0.22, v: 0.3, bp: 1400, q: 1.2, dl: 0.18 }],
   blaster: [{ w: 'square', f: 900, f1: 300, d: 0.12, v: 0.15 }],
   // ---------------- impacts & feedback
   hit: [{ w: 'triangle', f: 700, f1: 500, d: 0.05, v: 0.12 }],

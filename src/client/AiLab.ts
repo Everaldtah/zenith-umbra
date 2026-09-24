@@ -8,7 +8,7 @@ import type { Fx } from '../render/Fx';
 import { sfx, SFX_IDS } from '../audio/Sfx';
 import type { Bot } from '../ai/Bot';
 
-const ANIM_STATES = ['idle', 'run', 'strafe', 'backpedal', 'jump', 'fall', 'attack', 'cast', 'hit', 'death'];
+const ANIM_STATES = ['idle', 'run', 'strafe', 'backpedal', 'jump', 'fall', 'attack', 'punch', 'cast', 'hit', 'death'];
 const ALL_ABILITIES = HEROES.flatMap(h => [h.ability1.id, h.ability2.id, h.ult.id, ...('id' in h.secondary && !['bulwark', 'zoom'].includes(h.secondary.id) ? [h.secondary.id] : [])]);
 const COUNTERS = HEROES.map(h => [h.id, h.rival]);
 
@@ -76,7 +76,7 @@ export class AiLab {
       if (a.grounded && sp > 1) s.states.add(fwd > 0.6 ? 'run' : fwd < -0.6 ? 'backpedal' : 'strafe');
       if (!a.grounded && a.vel.y > 1) s.states.add('jump');
       if (!a.grounded && a.vel.y < -1) s.states.add('fall');
-      if (t - a.anim.attackAt < 0.05) s.states.add('attack');
+      if (t - a.anim.attackAt < 0.05) s.states.add(a.anim.attackKind === 'punch' ? 'punch' : 'attack');
       if (t - a.anim.castAt < 0.05) s.states.add('cast');
       if (t - a.anim.hitAt < 0.05) s.states.add('hit');
       if (a.flying) { s.states.add('fly'); s.flyFrames++; if (v.anim.bones.wing_L || !v.real) s.wingFrames++; }
@@ -102,7 +102,7 @@ export class AiLab {
       } else { this.prevFoot.delete(`${a.id}L`); this.prevFoot.delete(`${a.id}R`); }
       // --- physics
       const p = { ...a.pos };
-      if (w.level.collide(p, a.radius * 0.8, a.height)) s.penetrate++;
+      if (w.level.collide(p, a.colRadius * 0.8, a.colHeight)) s.penetrate++;
       const g = w.level.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.5);
       if (a.grounded && g > a.pos.y + 0.15) s.sink++;
       if (!a.forced && a.grounded && sp > a.def.speed * 1.6 * Math.max(1, a.scale) + 0.5 && !a.has('padflight', t)) s.overspeed++;

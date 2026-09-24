@@ -31,6 +31,10 @@ export interface AnimState {
   attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
+  hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
+  swingSide?: number;       // +1 sweeps right-to-left, -1 left-to-right (swings alternate)
+  angel?: boolean;          // Mirei: angelic combat-medic flight (upright hover, swept-back dash, glide)
+  gliding?: boolean;        // slow-fall glide with the wings spread
   scale: number;            // world metres per model unit
   pos: THREE.Vector3;       // actor world position (feet)
 }
@@ -40,6 +44,32 @@ interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAxisAngle(axis, a);
+
+// ---------------- Tenkai-Oh's rocket hammer, choreographed after a heavyweight hammer tank: swings alternate sides -
+// wind up behind the shoulder, sweep flat through the front with the weight rolling onto the lead foot, follow through
+// past the other shoulder, settle back into the guard (hammer upright in front, head by the right shoulder).
+export const SWING_TIME = 0.85;
+type HPose = { th: number; ph: number; d: number; gy: number };
+const GUARD: HPose = { th: -0.45, ph: 1.05, d: 0.26, gy: -0.14 };
+const smooth = (u: number) => u * u * (3 - 2 * u);
+function hammerPose(p: number, side: number, shield: boolean, casting: boolean) {
+  if (shield) return { th: -0.75, ph: -1.15, d: 0.2, gy: -0.26, imp: 0, w: 0, side };      // lowered while the shield is up
+  if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side };
+  const K: [number, HPose][] = [
+    [0, GUARD],
+    [0.2, { th: -side * 1.75, ph: 0.45, d: 0.24, gy: -0.02 }],      // wind-up: drawn back at shoulder height
+    [0.34, { th: 0, ph: 0.0, d: 0.42, gy: -0.1 }],                   // impact: arms long, head through the target
+    [0.5, { th: side * 1.55, ph: 0.1, d: 0.34, gy: -0.12 }],        // follow-through
+    [0.68, { th: side * 1.1, ph: 0.55, d: 0.28, gy: -0.14 }],       // settle
+    [1, GUARD],
+  ];
+  let k = 0;
+  while (k < K.length - 2 && p > K[k + 1][0]) k++;
+  const [p0, a] = K[k], [p1, b] = K[k + 1];
+  const u = smooth(Math.min(1, Math.max(0, (p - p0) / (p1 - p0))));
+  const L = (x: number, y: number) => x + (y - x) * u;
+  return { th: L(a.th, b.th), ph: L(a.ph, b.ph), d: L(a.d, b.d), gy: L(a.gy, b.gy), imp: Math.max(0, 1 - Math.abs(p - 0.34) / 0.14), w: Math.min(1, p / 0.1, (1 - p) / 0.25), side };
+}
 
 export class Animator {
   bones: Partial<Record<BoneName, THREE.Object3D>> = {};
@@ -62,6 +92,11 @@ export class Animator {
   private hipYaw = 0; private hipYawV = 0; private lastYaw = 0; private turnRoll = 0;
   private leanV = new THREE.Vector2(); private flinch = 0; private flinchV = 0; private lastHitAge = 9; private flinchDir = 1;
   private recoil = 0; private recoilV = 0; private lastAtkAge = 9; private readyW = 0;
+  private punchExt = 0; private punchW = 0;
+  /** optional held prop (model-space child of the rig root) posed along the hammer path each frame */
+  prop: THREE.Object3D | null = null;
+  hammerLen = 1;
+  private gripG = new THREE.Vector3(); private gripH = new THREE.Vector3(0, 1, 0); private gripT = new THREE.Vector3(1, 0, 0);
   // spring chain state: world-space tip + previous tip per chain segment
   private spring = new Map<string, { tip: THREE.Vector3; prev: THREE.Vector3 }>();
   private posCache = new Map<string, THREE.Vector3>();
@@ -253,6 +288,15 @@ export class Animator {
     this.airBlend += ((s.grounded ? 0 : 1) - this.airBlend) * Math.min(1, dt * 8);
     this.flyBlend += ((s.flying ? 1 : 0) - this.flyBlend) * Math.min(1, dt * 5);
     this.atk = Math.max(0, 1 - s.attackAge / (s.attackKind === 'secondary' || s.attackKind === 'lance' ? 0.45 : 0.3));
+    const punching = s.attackKind === 'punch', swinging = !!s.hammer && s.attackKind === 'primary';
+    if (punching || swinging) this.atk = 0;
+    // quick melee jab (left hand): short pull-back, snap out, slower recovery
+    const pq = punching ? s.attackAge / 0.42 : 9;
+    this.punchExt = pq < 0.14 ? -0.35 * pq / 0.14 : pq < 0.26 ? -0.35 + 1.35 * (pq - 0.14) / 0.12 : Math.max(0, 1 - (pq - 0.26) / 0.74);
+    this.punchW = pq >= 1 ? 0 : pq < 0.85 ? 1 : (1 - pq) / 0.15;
+    const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05) : null;
+    const hTw = hs ? Math.max(-0.95, Math.min(0.95, hs.th * 0.55)) * hs.w : 0;
+    const pTw = -0.45 * Math.max(0, this.punchExt) * this.punchW;
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
     // ---------------- lower-body yaw: legs face where we move, the torso twists back to the aim (hero-shooter strafing)
@@ -332,6 +376,15 @@ export class Animator {
         const tuck = flyer ? 0.25 : Math.max(0, Math.min(1, (s.vel.y + 4) / 10));
         const air = new THREE.Vector3((i === 0 ? R.foot_L : R.foot_R).p.x + side * this.hipW * 0.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
         if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
+        if (s.angel) {
+          // angelic flight: legs together and long; hovering, one knee softly bent and that foot a little behind;
+          // flying fast, both legs trail back in line with the body; gliding, they hang straight down
+          const fastK = Math.min(1, speed / (this.legLen * 6));
+          air.set((i === 0 ? R.foot_L : R.foot_R).p.x * 0.35,
+            this.footY + this.legLen * (s.gliding ? 0.04 : (i === 1 ? 0.14 : 0.05) * (1 - fastK) + 0.08 * fastK),
+            this.legLen * (-0.04 - 0.5 * fastK - (i === 1 && !s.gliding ? 0.1 * (1 - fastK) : 0)));
+          air.y += Math.sin(s.time * 1.6 + i * 0.6) * 0.015 * this.legLen;
+        }
         tgt.lerp(air, this.airBlend);
       }
       // never reach further than the leg allows (keeps IK stable on hard stops)
@@ -348,11 +401,15 @@ export class Animator {
     const lunge = s.melee ? Math.sin(Math.min(1, this.atk) * Math.PI) * 0.12 * this.legLen : 0;
     hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0) - stance * this.legLen - lunge * 0.3;
     hipsOff.z += lunge;
+    // hammer: weight rolls onto the front foot at impact; jab: a small step into the punch
+    if (hs) { hipsOff.z += hs.imp * 0.09 * this.legLen; hipsOff.y -= hs.imp * 0.06 * this.legLen + (hs.w > 0 ? 0.02 * this.legLen : 0); }
+    hipsOff.z += Math.max(0, this.punchExt) * this.punchW * 0.05 * this.legLen;
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
+    if (s.angel && s.flying) hipsOff.y += Math.sin(s.time * 1.8) * 0.025 * this.legLen * (1 - Math.min(1, speed / (this.legLen * 6)));
     // lean into velocity with a damped spring (overshoots when you stop or turn) + roll into turns
     const leanTarget = new THREE.Vector2(
       Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.14) + this.turnRoll,
-      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? 0.45 : heavy ? 0.1 : 0.18));
+      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? (s.angel ? 0.75 : 0.45) : heavy ? 0.1 : 0.18));
     this.leanV.x += ((leanTarget.x - this.lean.x) * 70 - this.leanV.x * 9) * dt;
     this.leanV.y += ((leanTarget.y - this.lean.y) * 70 - this.leanV.y * 9) * dt;
     this.lean.x += this.leanV.x * dt; this.lean.y += this.leanV.y * dt;
@@ -360,14 +417,14 @@ export class Animator {
     if (s.hitAge < this.lastHitAge) { this.flinchV += 7; this.flinchDir = Math.random() < 0.5 ? -1 : 1; }
     this.lastHitAge = s.hitAge;
     this.flinchV += (-this.flinch * 160 - this.flinchV * 14) * dt; this.flinch += this.flinchV * dt;
-    if (s.attackAge < this.lastAtkAge && !s.melee) this.recoilV += heavy ? 3 : 5;
+    if (s.attackAge < this.lastAtkAge && !s.melee && s.attackKind !== 'punch') this.recoilV += heavy ? 3 : 5;
     this.lastAtkAge = s.attackAge;
     this.recoilV += (-this.recoil * 220 - this.recoilV * 16) * dt; this.recoil += this.recoilV * dt;
     const hipSway = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.09 : 0.06) * this.moveBlend;
     const idleShift = Math.sin(s.time * 0.55) * 0.03 * (1 - this.moveBlend);
     const stepRoll = heavy ? Math.sin(this.phase * 2 * Math.PI) * 0.05 * this.moveBlend : 0;   // mechs rock side to side per stomp
     // ---------------- hips (face the movement direction)
-    const Dh = rot(Y, this.hipYaw + hipSway).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift + stepRoll));
+    const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.22).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift + stepRoll));
     if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
     this.applyDelta('hips', Dh);
     const hb = this.bones.hips!;
@@ -376,15 +433,15 @@ export class Animator {
     const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
     const breath = Math.sin(s.time * 1.6) * 0.015;
     const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
-    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2)).multiply(rot(Y, -(this.hipYaw + hipSway) * 0.45 + twist * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0))).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
     if (this.bones.spine) this.applyDelta('spine', Ds);
-    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway) * 0.55 + twist * 0.6 - idleShift * 0.5));
+    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6));
     this.applyDelta('chest', Dc);
     const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
     if (this.bones.neck) this.applyDelta('neck', Dn);
     // the head keeps the eyes on the aim and glances around when idle
     const look = Math.sin(s.time * 0.37) * 0.12 * (1 - this.moveBlend) * (1 - Math.min(1, this.atk * 3));
-    const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02));
+    const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02));
     this.applyDelta('head', Dhd);
     // ---------------- legs (IK)
     const hipsPos = R.hips.p.clone().add(hipsOff);
@@ -415,17 +472,37 @@ export class Animator {
       const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[`hand_${L}` as BoneName] ?? R[fa]).p) || l1;
       // relaxed pose: rest direction pulled 25% toward straight down, swung with the gait
       const restD = R[ua].dir.clone().applyQuaternion(Dc);
-      const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), flyer && s.flying ? 0.05 : 0.3).normalize();
+      const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), s.angel ? 0.1 : flyer && s.flying ? 0.05 : 0.3).normalize();
       relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1));
       if (flyer && s.flying) relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0), -0.3 * this.flyBlend);
+      if (s.angel && (s.flying || s.gliding)) relaxed.lerp(new THREE.Vector3(side * 0.55, -0.8, -0.15), 0.35 * Math.max(this.flyBlend, s.gliding ? 1 : 0)).normalize();
       // weapon-ready stance: elbows forward, hands up in front of the body; relaxes into arm swing at full sprint
-      const readyW = (1 - 0.7 * run) * (1 - this.airBlend * 0.5) * (heavy ? 0.45 : 0.72) * (flyer && s.flying ? 0.35 : 1);
+      // angelic medic: arms stay low and relaxed (the held feather-blades hang at her sides) instead of a weapon guard
+      const readyW = (1 - 0.7 * run) * (1 - this.airBlend * 0.5) * (heavy ? 0.45 : 0.72) * (flyer && s.flying ? 0.35 : 1) * (s.angel ? 0.12 : 1);
       relaxed.lerp(new THREE.Vector3(side * 0.3, -0.72, 0.62).applyQuaternion(Dc).normalize(), readyW).normalize();
       this.readyW = readyW;
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
+      // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
+      let over: { hand: THREE.Vector3; w: number } | null = null;
+      if (hs && (i === 1 || !(s.barrier || this.cast > 0.05 || this.punchW > 0.01))) {
+        const L_ = this.height, C = R.chest.p.clone().add(hipsOff);
+        const dirH = new THREE.Vector3(Math.sin(hs.th), 0, Math.cos(hs.th));
+        const H = new THREE.Vector3(Math.sin(hs.th) * Math.cos(hs.ph), Math.sin(hs.ph), Math.cos(hs.th) * Math.cos(hs.ph));
+        const G = C.clone().add(new THREE.Vector3(0, hs.gy * L_, 0)).addScaledVector(dirH, hs.d * L_);
+        over = { hand: i === 1 ? G : G.clone().addScaledVector(H, 0.2 * this.hammerLen), w: 1 };
+        if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
+      } else if (i === 0 && this.punchW > 0.01) {
+        const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
+        hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
+        over = { hand, w: this.punchW };
+      }
       const lead = i === 1 ? 1 : 0.35;
       const act = Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
-      if (act > 0.01) {
+      if (over) {
+        const [u, l] = this.ik(shoulder, over.hand, l1, l2, new THREE.Vector3(side * 0.5, -1, -0.4));
+        this.aimBone(ua, relaxed.clone().lerp(u, over.w).normalize());
+        this.aimBone(fa, relaxed.clone().lerp(l, over.w).normalize());
+      } else if (act > 0.01) {
         const reach = aimDir.clone().multiplyScalar((l1 + l2) * (0.72 + 0.15 * Math.sin(Math.min(1, act) * Math.PI)));
         const hand = shoulder.clone().add(reach);
         hand.x += -side * (l1 + l2) * 0.25;             // hands converge toward the centre line
@@ -442,15 +519,45 @@ export class Animator {
         // slight natural elbow bend
         // forearms bend up toward the centre line (holding the weapon / focus) in the ready stance
         const fore = new THREE.Vector3(-side * 0.35, -0.12, 1).applyQuaternion(Dc).normalize();
-        const lD = relaxed.clone().lerp(fore, 0.18 + 0.15 * this.moveBlend + this.readyW * 0.55).normalize();
+        // angel: the forearm keeps its sculpted angle to the upper arm (the long feather-blades in her hands hang straight
+        // down as designed) with only a hint of bend while moving
+        const lD = s.angel
+          ? R[fa].dir.clone().applyQuaternion(Du).lerp(fore, 0.04 + 0.08 * this.moveBlend).normalize()
+          : relaxed.clone().lerp(fore, 0.18 + 0.15 * this.moveBlend + this.readyW * 0.55).normalize();
         this.aimBone(fa, lD);
         void Du;
       }
       const hn = `hand_${L}` as BoneName;
       if (this.bones[hn]) this.setModelQ(hn, (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q));
     }
+    // ---------------- held hammer: pommel just below the right hand, haft along the swing path, head across it
+    if (this.prop) {
+      this.prop.visible = !!hs;
+      if (hs) {
+        const H = this.gripH, T = this.gripT.clone().addScaledVector(H, -this.gripT.dot(H));
+        if (T.lengthSq() < 1e-6) T.set(1, 0, 0);
+        T.normalize();
+        const Zb = new THREE.Vector3().crossVectors(T, H);
+        this.prop.position.copy(this.gripG).addScaledVector(H, -0.1 * this.hammerLen);
+        this.prop.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, H, Zb));
+      }
+    }
     // ---------------- wings
-    if (this.bones.wing_L || this.bones.wing_R) {
+    if ((this.bones.wing_L || this.bones.wing_R) && s.angel) {
+      // angel wings: hovering - spread wide with slow, deep strokes; dashing - swept back along the body;
+      // gliding - held high and open; on the ground - folded against the back
+      const fastK = Math.min(1, speed / (this.legLen * 6)) * this.flyBlend;
+      const air = Math.max(this.flyBlend, s.gliding ? 1 : 0);
+      this.flap += dt * (s.gliding ? 0.4 : 1.1 + 0.8 * fastK);
+      const beat = Math.sin(this.flap * 2 * Math.PI) * (s.gliding ? 0.04 : 0.16 * (1 - fastK) + 0.06);
+      const lift = s.gliding ? 0.38 : 0.12 * (1 - fastK) * air;                  // raise (open) the wings
+      const sweep = 0.55 * fastK + (1 - air) * 0.12;                             // back along the body
+      for (const [n, side] of [['wing_L', 1], ['wing_R', -1]] as [BoneName, number][]) {
+        if (!this.bones[n]) continue;
+        // on the ground the wings rest as sculpted (raised, half open) and only breathe
+        this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (beat * air + lift - (1 - air) * 0.06 + (1 - air) * Math.sin(s.time * 1.3) * 0.02))).multiply(rot(Y, side * sweep)));
+      }
+    } else if (this.bones.wing_L || this.bones.wing_R) {
       const rate = s.flying ? (s.vel.y > 1 ? 4.2 : 2.6) : 0.8;
       this.flap += dt * rate;
       const amp = s.flying ? (s.vel.y > 1 ? 0.55 : 0.35) : 0.08;

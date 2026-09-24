@@ -335,7 +335,8 @@ export class Game {
   private cameraPose(a: Actor, yaw: number, pitch: number): THREE.Vector3 {
     const mech = a.def.frame === 'mech';
     const zoom = a.sv.zoom ? 0.55 : 1;
-    const back = (mech ? 6.8 : 3.3) * a.scale * zoom, right = (mech ? 1.5 : 0.7) * zoom, up = mech ? 0.6 : 0.3;
+    // offsets grow with the actor so Tenkai-Oh's 7m giant form stays framed over the shoulder instead of filling the screen
+    const back = (mech ? 6.8 : 3.3) * a.scale * zoom, right = (mech ? 1.5 : 0.7) * a.scale * zoom, up = (mech ? 0.6 : 0.3) * a.scale;
     const e = a.eye;
     const cp = Math.cos(pitch);
     const f = new THREE.Vector3(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);

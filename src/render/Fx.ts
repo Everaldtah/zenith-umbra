@@ -137,6 +137,17 @@ export class Fx {
         }
         break;
       }
+      case 'hammer': if (e.actor) {
+        // rocket hammer: a wide flat crescent swept across the front, tilted with the swing direction
+        const a = e.actor, r = e.r ?? 5, side = e.side ?? 1;
+        const arc = new THREE.Mesh(new THREE.RingGeometry(r * 0.3, r, 40, 1, -1.5, 3.0), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+        arc.position.set(a.pos.x, a.pos.y + a.height * 0.5, a.pos.z);
+        arc.rotation.order = 'YXZ'; arc.rotation.y = a.yaw - Math.PI / 2; arc.rotation.x = -Math.PI / 2 + 0.12 * side; arc.rotation.z = 0;
+        this.add(arc, 'fade', now, 0.22);
+        const f = a.forward(), tip = { x: a.pos.x + f.x * r * 0.8, y: a.pos.y + a.height * 0.45, z: a.pos.z + f.z * r * 0.8 };
+        P.emit(tip, n(18), c, { speed: 7, life: 0.35, size: 0.25 });
+        this.shake = Math.max(this.shake, 0.05 / (1 + near / 8));
+      } break;
       case 'lightning': if (e.to) { this.zigzag(p, e.to, '#8ad8ff', now); } break;
       case 'parry': this.ring(p, 1.8, '#8ad8ff', now, 0.3, false); P.emit(p, n(16), c, { speed: 8, life: 0.2, size: 0.15 }); this.light(p, '#8ad8ff', 30, now); break;
       case 'decoy': P.emit(p, n(40), c, { speed: 4, life: 0.8, size: 0.3 }); this.ring(p, 2, e.color ?? '#c77dff', now, 0.5, false); break;

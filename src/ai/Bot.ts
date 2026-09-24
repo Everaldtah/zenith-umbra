@@ -116,6 +116,7 @@ export class Bot {
 
   private preferredRange() {
     const a = this.a, P = a.def.primary;
+    if (a.def.id === 'tenkai') return 3.5;         // hammer reach is 5m: stand just inside it
     if (P.kind === 'melee') return 1.5;
     if (a.def.id === 'enra') return 4;
     if (a.def.id === 'gorgoth') return 7;
@@ -238,7 +239,7 @@ export class Bot {
   private shoot() {
     const w = this.w, a = this.a, t = w.time, i = a.input, tg = this.target;
     const P = a.def.primary, S = a.def.secondary;
-    i.fire = false;
+    i.fire = false; i.melee = false;
     i.alt = t < this.holdAlt;
     // supports heal first
     if (!isAbility(S) && S.heal && this.ally && this.ally !== a && this.ally.health < this.ally.maxHp * 0.97 && dist3(this.ally.pos, a.pos) < S.range + 2 && w.visible(a, this.ally)) {
@@ -257,6 +258,8 @@ export class Bot {
     }
     const inRange = d < P.range * (P.kind === 'hitscan' ? 0.8 : 1) + tg.radius;
     if (inRange && this.onTarget(P.kind === 'melee' ? 35 : P.kind === 'beam' ? 14 : 5)) i.fire = true;
+    // quick melee when an enemy is in arm's reach (ranged heroes finish low targets / fight off divers this way)
+    if (d < 1.2 + a.radius * 1.3 + tg.radius && t >= a.nextMelee && this.onTarget(30) && (P.kind !== 'melee' || Math.random() < 0.15)) i.melee = true;
     // melee secondaries / ranged secondaries
     if (!isAbility(S) && !S.heal) {
       if (S.kind === 'melee' && d < S.range + tg.radius && this.onTarget(35)) i.alt = true;
@@ -300,7 +303,8 @@ export class Bot {
         const cleanse = allies.some(x => dist3(x.pos, a.pos) < 10 && ['brand', 'antiheal', 'root', 'silence', 'tethered'].some(s => x.has(s, t)));
         if (cleanse && rdy('sunburst')) { this.castAt('a2'); break; }
         if (tg && d > 6 && d < 20 && vis(tg) && rdy('anchor') && Math.random() < 0.4) { this.castAt('a1', tg.center); break; }
-        if (ultReady && tg && near(tg.pos, 8, foes).length >= 2 && d < 14) { this.castAt('ult', tg.pos); break; }
+        // Dawn Colossus: wake up the giant when a fight is on (two foes close, or a duel going badly)
+        if (ultReady && tg && d < 12 && (near(a.pos, 14, foes).length >= 2 || a.health / a.maxHp < 0.6)) { this.castAt('ult', tg.pos); break; }
         // Solar Bulwark: raise when under fire
         if (t - a.lastDamagedAt < 0.8 && a.barrier.hp > 350 && tg && d > 5) this.holdAlt = t + 1.2 + Math.random();
         break;

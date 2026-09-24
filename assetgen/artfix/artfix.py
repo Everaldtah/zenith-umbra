@@ -25,9 +25,12 @@ from rembg import remove, new_session
 PICKS = dict(p.split(":") for p in os.environ.get("PICKS", "").split(",") if p)
 SUBJ = {k: v[1] for k, v in MODELS2.items()}
 SUBJ["qelvaris"] = CAMPAIGN["qelvaris"][1]
+SUBJ["mireiv4"] = ("angelic combat medic heroine Mirei, adult woman with short silver-white hair, sleek white armored flight suit with sky blue panels, "
+                   "large mechanical wings of white and crystal-blue metal feathers")
+REAL = os.environ.get("REAL") == "1"      # stylized-realistic hero shooter look instead of anime cel shading
 SCENE = {
     "tenkai": "raising a blazing sun sword above a city at dawn, golden light rays", "gorgoth": "in a burning hangar, sparks and red light",
-    "mirei": "flying through a starry night sky casting starlight", "nocturne": "singing in a gothic cathedral under a blood red moon",
+    "mirei": "flying through a starry night sky casting starlight", "mireiv4": "soaring above a starlit city at night, wings spread wide, healing starlight streaming from her hand", "nocturne": "singing in a gothic cathedral under a blood red moon",
     "kaien": "on a floating mountain shrine surrounded by glowing talismans and cherry blossoms", "kagemaru": "emerging from shadow smoke on a moonlit rooftop",
     "raijin": "mid-dash in a rainy neon city, blue lightning trailing the katana", "enra": "roaring amid a violet eclipse storm with burning gauntlets",
     "yuzu": "drawing her bow on a rooftop at sunrise", "hex": "in a dark twisted puppet theater with glowing violet strings",
@@ -88,14 +91,16 @@ def worker(dev, items):
             for k in range(2):
                 g = torch.Generator(f"cuda:{dev}").manual_seed(900 + k * 31)
                 face = head_crop(img, mech)
-                prompt = (f"anime character portrait, close-up of the {'robot head and helmet' if mech else 'face and shoulders'} of {subj}, "
+                prompt = (f"stylized realistic 3D game character portrait, close-up of the face and shoulders of {subj}, detailed natural face, soft rim light, "
+                          "hero shooter character select portrait, high quality render") if REAL else (f"anime character portrait, close-up of the {'robot head and helmet' if mech else 'face and shoulders'} of {subj}, "
                           "highly detailed face, expressive eyes, clean crisp lineart, detailed cel shading, soft rim light, game character select portrait, masterpiece")
                 neg = "blurry, lowres, deformed face, extra eyes, bad anatomy, text, watermark, cropped, multiple people"
                 pipe(prompt=prompt, negative_prompt=neg, image=face, strength=0.5 if not mech else 0.45, guidance_scale=7, num_inference_steps=36, generator=g).images[0].save(f"{OUT}/portrait_{aid}_{k}.png")
                 canvas = keyart_canvas(img)
-                kp = (f"anime key visual illustration of {subj}, {SCENE.get(aid, '')}, dynamic heroic composition, dramatic lighting, "
+                kp = (f"stylized realistic hero shooter key art of {subj}, {SCENE.get(aid, '')}, dynamic heroic composition, dramatic cinematic lighting, "
+                      "high quality 3D game splash art") if REAL else (f"anime key visual illustration of {subj}, {SCENE.get(aid, '')}, dynamic heroic composition, dramatic lighting, "
                       "detailed cel shading, vibrant colors, high quality anime game splash art, masterpiece")
-                pipe(prompt=kp, negative_prompt=neg, image=canvas, strength=0.68, guidance_scale=7.5, num_inference_steps=40, generator=g).images[0].save(f"{OUT}/key_{aid}_{k}.png")
+                pipe(prompt=kp, negative_prompt=neg, image=canvas, strength=float(os.environ.get("KEYSTR", "0.68")), guidance_scale=7.5, num_inference_steps=40, generator=g).images[0].save(f"{OUT}/key_{aid}_{k}.png")
             done.append(aid)
             publish("progress", id=aid, done=len(done), total=len(jobs))
     except Exception:

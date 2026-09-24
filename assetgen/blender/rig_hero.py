@@ -19,6 +19,7 @@ ap.add_argument("--wings", action="store_true"); ap.add_argument("--mech", actio
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--python", default="python")
 ap.add_argument("--debug", default="")
 ap.add_argument("--geodesic", action="store_true"); ap.add_argument("--keep-main", action="store_true")
+ap.add_argument("--no-chains", action="store_true")      # nothing hangs (short hair, fitted suit): no spring chains
 a = ap.parse_args(argv)
 HERE = os.path.dirname(os.path.abspath(__file__))
 T0 = time.time()
@@ -405,7 +406,7 @@ def geodesic(bnames, bdict):
         if os.path.exists(f): os.remove(f)
     return out
 chains = []
-if not a.static and not a.mech:
+if not a.static and not a.mech and not a.no_chains:
     names0 = [n for n in bones if n != "root"]
     g = geodesic(names0, bones)
     if g is not None:
@@ -440,14 +441,17 @@ if not a.static and not a.mech:
             t = np.clip(((co - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
             return np.linalg.norm(co - (A + t[:, None] * AB), axis=1)
         armd = np.min(np.stack([seg3(bones[f"{b}_{s}"][0], bones[f"{b}_{s}"][1]) for b in ("forearm", "hand") for s in ("L", "R")]), 0)
+        back_plane = float(np.percentile(co[(co[:, 2] > hz) & (co[:, 2] < chest.z) & (np.abs(co[:, 0]) < sx * 0.5), 1], 80)) if len(co) else chest.y
         # coat tails / skirts / gowns: below the hips, outside both legs, away from the hanging hands and weapons
         cloth = (co[:, 2] < hz - H * 0.07) & (co[:, 2] > H * 0.06) & (legd > leg_r) & (armd > H * 0.12)
+        # winged heroes: everything behind the back is wing (feathers, hanging blades) - it follows the wing bones, not
+        # skirt / cape springs
+        if a.wings: cloth &= co[:, 1] <= back_plane + H * 0.02
         chain("skirt_B", cloth & (co[:, 1] > hy + H * 0.01), "hips")      # behind (the model faces -Y)
         chain("skirt_F", cloth & (co[:, 1] < hy - H * 0.03), "hips")
-        # capes / long coats hanging behind the torso
-        back_plane = float(np.percentile(co[(co[:, 2] > hz) & (co[:, 2] < chest.z) & (np.abs(co[:, 0]) < sx * 0.5), 1], 80)) if len(co) else chest.y
+        # capes / long coats hanging behind the torso (on winged heroes that region is the wings)
         cape = (co[:, 1] > back_plane + H * 0.02) & (co[:, 2] < neck_z - H * 0.05) & (co[:, 2] > hz - H * 0.25) & (np.abs(co[:, 0]) < sx * 1.1)
-        if cape.sum() > 150: chain("hair_B", cape, "chest")
+        if cape.sum() > 150 and not a.wings: chain("hair_B", cape, "chest")
         else:
             # long hair: mass behind the head that hangs below the neck
             head = bones["head"][0]
@@ -547,7 +551,23 @@ for s, sg in (("L", 1), ("R", -1)):
     for arm_b in ("forearm", "hand"):
         Wt[thigh_zone, gi[f"{arm_b}_{s}"]] *= 0.1
 if a.wings:
-    wing = (co[:, 1] > bones["chest"][0].y + H * 0.04) & (np.abs(co[:, 0]) > sh_x * 0.45) & (co[:, 2] > bones["hips"][0].z)
+    torso = co[(co[:, 2] > bones["hips"][0].z) & (co[:, 2] < bones["chest"][0].z) & (np.abs(co[:, 0]) < sh_x * 0.5)]
+    back_y = float(np.percentile(torso[:, 1], 80)) if len(torso) else bones["chest"][0].y + H * 0.04
+    # the wing mass: behind the back (feathers and the blades hanging from the wing roots), clear of the spine column
+    wing = (co[:, 1] > back_y + H * 0.02) & (np.abs(co[:, 0]) > sh_x * 0.3) & (co[:, 2] > H * 0.12)
+    # ...and feathers spread out to the sides in the body's plane: far out laterally but not part of an arm
+    def _segd(n):
+        A = np.array(bones[n][0]); B = np.array(bones[n][1]); AB = B - A
+        t = np.clip(((co - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
+        return np.linalg.norm(co - (A + t[:, None] * AB), axis=1)
+    armd_w = np.min(np.stack([_segd(f"{b}_{s}") for b in ("upperarm", "forearm", "hand") for s in ("L", "R")]), 0)
+    legd_w = np.min(np.stack([_segd(f"{b}_{s}") for b in ("thigh", "shin", "foot") for s in ("L", "R")]), 0)
+    wing |= (np.abs(co[:, 0]) > sh_x * 0.8) & (armd_w > H * 0.06) & (legd_w > H * 0.08) & (co[:, 2] > H * 0.12)
+    # arms and legs never drive wing geometry: the weapon-ready arm pose dragged a wing across the body, and feathers
+    # far out from a thigh bone whip around on any leg IK bend (long lever arm)
+    for arm_b in ("shoulder", "upperarm", "forearm", "hand", "thigh", "shin", "foot"):
+        for side in ("L", "R"):
+            if f"{arm_b}_{side}" in gi: Wt[wing, gi[f"{arm_b}_{side}"]] = 0
     for s, sg in (("L", 1), ("R", -1)):
         m = wing & (np.sign(co[:, 0]) == sg)
         k = np.clip((np.abs(co[m, 0]) - sh_x * 0.45) / (W * 0.2), 0, 1)

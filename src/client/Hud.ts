@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { isAbility, type AbilityDef } from '../data/heroes';
 import type { Actor } from '../game/Actor';
 import type { GameEvent, World } from '../game/World';
+import { QUICK_MELEE } from '../game/weapons';
 import { BASE } from '../render/Assets';
 
 const el = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
@@ -45,7 +46,7 @@ export class Hud {
     const S = a.def.secondary;
     const list: [string, AbilityDef | null, string][] = [
       ['RMB', isAbility(S) ? S : null, isAbility(S) ? S.name : (S.heal ? 'Heal' : 'Alt fire')],
-      ['SHIFT', a.def.ability1, a.def.ability1.name], ['E', a.def.ability2, a.def.ability2.name],
+      ['SHIFT', a.def.ability1, a.def.ability1.name], ['E', a.def.ability2, a.def.ability2.name], ['C', null, 'Melee'],
     ];
     for (const [key, def, name] of list) {
       const b = el('div', 'ab' + (def?.counter ? ' counter' : ''), `<div class="cd"></div><div class="k">${key}</div><div class="n">${name}</div>`);
@@ -77,6 +78,12 @@ export class Hud {
         e.classList.toggle('silenced', me.has('silence', t));
         (e.querySelector('.k') as HTMLElement).textContent = left > 0 ? left.toFixed(left < 3 ? 1 : 0) : k;
       }
+      {
+        // quick melee cooldown
+        const e = this.abilEls.C, left = Math.max(0, me.nextMelee - t);
+        (e.querySelector('.cd') as HTMLElement).style.height = `${left / QUICK_MELEE.cooldown * 100}%`;
+        e.classList.toggle('ready', left <= 0);
+      }
       if (me.def.id === 'tenkai') {
         const b = this.abilEls.RMB;
         (b.querySelector('.cd') as HTMLElement).style.height = `${100 - me.barrier.hp / me.barrier.max * 100}%`;
@@ -84,7 +91,12 @@ export class Hud {
       }
       const u = me.ult / me.def.ult.charge;
       const ready = u >= 1;
-      this.ultEl.innerHTML = `<div class="ring" style="--p:${(u * 100).toFixed(1)}"></div><div class="v">${ready ? 'Q' : Math.floor(u * 100) + '%'}</div><div class="n">${me.def.ult.name}</div>`;
+      const titan = me.has('titan', t) ? me.st.titan - t : 0;
+      this.ultEl.innerHTML = titan > 0
+        // giant form running: the ring drains over the 60 seconds
+        ? `<div class="ring" style="--p:${(titan / 60 * 100).toFixed(1)}"></div><div class="v">${Math.ceil(titan)}s</div><div class="n">GIANT FORM</div>`
+        : `<div class="ring" style="--p:${(u * 100).toFixed(1)}"></div><div class="v">${ready ? 'Q' : Math.floor(u * 100) + '%'}</div><div class="n">${me.def.ult.name}</div>`;
+      this.ultEl.classList.toggle('active', titan > 0);
       this.ultEl.classList.toggle('ready', ready);
       if (ready && !this.ultWasReady) this.onUltReady?.();
       this.ultWasReady = ready;

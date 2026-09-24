@@ -1,0 +1,17 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--use-angle=d3d11', '--window-size=1600,900'], defaultViewport: { width: 1600, height: 900 } });
+const p = await b.newPage();
+await p.goto('http://localhost:5190/play.html', { waitUntil: 'domcontentloaded' });
+await new Promise(r => setTimeout(r, 1500));
+await p.evaluate(() => window.__zu.menu.viewer());
+await p.evaluate(() => { const V = window.__zu.viewer; V.select('tenkai'); V.auto = false; V.yaw = 0.5; });
+await new Promise(r => setTimeout(r, 3000));
+await (await p.$('.vstage')).screenshot({ path: 'tests/e2e/shots/ult_0.png' });
+await p.evaluate(() => { document.querySelector('[data-a="ult"]').click(); });
+await new Promise(r => setTimeout(r, 3500));
+console.log(await p.evaluate(() => window.__zu.viewer.actor.scale.toFixed(2)));
+await (await p.$('.vstage')).screenshot({ path: 'tests/e2e/shots/ult_1.png' });
+await p.evaluate(() => { document.querySelector('[data-a="attack"]').click(); });
+await new Promise(r => setTimeout(r, 1200));
+await (await p.$('.vstage')).screenshot({ path: 'tests/e2e/shots/ult_2.png' });
+await b.close();

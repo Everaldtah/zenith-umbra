@@ -228,3 +228,23 @@ def jobs3():
 # ---- hex re-render: no puppet stand (pass 2 always drew one standing on the floor beside him)
 HEXFIX = [("model_hex", "model", "sinister anime puppeteer named Hex, cracked white porcelain doll mask, tall thin figure, patchwork violet and black long coat with stitches, glowing violet strings dangling from his fingertips, empty hands, nothing on the floor, " + MODEL2_STYLE, NEG2 + ", stand, tripod, pedestal, puppet, doll on the floor, props", 1024, 1024, 4)]
 def jobs4(): return HEXFIX
+
+
+# ---- Mirei v2: grounded hero-shooter proportions instead of the chibi magical girl (her hair + frills read as an
+# "onion" in 3D and TRELLIS split the oversized face). Angelic combat medic, original star-themed design.
+REAL_STYLE = ("full body shot, wide shot, the entire figure from the top of the head to the boots is visible and standing on the floor, "
+              "stylized realistic 3D game character render, western hero shooter art style, realistic adult human proportions, "
+              "detailed natural face, full body from head to toe with both feet visible, standing in a neutral A-pose with arms slightly "
+              "away from the body, symmetrical, front view, plain flat light grey background, clean even studio lighting, no effects, one character only")
+REAL_NEG = NEG2 + ", headshot, bust, half body, waist up, knees up, cut off legs, anime, manga, chibi, cartoon, big eyes, twin tails, pigtails, frills, ruffles, puffy dress, skirt, tutu, child, loli"
+MIREI_V2 = [
+    ("model_mireiv2", "model", "angelic combat medic heroine named Mirei, adult woman, calm kind face, silver-white hair in a single braided ponytail, "
+     "sleek fitted white armored flight suit with pale sky blue panels and thin silver-gold trim, small star emblem on the chest, "
+     "glowing six-pointed star halo floating behind her head, large mechanical wings on her back made of layered translucent blue crystal feather blades "
+     "on a white metal frame, holding a slender white healing staff topped with a star crystal, armored white boots, " + REAL_STYLE, REAL_NEG, 832, 1216, 4),
+    ("model_mireiv3", "model", "guardian angel field medic named Mirei, adult woman, gentle determined face, short silver hair with a side-swept fringe, "
+     "white and light blue armored bodysuit with a silver chest plate and star-shaped medic emblem, thin glowing star halo behind her head, "
+     "big folded mechanical wings of long crystal-blue metal feathers on her back, slender white staff with a glowing star tip in her right hand, "
+     "white armored boots and gauntlets, " + REAL_STYLE, REAL_NEG, 832, 1216, 4),
+]
+def jobs5(): return MIREI_V2

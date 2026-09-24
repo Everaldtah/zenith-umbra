@@ -8,12 +8,15 @@ import { ROBOTS } from '../data/robots';
 import { castAbility, tickAbilities } from './abilities';
 import { updateWeapons } from './weapons';
 
+/** Tenkai-Oh's ult: 3.3m x 2.2 = 7.3m, four times an average hero's height */
+export const TITAN_SCALE = 2.2;
+
 export const G = 24;
 export type Mode = 'training' | 'skirmish' | 'spectate' | 'aitest' | 'campaign' | 'gallery';
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
-  | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; actor?: Actor; target?: Actor }
+  | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; side?: number; actor?: Actor; target?: Actor }
   | { t: 'dmg'; src: Actor | null; tgt: Actor; amt: number; crit: boolean; heal?: boolean; pos: V3 }
   | { t: 'kill'; src: Actor | null; tgt: Actor }
   | { t: 'cast'; actor: Actor; id: string; name: string }
@@ -39,7 +42,7 @@ export class World {
   zones: Zone[] = [];
   events: GameEvent[] = [];
   timers: { at: number; fn: () => void }[] = [];
-  prevIn = new Map<number, { a1: boolean; a2: boolean; ult: boolean; alt: boolean; jump: boolean; fire: boolean }>();
+  prevIn = new Map<number, { a1: boolean; a2: boolean; ult: boolean; alt: boolean; jump: boolean; fire: boolean; melee: boolean }>();
   attackers = new Map<number, Map<number, number>>();
   // capture point
   point = { owner: null as TeamId | null, capture: 0, capTeam: null as TeamId | null, progress: { zenith: 0, umbra: 0 }, contested: false, unlockAt: 8, r: 6 };
@@ -185,6 +188,7 @@ export class World {
     }
     let dmg = amount;
     if (src?.has('dmgamp', t)) dmg *= 1.3;
+    if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
     if (src?.has('ambush', t) && o.kind !== 'dot') { dmg += 50; src.clear('ambush'); }
     // Hex: Stitched Decoy eats one huge hit
@@ -388,14 +392,14 @@ export class World {
     let best: { t: number; owner: Actor } | null = null;
     for (const a of this.actors) {
       if (!a.alive || !a.barrier.up || a.team === team) continue;
-      const f = a.forward(), c = { x: a.pos.x + f.x * 1.7, y: a.pos.y, z: a.pos.z + f.z * 1.7 };
+      const f = a.forward(), k = a.scale, c = { x: a.pos.x + f.x * 1.7 * k, y: a.pos.y, z: a.pos.z + f.z * 1.7 * k };
       const den = d.x * f.x + d.z * f.z;
       if (den >= -1e-4) continue;                 // only blocks shots coming at its face
       const t = ((c.x - o.x) * f.x + (c.z - o.z) * f.z) / den;
       if (t < 0 || t > max || (best && t > best.t)) continue;
       const hx = o.x + d.x * t - c.x, hz = o.z + d.z * t - c.z, hy = o.y + d.y * t - c.y;
       const lateral = Math.abs(hx * -f.z + hz * f.x);
-      if (lateral > 2.4 || hy < -0.2 || hy > 3.8) continue;
+      if (lateral > 2.4 * k || hy < -0.2 || hy > 3.8 * k) continue;
       best = { t, owner: a };
     }
     return best;
@@ -432,7 +436,7 @@ export class World {
     else if (this.mode !== 'training') this.updatePoint(dt);
   }
 
-  pressed(a: Actor, k: 'a1' | 'a2' | 'ult' | 'alt' | 'jump' | 'fire') {
+  pressed(a: Actor, k: 'a1' | 'a2' | 'ult' | 'alt' | 'jump' | 'fire' | 'melee') {
     const p = this.prevIn.get(a.id);
     return a.input[k] && !(p && p[k]);
   }
@@ -453,6 +457,15 @@ export class World {
     if (a.isRobot && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
     a.shields = a.shields.filter(s => s.until > t);
     if (a.st.asura && !per('asura') && a.scale > 1) { a.scale = 1; a.maxArmor = a.def.armor; a.armor = Math.min(a.armor, a.maxArmor); }
+    // Dawn Colossus: grow into the giant over ~1s, hold it for the ult's duration, then shrink back and drop the bonus armor
+    if (a.st.titan !== undefined) {
+      const on = per('titan');
+      a.scale += ((on ? TITAN_SCALE : 1) - a.scale) * Math.min(1, dt * (on ? 2.6 : 3.2));
+      if (!on && a.scale < 1.02) {
+        a.scale = 1; a.maxArmor = a.def.armor; a.armor = Math.min(a.armor, a.maxArmor); a.clear('titan');
+        this.fx('ultflash', a.center, { color: a.def.glow, actor: a }); this.sfx('barrierbreak', a.center, a);
+      }
+    }
     if (!a.alive) return;
     a.ult = Math.min(a.def.ult.charge, a.ult + (this.mode === 'aitest' ? 30 : 5) * dt);
     if (a.barrier.max && !a.barrier.up && t > a.barrier.regenAt && t > a.barrier.brokenUntil) a.barrier.hp = Math.min(a.barrier.max, a.barrier.hp + 150 * dt);
@@ -476,7 +489,7 @@ export class World {
       }
     } else { a.barrier.up = false; a.beamOn = false; a.flameOn = false; a.charging = false; }
     const i = a.input;
-    this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire });
+    this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire, melee: i.melee });
   }
 
   /** movement integration only (also used by co-op clients to predict their own hero) */
@@ -495,6 +508,7 @@ export class World {
       let spd = d.speed;
       if (a.has('slow', t)) spd *= 0.8;
       if (a.has('speed', t)) spd *= a.sv.speed ?? 1.25;
+      if (a.has('titan', t)) spd *= 1.2;
       if (a.has('judgment', t) || a.has('stealth', t)) spd *= 1.3;
       if (a.charging) spd *= 0.7;
       if (a.barrier.up) spd *= 0.65;
@@ -536,6 +550,8 @@ export class World {
         }
       }
       if (!a.flying && d.frame !== 'drone') a.vel.y -= G * dt * (a.has('glide', t) && a.vel.y < 0 ? 0.18 : 1);
+      // Mirei's angelic descent: out of flight energy, holding SPACE floats her down slowly instead of dropping
+      if (d.id === 'mirei' && !a.flying && !a.grounded && inp.jumpHeld && a.vel.y < -2.2 && !a.forced) { a.vel.y = -2.2; a.set('angelglide', t, 0.15); }
     }
     // integrate with sub-steps so fast dashes don't tunnel
     // a non-finite velocity would make the sub-step count infinite and freeze the whole simulation
@@ -546,7 +562,7 @@ export class World {
     const y0 = a.pos.y, x0 = a.pos.x, z0 = a.pos.z;
     for (let i = 0; i < n; i++) {
       a.pos.x += a.vel.x * dt / n; a.pos.y += a.vel.y * dt / n; a.pos.z += a.vel.z * dt / n;
-      if (L.collide(a.pos, a.radius, a.height)) hitWall = true;
+      if (L.collide(a.pos, a.colRadius, a.colHeight)) hitWall = true;
     }
     if (hitWall && a.forced?.kind === 'abysscharge') a.forced.until = t;
     const [X, Z] = L.size;
@@ -602,7 +618,7 @@ export class World {
       const ka = mb / (ma + mb), kb = ma / (ma + mb);
       a.pos.x -= dx / d * push * ka; a.pos.z -= dz / d * push * ka;
       b.pos.x += dx / d * push * kb; b.pos.z += dz / d * push * kb;
-      this.level.collide(a.pos, a.radius, a.height); this.level.collide(b.pos, b.radius, b.height);
+      this.level.collide(a.pos, a.colRadius, a.colHeight); this.level.collide(b.pos, b.colRadius, b.colHeight);
     }
   }
 

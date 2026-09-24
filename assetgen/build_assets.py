@@ -16,7 +16,7 @@ RIG = HERE / 'out' / 'rigged'
 # id: (height m, flags)
 HEROES = {
     'tenkai': (3.3, ['--mech', '--tris', '34000']), 'gorgoth': (3.4, ['--mech', '--tris', '34000']),
-    'mirei': (1.65, ['--wings']), 'nocturne': (1.75, ['--wings']),
+    'mirei': (1.7, ['--wings', '--no-chains', '--tris', '40000']), 'nocturne': (1.75, ['--wings']),
     'kaien': (1.8, []), 'raijin': (1.8, []), 'yuzu': (1.62, []), 'hex': (1.95, []), 'kagemaru': (1.78, []), 'enra': (2.05, []),
     'haruto': (1.75, []), 'vorn': (1.85, []),
     'bot_dummy': (1.9, ['--tris', '12000']), 'bot_sentry': (1.7, ['--mech', '--tris', '12000']),
@@ -87,7 +87,7 @@ def main():
 
     def opt(j):
         aid, p, kind, h = j
-        big = aid.startswith('boss_')
+        big = aid.startswith('boss_') or aid == 'mirei'      # Mirei's redesigned face needs the 2K texture on the web too
         # web: props are background dressing -> heavy decimation; desktop keeps far more detail
         ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.3 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.005)
         gltf(p, HQ / f'{aid}.glb', 2048 if kind != 'prop' else 1024, 0.45 if kind == 'prop' else 0.7 if kind == 'static' else None)

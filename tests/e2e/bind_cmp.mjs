@@ -7,7 +7,7 @@ await p.goto('http://localhost:5190/play.html', { waitUntil: 'domcontentloaded' 
 await new Promise(r => setTimeout(r, 1500));
 await p.evaluate(() => window.__zu.menu.viewer());
 for (const id of ids) {
-  await p.evaluate(id => { const V = window.__zu.viewer; V.select(id); V.auto = false; V.yaw = 0.35; V.tilt = 0.15; V.zoom = 1.25; }, id);
+  await p.evaluate(id => { const V = window.__zu.viewer; V.select(id); V.auto = false; V.yaw = 0.05; V.tilt = 0.1; V.zoom = 1.1; }, id);
   await new Promise(r => setTimeout(r, 3000));
   await (await p.$('.vstage')).screenshot({ path: `tests/e2e/shots/${id}_anim.png` });
   await p.evaluate(() => { const v = window.__zu.viewer.view; v.anim.ok = false; v.model.traverse(o => { if (o.isSkinnedMesh) o.skeleton.pose(); }); });

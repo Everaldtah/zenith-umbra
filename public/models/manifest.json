@@ -34,8 +34,8 @@
    ]
   },
   "mirei": {
-   "height": 1.65,
-   "tris": 26000,
+   "height": 1.7,
+   "tris": 40000,
    "bones": [
     "humanoid"
    ]

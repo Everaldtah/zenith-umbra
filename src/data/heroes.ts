@@ -8,6 +8,7 @@ export type Frame = 'human' | 'mech' | 'flyer' | 'drone';
 
 export interface WeaponDef {
   kind: 'projectile' | 'hitscan' | 'melee' | 'beam' | 'charge';
+  name?: string;         // shown in the hero panels (defaults to the kind)
   damage: number;
   rate: number;          // shots (or ticks) per second
   range: number;
@@ -18,6 +19,8 @@ export interface WeaponDef {
   ammo?: number;
   reload?: number;
   heal?: boolean;        // beam / projectile heals allies instead of hurting enemies
+  sweep?: boolean;       // melee: a wide two-handed arc (alternating swing sides) instead of a thrust
+  delay?: number;        // melee: seconds from the button press to the blow landing (heavy weapons wind up)
   sfx: string;
   fx: string;            // colour key for projectile / beam effect
 }
@@ -67,28 +70,28 @@ export const HEROES: HeroDef[] = [
   {
     id: 'tenkai', name: 'Tenkai-Oh', title: 'The Dawn Colossus', team: 'zenith', role: 'tank', frame: 'mech', rival: 'gorgoth',
     hp: 400, armor: 250, speed: 5.0, height: 3.3, radius: 0.95, color: '#f4d35e', glow: '#ffd76a',
-    primary: { kind: 'projectile', damage: 22, splash: 1.6, rate: 5, range: 60, speed: 62, ammo: 30, reload: 1.8, sfx: 'cannon', fx: 'sun' },
+    primary: { kind: 'melee', name: 'Dawnbreaker Rocket Hammer', damage: 85, rate: 1.1, range: 5, sweep: true, delay: 0.24, sfx: 'hammer', fx: 'sun' },
     secondary: { id: 'bulwark', name: 'Solar Bulwark', key: 'RMB', cooldown: 0, hold: true, desc: 'Raise a 1400 HP sun-shield in front of you. Regenerates when lowered.' },
     ability1: { id: 'anchor', name: 'Dawn Anchor', key: 'SHIFT', cooldown: 8, desc: 'Launch a rocket fist that drags the first enemy hit toward you (40 dmg).', counter: "Interrupts Gorgoth's Abyss Charge and every channel." },
     ability2: { id: 'sunburst', name: 'Purging Sunburst', key: 'E', cooldown: 12, desc: 'Burst of dawnlight: cleanse nearby allies of curses, burns, roots and silence, 2s immunity. 30 dmg to enemies.', counter: "Burns away Enra's Eclipse Brand and Hex's Grievous Hex." },
-    ult: { id: 'dawndrive', name: 'Final Dawn Drive', key: 'Q', cooldown: 0, charge: 1900, desc: 'Leap skyward and slam a blazing sun-sword: 200 dmg and 1.5s stun in 8m.' },
+    ult: { id: 'colossus', name: 'Dawn Colossus Awakening', key: 'Q', cooldown: 0, charge: 2300, desc: 'The sun-reactor goes critical: Tenkai-Oh grows into a 7-metre giant - four times a hero’s height - for 60s. +800 armor, +25% damage, +20% speed and a longer hammer reach; the landing stomp deals 120 and stuns for 1s. Shrinks back when it ends.' },
     passive: { name: 'Heavy Frame', desc: 'Immune to knockback. Armor absorbs 30% of every hit.' },
     lore: 'Tenkai-Oh was forged in Hangar Zero as the first Guardian Frame, piloted by Haruto Daimon - a mechanic\'s son who refused to let the Eclipse take another city. Its sun-reactor was stolen by the Syndicate once. It will not happen twice.',
-    inspiration: 'Classic super robot shows - hot-blooded pilot, combining-sword finishers, dawn-light transformation.',
+    inspiration: 'Classic super robot shows - hot-blooded pilot, a rocket-driven hammer, the giant dawn-light transformation.',
     voice: [110, 0.8],
     pilot: { id: 'haruto', name: 'Haruto Daimon', bio: "Seventeen, hot-blooded, and the only pilot Tenkai-Oh's sun-reactor ever synchronised with. Ejects in a golden escape pod when the frame goes down - and is back in the cockpit before the dust settles." },
   },
   {
     id: 'mirei', name: 'Mirei', title: 'The Starweaver', team: 'zenith', role: 'support', frame: 'flyer', rival: 'nocturne',
-    hp: 200, armor: 0, speed: 5.6, height: 1.65, radius: 0.42, color: '#8fd3ff', glow: '#bfe8ff',
+    hp: 200, armor: 0, speed: 5.6, height: 1.7, radius: 0.42, color: '#8fd3ff', glow: '#bfe8ff',
     primary: { kind: 'projectile', damage: 22, rate: 3, range: 50, speed: 55, ammo: 24, reload: 1.4, sfx: 'star', fx: 'star' },
     secondary: { kind: 'beam', damage: 62, rate: 10, range: 18, heal: true, sfx: 'healbeam', fx: 'star' },
     ability1: { id: 'constellation', name: 'Constellation Link', key: 'SHIFT', cooldown: 12, desc: 'Link allies within 15m for 5s: 25 HP/s and immunity to silence, grounding and roots.', counter: "Linked allies shrug off Nocturne's Silence Aria." },
     ability2: { id: 'wish', name: 'Wish Barrier', key: 'E', cooldown: 10, desc: 'Wrap the ally you aim at (or yourself) in a 300 HP star shield for 4s.' },
     ult: { id: 'nova', name: 'Nova Requiem', key: 'Q', cooldown: 0, charge: 2000, desc: 'A healing supernova: allies within 25m heal 350 over 2.5s and deal +30% damage for 4s.' },
-    passive: { name: 'Starwing Flight', desc: 'Hold SPACE to fly on holographic star wings. Flight energy regenerates on the ground.' },
+    passive: { name: 'Starwing Flight', desc: 'Hold SPACE to fly on crystal star-wings. Out of flight energy, keep holding SPACE to glide down slowly. Energy regenerates on the ground.' },
     lore: 'The last apprentice of the Amatsu Star Choir, Mirei stitched her wings from the constellations the night the Eclipse swallowed her teacher\'s voice. She sings to keep the Vanguard alive - and to drown out a song she once loved.',
-    inspiration: 'Magical-girl transformation shows and idol-singer anime.',
+    inspiration: 'Angelic combat medics of team hero shooters, with a starlit idol-singer soul.',
     voice: [520, 0.2],
   },
   {

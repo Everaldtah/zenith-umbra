@@ -114,6 +114,7 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .ult .ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--gold) calc(var(--p) * 1%), rgba(255,255,255,.1) 0); mask: radial-gradient(circle, transparent 58%, #000 60%); }
 .ult .v { position: absolute; inset: 0; display: grid; place-items: center; font: 800 26px Orbitron; } .ult .n { position: absolute; top: 104px; width: 180px; left: -40px; text-align: center; font-size: 13px; opacity: .8; }
 .ult.ready .ring { background: var(--gold); animation: pulse 1s infinite; } .ult.ready .v { color: var(--gold); text-shadow: 0 0 12px var(--gold); }
+.ult.active .ring { background: conic-gradient(#ffb347 calc(var(--p) * 1%), rgba(255,255,255,.1) 0); filter: drop-shadow(0 0 8px #ffb347); } .ult.active .v { color: #ffd76a; font-size: 24px; } .ult.active .n { color: #ffd76a; font-weight: 700; }
 @keyframes pulse { 50% { opacity: .55; } }
 .ammo { position: absolute; right: 60px; bottom: 170px; font: 800 38px Orbitron; } .ammo small { font-size: 18px; opacity: .6; }
 .flight { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: .2em; }

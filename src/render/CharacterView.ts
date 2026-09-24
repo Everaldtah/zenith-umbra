@@ -4,6 +4,9 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator } from './Animator';
 import { heroModel } from './Assets';
+import { buildHammer, type HammerProp } from './Hammer';
+
+const BRIGHT_SUITS = new Set(['mirei']);
 import { skinsFor, type Skin } from '../data/skins';
 
 const rimChunk = `
@@ -130,6 +133,7 @@ export class CharacterView {
   shieldMesh: THREE.Mesh;
   barrierMesh: THREE.Mesh | null = null;
   scaleFit = 1;
+  hammer: HammerProp | null = null;
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
@@ -213,6 +217,12 @@ export class CharacterView {
     this.scaleFit = s;
     this.real = true;
     this.hookStep();
+    // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path
+    if (this.actor.def.primary.sweep && anim.ok) {
+      this.hammer = buildHammer(anim.height);
+      m.add(this.hammer.group);
+      anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
+    }
     // materials: keep the concept colours, add rim + a hint of emission for readability in dark maps
     this.collectMats();
     for (const mt of this.mats) {
@@ -233,7 +243,9 @@ export class CharacterView {
         // reconstructed surfaces can carry inverted faces; draw both sides so they never read as holes
         sm.side = THREE.DoubleSide;
         sm.envMapIntensity = 0.6;
-        if (sm.map && !sm.emissiveMap) { sm.emissive = new THREE.Color(0xffffff); sm.emissiveMap = sm.map; sm.emissiveIntensity = 0.16; }
+        // a hint of self-light keeps dark heroes readable; near-white suits (Mirei) would bloom flat, so they get far less
+        if (sm.map && !sm.emissiveMap) { sm.emissive = new THREE.Color(0xffffff); sm.emissiveMap = sm.map; sm.emissiveIntensity = BRIGHT_SUITS.has(this.actor.def.id) ? 0.04 : 0.16; }
+        if (BRIGHT_SUITS.has(this.actor.def.id)) { sm.roughness = 0.55; sm.envMapIntensity = 0.45; }
         sm.needsUpdate = true;
       }
     }
@@ -283,7 +295,9 @@ export class CharacterView {
       this.barrierMesh.visible = a.barrier.up;
       const bm = this.barrierMesh.material as THREE.ShaderMaterial;
       bm.uniforms.t.value = time; bm.uniforms.hp.value = a.barrier.hp / a.barrier.max;
-      this.barrierMesh.position.set(0, 1.9, 1.7 - 3.2);   // arc centred so its face sits 1.7m in front
+      // arc centred so its face sits 1.7m in front; grows with Tenkai-Oh's giant form
+      this.barrierMesh.scale.setScalar(a.scale);
+      this.barrierMesh.position.set(0, 1.9 * a.scale, (1.7 - 3.2) * a.scale);
     }
     // animation
     const an = a.anim;
@@ -294,7 +308,17 @@ export class CharacterView {
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
+      hammer: !!this.hammer, swingSide: an.attackSide,
+      angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
     });
+    if (this.hammer) {
+      // rocket thruster: roars through the swing, the sun cores flare on impact
+      const age = time - an.attackAt, on = an.attackKind === 'primary' && age > 0.12 && age < 0.45;   // fires on the strike, not the wind-up
+      const f = this.hammer.flame;
+      f.visible = on;
+      if (on) f.scale.set(1, 0.5 + 0.9 * Math.sin(Math.min(1, (age - 0.12) / 0.33) * Math.PI) + Math.random() * 0.15, 1);
+      this.hammer.core.emissiveIntensity = 2.4 + (on ? 3 * Math.max(0, 1 - Math.abs(age - 0.29) / 0.15) : 0) + (a.has('titan', time) ? 1.5 : 0);
+    }
     if (a.def.frame === 'drone') this.model.rotation.z = Math.sin(time * 2 + a.id) * 0.1;
   }
 

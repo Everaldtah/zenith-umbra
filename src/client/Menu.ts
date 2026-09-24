@@ -81,12 +81,13 @@ export class Menu {
         <div class="meta"><span class="${d.team}">${TEAM_NAME[d.team]}</span><span>${d.role.toUpperCase()}</span><span>${d.hp + d.armor} HP${d.armor ? ` (${d.armor} armor)` : ''}</span>${d.frame === 'flyer' ? '<span>FLYER</span>' : ''}${d.frame === 'mech' ? '<span>MECHA</span>' : ''}</div>
         ${d.pilot ? `<p class="pilot"><img src="${BASE}img/portrait_${d.pilot.id}.webp" onerror="this.remove()"><span><b>Pilot: ${d.pilot.name}</b> ${d.pilot.bio}</span></p>` : ''}
         <p class="lore">${d.lore}</p>
-        ${ab('LMB', pr.kind === 'charge' ? 'Charged shot' : pr.kind === 'melee' ? 'Melee strikes' : pr.kind === 'beam' ? 'Close-range stream' : 'Primary fire', `${pr.damage}${pr.pellets ? `×${pr.pellets}` : ''} dmg${pr.kind === 'beam' ? '/s' : ''}${pr.splash ? `, ${pr.splash}m splash` : ''}${pr.ammo ? `, ${pr.ammo} rounds` : ''}`)}
+        ${ab('LMB', pr.name ?? (pr.kind === 'charge' ? 'Charged shot' : pr.kind === 'melee' ? 'Melee strikes' : pr.kind === 'beam' ? 'Close-range stream' : 'Primary fire'), `${pr.damage}${pr.pellets ? `×${pr.pellets}` : ''} dmg${pr.kind === 'beam' ? '/s' : ''}${pr.splash ? `, ${pr.splash}m splash` : ''}${pr.ammo ? `, ${pr.ammo} rounds` : ''}${pr.sweep ? `, ${pr.range}m sweeping arc` : ''}`)}
         ${isAbility(S) ? ab('RMB', S.name, S.desc, S.counter) : ab('RMB', S.heal ? 'Healing' : 'Alt fire', S.heal ? `Heals allies ${S.damage}${S.kind === 'beam' ? '/s' : ''}` : `${S.damage} dmg`)}
         ${ab('SHIFT', d.ability1.name, d.ability1.desc, d.ability1.counter)}
         ${ab('E', d.ability2.name, d.ability2.desc, d.ability2.counter)}
         ${ab('Q', d.ult.name + ' (ULT)', d.ult.desc)}
         ${ab('—', d.passive.name + ' (passive)', d.passive.desc)}
+        ${ab('C', 'Quick melee', 'A fast punch for 40 damage - every hero has one (0.9s cooldown).')}
         <p class="rival">RIVAL: <b style="color:${rival.color}">${rival.name}</b>, ${rival.title}. <em>${d.inspiration}</em></p>
       </div></div>`;
   }
@@ -138,7 +139,7 @@ export class Menu {
     const map = this.mode === 'training' ? 'training' : this.map;
     const m = MAP[map];
     this.show(`<div class="loading"><div class="bg" style="background-image:url(${BASE}img/map_${map}.webp)"></div><h2>${m.name}</h2><p>${m.story}</p><div class="spin"></div>
-      <p class="tips">WASD move · SPACE jump / fly · LMB fire · RMB secondary · SHIFT / E abilities · Q ultimate · R reload · V first/third person · TAB scoreboard</p></div>`);
+      <p class="tips">WASD move · SPACE jump / fly · LMB fire · RMB secondary · C melee · SHIFT / E abilities · Q ultimate · R reload · CTRL descend · V first/third person · TAB scoreboard</p></div>`);
     await this.game.start({ mode: this.mode, map, hero: this.mode === 'spectate' || this.mode === 'aitest' ? null : this.hero });
     setTimeout(() => this.close(), 600);
   }

@@ -7,7 +7,7 @@ PUB = os.path.join(HERE, '..', 'public')
 SRC = [os.path.join(HERE, 'out', d, 'img') for d in ('campaign', 'models2', 'pilots', 'concepts')]
 ARTFIX = os.path.join(HERE, 'out', 'artfix', 'img')
 # art regenerated from each model's own concept (matches the 3D model): portrait pick, key-art pick
-FIX = {'enra': (0, 0), 'gorgoth': (1, 0), 'haruto': (0, 1), 'hex': (0, 0), 'kagemaru': (0, 0), 'kaien': (0, 0), 'mirei': (1, 0), 'nocturne': (0, 1), 'qelvaris': (0, 1), 'raijin': (0, 1), 'tenkai': (0, 1), 'vorn': (0, 0), 'yuzu': (0, 0)}   # earlier dirs win
+FIX = {'enra': (0, 0), 'gorgoth': (1, 0), 'haruto': (0, 1), 'hex': (0, 0), 'kagemaru': (0, 0), 'kaien': (0, 0), 'mirei': (9, 9), 'nocturne': (0, 1), 'qelvaris': (0, 1), 'raijin': (0, 1), 'tenkai': (0, 1), 'vorn': (0, 0), 'yuzu': (0, 0)}   # earlier dirs win
 KEY_PICK = {'qelvaris': 1, 'enra': 0, 'gorgoth': 0, 'hex': 1, 'kagemaru': 0, 'kaien': 1, 'mirei': 1, 'nocturne': 0, 'raijin': 0, 'tenkai': 0, 'yuzu': 1, 'haruto': 0, 'vorn': 1}
 MAP_PICK = {'amatsu': 0, 'cathedral': 1, 'hangar': 0, 'kurogane': 1, 'rift': 0, 'training': 0}
 

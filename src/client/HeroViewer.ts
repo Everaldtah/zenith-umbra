@@ -8,6 +8,8 @@ import { Actor } from '../game/Actor';
 import { CharacterView } from '../render/CharacterView';
 import { loadManifest, BASE } from '../render/Assets';
 import { skinsFor, equipSkin, equippedSkin } from '../data/skins';
+import { SWING_TIME } from '../render/Animator';
+import { TITAN_SCALE } from '../game/World';
 import { sfx } from '../audio/Sfx';
 
 const EXTRA: HeroDef[] = [
@@ -18,7 +20,7 @@ const EXTRA: HeroDef[] = [
   ...Object.values(ENEMIES).map(e => ({ ...e, lore: `${e.title}: one of the Star-Forger's mass-produced robots in Operation Starfall.` })),
 ];
 const ALL: Record<string, HeroDef> = Object.fromEntries([...HEROES, ...EXTRA].map(h => [h.id, h]));
-type AnimMode = 'idle' | 'walk' | 'run' | 'attack' | 'alt' | 'cast' | 'jump' | 'fly' | 'hit';
+type AnimMode = 'idle' | 'walk' | 'run' | 'attack' | 'alt' | 'melee' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
 
 export class HeroViewer {
   root: HTMLElement;
@@ -47,7 +49,7 @@ export class HeroViewer {
         <h3>PILOTS &amp; CAMPAIGN</h3><div class="vrow">${EXTRA.map(h => this.chip(h)).join('')}</div>
       </div>
       <div class="vstage"><div class="vname"></div>
-        <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'cast', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
+        <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'melee', 'cast', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
         <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div></div>
       <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
     host.append(this.root);
@@ -104,6 +106,7 @@ export class HeroViewer {
 
   private setMode(m: AnimMode) {
     this.mode = m; this.t = 0;
+    if (this.actor) { this.actor.scale = 1; this.actor.clear('titan'); }
     this.root.querySelectorAll<HTMLElement>('[data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === m));
   }
 
@@ -163,7 +166,14 @@ export class HeroViewer {
     if (m === 'jump') { const p = (T % 1.2) / 1.2; a.pos.y = Math.sin(p * Math.PI) * 1.4; a.vel.y = Math.cos(p * Math.PI) * 6; a.grounded = p > 0.97; if (p < 0.05) a.anim.jumpAt = T; if (p > 0.97) a.anim.landAt = T; }
     else if (m === 'fly') { a.pos.y = 1.2 + Math.sin(T * 1.5) * 0.2; a.vel.y = Math.cos(T * 1.5) * 0.3; }
     else a.pos.y = 0;
-    if (m === 'attack' && T % 0.6 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'primary'; }
+    const swingEvery = a.def.primary.sweep ? SWING_TIME + 0.1 : 0.6;
+    if (m === 'attack' && T % swingEvery < dt) { a.anim.attackAt = T; a.anim.attackKind = 'primary'; a.anim.attackSide = -a.anim.attackSide; }
+    if (m === 'melee' && T % 0.9 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'punch'; }
+    if (m === 'ult') {
+      // Tenkai-Oh previews the giant form; everyone else plays their ult cast
+      if (a.def.ult.id === 'colossus') { a.set('titan', T, 9999); a.scale += (TITAN_SCALE - a.scale) * Math.min(1, dt * 2.6); }
+      else if (T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ult.id; }
+    }
     if (m === 'alt' && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
     if (m === 'cast' && T % 1.4 < dt) a.anim.castAt = T;
     if (m === 'hit' && T % 0.8 < dt) a.anim.hitAt = T;
@@ -174,7 +184,8 @@ export class HeroViewer {
     v.rim.value = 0;
     // camera orbit around the model, distance fitted to the posed bounds (whole body + wings in frame, feet clear of
     // the animation buttons along the bottom of the stage)
-    const H = a.height, F = this.measure(v, dt);
+    const H = a.height, F0 = this.measure(v, dt), ks = a.scale;
+    const F = { minY: F0.minY * ks, maxY: F0.maxY * ks, rad: F0.rad * ks };
     const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const fh = F.maxY - F.minY;
     const fitR = Math.max(fh / 0.74, (2.25 * F.rad) / Math.max(0.5, this.camera.aspect)) / (2 * tanH) + F.rad * 0.5;
@@ -212,8 +223,10 @@ export class HeroViewer {
       });
       if (!box.isEmpty()) {
         const gy = v.group.position.y;
-        F.minY = Math.min(0, box.min.y - gy); F.maxY = box.max.y - gy;
-        F.rad = Math.max(-box.min.x, box.max.x, -box.min.z, box.max.z, 0.3);
+        // stored at scale 1 (the frame multiplies by the actor's current scale: Tenkai-Oh's giant preview)
+        const ks = this.actor!.scale;
+        F.minY = Math.min(0, box.min.y - gy) / ks; F.maxY = (box.max.y - gy) / ks;
+        F.rad = Math.max(-box.min.x, box.max.x, -box.min.z, box.max.z, 0.3) / ks;
         const ring = this.scene.getObjectByName('ring') as THREE.Mesh;
         ring.scale.setScalar(Math.max(1, this.actor!.def.radius * 1.6, F.rad * 0.8));
       }
