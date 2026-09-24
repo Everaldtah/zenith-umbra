@@ -97,7 +97,7 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
         if (!a.alive || a.has('stun', w.time)) return;
         const reach = W.range * (a.scale > 1 ? 1 + (a.scale - 1) * 0.5 : 1);
         w.fx('hammer', a.center, { color: a.def.glow, actor: a, side, r: reach });
-        const n = meleeArc(w, a, reach, W.damage * mult, 0.1, 3 * a.scale);
+        const n = meleeArc(w, a, reach, W.damage * mult, 0.1, a.height * 1.3);
         // the head of the hammer also batters enemy barriers it passes through
         const f = a.forward();
         for (const o of w.enemies(a)) {

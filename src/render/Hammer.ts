@@ -47,3 +47,20 @@ export function buildHammer(modelHeight: number): HammerProp {
   g.add(flame);
   return { group: g, len, flame, core };
 }
+
+/** Haruto's "Sunspark" sidearm: barrel along +Z from the grip (origin), sized in the rig's model units */
+export function buildBlaster(modelHeight: number): THREE.Group {
+  const L = modelHeight;
+  const white = new THREE.MeshStandardMaterial({ color: '#eef1f6', metalness: 0.5, roughness: 0.35 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#1c2433', metalness: 0.55, roughness: 0.5 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#b98224', metalness: 0.8, roughness: 0.34 });
+  const core = new THREE.MeshStandardMaterial({ color: '#fff1c2', emissive: new THREE.Color('#ffd76a'), emissiveIntensity: 2.2 });
+  const g = new THREE.Group();
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, rx = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.x = rx; o.castShadow = true; g.add(o); return o; };
+  add(new THREE.BoxGeometry(0.035 * L, 0.05 * L, 0.13 * L), white, 0, 0.03 * L, 0.05 * L);            // body
+  add(new THREE.CylinderGeometry(0.011 * L, 0.013 * L, 0.09 * L, 10), dark, 0, 0.038 * L, 0.15 * L, Math.PI / 2);   // barrel
+  add(new THREE.BoxGeometry(0.028 * L, 0.06 * L, 0.03 * L), dark, 0, -0.012 * L, 0.0, -0.25);        // grip
+  add(new THREE.BoxGeometry(0.038 * L, 0.012 * L, 0.1 * L), gold, 0, 0.058 * L, 0.05 * L);           // top rail
+  add(new THREE.SphereGeometry(0.012 * L, 10, 8), core, 0.018 * L, 0.03 * L, 0.06 * L);               // sun cell
+  return g;
+}

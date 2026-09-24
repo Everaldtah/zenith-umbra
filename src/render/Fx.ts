@@ -148,6 +148,24 @@ export class Fx {
         P.emit(tip, n(18), c, { speed: 7, life: 0.35, size: 0.25 });
         this.shake = Math.max(this.shake, 0.05 / (1 + near / 8));
       } break;
+      case 'shatter': if (e.to) {
+        // ground shockwave: a glowing wedge that races out along the floor, rock debris thrown up along its path
+        const len = e.r ?? 16, dx = e.to.x - p.x, dz = e.to.z - p.z, yaw = Math.atan2(dx, dz), half = 0.42;
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0); shape.lineTo(Math.tan(half) * len, len); shape.lineTo(-Math.tan(half) * len, len); shape.lineTo(0, 0);
+        const wedge = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+        wedge.rotation.order = 'YXZ'; wedge.rotation.y = yaw; wedge.rotation.x = Math.PI / 2;
+        wedge.position.set(p.x, p.y + 0.08, p.z);
+        this.add(wedge, 'shatter', now, 0.55, { r: 1 });
+        for (let k = 1; k <= 8; k++) {
+          const u = k / 8, q = { x: p.x + dx * u, y: p.y + 0.2, z: p.z + dz * u };
+          P.emit(q, n(10), c, { speed: 5 + 4 * u, life: 0.6, size: 0.35, up: 4, grav: 12 });
+          P.emit(q, n(6), new THREE.Color('#6b5b4a'), { speed: 4, life: 0.8, size: 0.45, up: 5, grav: 14 });
+        }
+        this.ring(p, 3, e.color ?? '#ffd76a', now, 0.4);
+        this.light(p, e.color ?? '#ffd76a', 40, now);
+        this.shake = Math.max(this.shake, 0.3 / (1 + near / 12));
+      } break;
       case 'lightning': if (e.to) { this.zigzag(p, e.to, '#8ad8ff', now); } break;
       case 'parry': this.ring(p, 1.8, '#8ad8ff', now, 0.3, false); P.emit(p, n(16), c, { speed: 8, life: 0.2, size: 0.15 }); this.light(p, '#8ad8ff', 30, now); break;
       case 'decoy': P.emit(p, n(40), c, { speed: 4, life: 0.8, size: 0.3 }); this.ring(p, 2, e.color ?? '#c77dff', now, 0.5, false); break;
@@ -234,6 +252,7 @@ export class Fx {
       const mat = (t.obj as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
       if (t.kind === 'ring') { const r = (t.r ?? 1) * (0.2 + 0.8 * Math.sqrt(k)); t.obj.scale.setScalar(r); if (mat) mat.opacity = 0.9 * (1 - k); }
       else if (t.kind === 'beam' || t.kind === 'fade' || t.kind === 'fadegeo') { if (mat) mat.opacity = 0.9 * (1 - k); }
+      else if (t.kind === 'shatter') { t.obj.scale.set(Math.min(1, k * 2.6), Math.min(1, k * 2.6), 1); if (mat) mat.opacity = 0.75 * (1 - k * k); }
       else if (t.kind === 'tether' && t.actor && t.target) { this.orient(t.obj, t.actor.center, t.target.center, t.r ?? 0.03); if (mat) mat.opacity = 0.7 + 0.3 * Math.sin(now * 20); t.obj.visible = t.actor.alive && t.target.alive; }
       else if (t.kind === 'trail' && t.actor) { const c = (t.obj as any).__col as THREE.Color; this.parts.emit(t.actor.center, 3, c, { speed: 1, life: 0.35, size: 0.4, spread: 0.6 }); }
       else if (t.kind === 'pod' && t.from) {

@@ -2,7 +2,7 @@
 // states (treadmill locomotion so the foot IK and spring physics can be inspected) and the skins locker.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { HEROES, HERO, TEAM_NAME, isAbility, type HeroDef } from '../data/heroes';
+import { HEROES, HERO, PILOTS, TEAM_NAME, isAbility, type HeroDef } from '../data/heroes';
 import { BOSSES, ENEMIES } from '../campaign/data';
 import { Actor } from '../game/Actor';
 import { CharacterView } from '../render/CharacterView';
@@ -13,14 +13,14 @@ import { TITAN_SCALE } from '../game/World';
 import { sfx } from '../audio/Sfx';
 
 const EXTRA: HeroDef[] = [
-  { ...HERO.tenkai, id: 'haruto', name: 'Haruto Daimon', title: "Tenkai-Oh's pilot", frame: 'human', height: 1.75, radius: 0.4, lore: HERO.tenkai.pilot!.bio, pilot: undefined },
+  { ...PILOTS.tenkai, lore: HERO.tenkai.pilot!.bio },
   { ...HERO.gorgoth, id: 'vorn', name: 'Warlord Vorn', title: "Gorgoth's pilot", frame: 'human', height: 1.85, radius: 0.4, lore: HERO.gorgoth.pilot!.bio, pilot: undefined },
   { ...BOSSES.qelvaris, lore: "The Umbra Syndicate's alien scientist - builder of the space colossi in Operation Starfall." },
   ...(['boss_ironmaw', 'boss_reaper', 'boss_leviathan', 'boss_phoenix', 'boss_genesis'] as const).map(id => ({ ...BOSSES[id], lore: `Campaign colossus. Weak point: ${BOSSES[id].weak}.` })),
   ...Object.values(ENEMIES).map(e => ({ ...e, lore: `${e.title}: one of the Star-Forger's mass-produced robots in Operation Starfall.` })),
 ];
 const ALL: Record<string, HeroDef> = Object.fromEntries([...HEROES, ...EXTRA].map(h => [h.id, h]));
-type AnimMode = 'idle' | 'walk' | 'run' | 'attack' | 'alt' | 'melee' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
+type AnimMode = 'idle' | 'walk' | 'run' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
 
 export class HeroViewer {
   root: HTMLElement;
@@ -49,7 +49,7 @@ export class HeroViewer {
         <h3>PILOTS &amp; CAMPAIGN</h3><div class="vrow">${EXTRA.map(h => this.chip(h)).join('')}</div>
       </div>
       <div class="vstage"><div class="vname"></div>
-        <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'melee', 'cast', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
+        <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
         <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div></div>
       <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
     host.append(this.root);
@@ -162,20 +162,26 @@ export class HeroViewer {
     a.yaw = 0; a.input.yaw = 0; a.pitch = 0;
     a.vel = { x: 0, y: 0, z: speed };
     a.pos.z += speed * dt;
-    a.grounded = m !== 'jump' && m !== 'fly'; a.flying = m === 'fly' && (a.def.frame === 'flyer' || a.def.frame === 'drone');
+    a.grounded = m !== 'jump' && m !== 'fly'; a.flying = m === 'fly' && (a.def.frame === 'flyer' || a.def.frame === 'drone' || !!a.def.jets);
     if (m === 'jump') { const p = (T % 1.2) / 1.2; a.pos.y = Math.sin(p * Math.PI) * 1.4; a.vel.y = Math.cos(p * Math.PI) * 6; a.grounded = p > 0.97; if (p < 0.05) a.anim.jumpAt = T; if (p > 0.97) a.anim.landAt = T; }
     else if (m === 'fly') { a.pos.y = 1.2 + Math.sin(T * 1.5) * 0.2; a.vel.y = Math.cos(T * 1.5) * 0.3; }
     else a.pos.y = 0;
     const swingEvery = a.def.primary.sweep ? SWING_TIME + 0.1 : 0.6;
     if (m === 'attack' && T % swingEvery < dt) { a.anim.attackAt = T; a.anim.attackKind = 'primary'; a.anim.attackSide = -a.anim.attackSide; }
     if (m === 'melee' && T % 0.9 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'punch'; }
+    // abilities: plays the cast (Tenkai-Oh: Dawn Charge pose on SHIFT, the overhead Solar Shatter slam on E)
+    if (m === 'shift') {
+      if (a.def.ability1.id === 'dawncharge') a.forced = { vx: 0, vy: 0, vz: 0, until: 1e9, kind: 'dawncharge' };
+      else if (T % 1.4 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ability1.id; }
+    } else if (a.forced?.kind === 'dawncharge') a.forced = null;
+    if (m === 'e' && T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ability2.id; }
+    if (m === 'cast' && T % 1.4 < dt) a.anim.castAt = T;
     if (m === 'ult') {
       // Tenkai-Oh previews the giant form; everyone else plays their ult cast
       if (a.def.ult.id === 'colossus') { a.set('titan', T, 9999); a.scale += (TITAN_SCALE - a.scale) * Math.min(1, dt * 2.6); }
       else if (T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ult.id; }
     }
     if (m === 'alt' && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
-    if (m === 'cast' && T % 1.4 < dt) a.anim.castAt = T;
     if (m === 'hit' && T % 0.8 < dt) a.anim.hitAt = T;
     a.charging = false; a.beamOn = false;
     v.update(dt, T, { team: a.team, sees: () => true });

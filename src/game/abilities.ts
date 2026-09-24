@@ -27,7 +27,7 @@ function applyCC(w: World, src: Actor, x: Actor, kind: string, dur: number): boo
 /** cancel dashes, charges and channels */
 function interrupt(w: World, x: Actor, by: Actor) {
   const f = x.forced;
-  if (f && ['abysscharge', 'flashstep', 'dawndrive', 'chainpull', 'sunhop'].includes(f.kind)) {
+  if (f && ['abysscharge', 'flashstep', 'dawndrive', 'dawncharge', 'chainpull', 'sunhop'].includes(f.kind)) {
     x.forced = null; x.vel.x *= 0.1; x.vel.z *= 0.1;
     w.fx('interrupt', x.center, { color: '#ffffff', actor: x }); w.sfx('interrupt', x.center);
     if (f.kind === 'abysscharge' && by.def.id === 'tenkai') w.emit({ t: 'counter', actor: by, target: x, text: 'Dawn Anchor stops the Abyss Charge' });
@@ -108,6 +108,72 @@ const I: Record<string, Impl> = {
         w.fx('slam', p, { r: 8, color: '#ffd76a', actor: a }); w.sfx('slam', p, a);
       });
     });
+    return true;
+  },
+  dawncharge(w, a) {
+    // a thruster-driven shoulder charge: steerable, pins the first enemy it meets, knocks everyone else aside
+    const d = flatDir(a), t = w.time;
+    a.sv.pinned = 0; a.sv.chargeWall = 0; a.sv.chargeStart = t; a.sv.chargeYaw = Math.atan2(d.x, d.z);
+    (a as any)._chargeHit = new Set<number>();
+    const sp = 17 * (a.scale > 1 ? 1.25 : 1);
+    a.forced = { vx: d.x * sp, vy: 0, vz: d.z * sp, until: t + 2.2, kind: 'dawncharge', onEnd: () => {
+      const pin = w.actors.find(x => x.id === a.sv.pinned);
+      if (pin && pin.alive) {
+        const wall = a.sv.chargeWall === 1;
+        w.damage(a, pin, wall ? 250 : 80, { kind: 'ability' }); applyCC(w, a, pin, 'stun', wall ? 1.0 : 0.4);
+        w.fx('slam', pin.pos, { r: wall ? 3.5 : 2, color: '#ffd76a', actor: a }); w.sfx(wall ? 'slam' : 'punch', pin.pos, a);
+      } else if (a.sv.chargeWall === 1) { w.fx('slam', a.pos, { r: 2.5, color: '#ffd76a', actor: a }); w.sfx('mechland', a.pos, a); }
+      a.sv.pinned = 0; a.vel.x *= 0.2; a.vel.z *= 0.2;
+    } };
+    a.set('charging', t, 2.2);
+    w.sfx('charge', a.center, a); w.sfx('mechjump', a.pos, a); w.fx('chargetrail', a.center, { actor: a, color: '#ffd76a', dur: 2.2 });
+    return true;
+  },
+  shatter(w, a) {
+    // raise the hammer overhead, slam it down: a ground shockwave cone knocks down everything standing in front
+    const t = w.time;
+    a.forced = { vx: 0, vy: 0, vz: 0, until: t + 0.75, kind: 'shatter' };
+    a.set('ccimmune', t, 0.6);
+    w.sfx('ultcall', a.center, a);
+    w.after(0.55, () => {
+      if (!a.alive) return;
+      const d = flatDir(a), o = { x: a.pos.x + d.x * 1.2 * a.scale, y: a.pos.y, z: a.pos.z + d.z * 1.2 * a.scale };
+      const len = 16 * (a.scale > 1 ? 1.4 : 1), half = 0.42;
+      for (const x of w.enemies(a)) {
+        const v = { x: x.pos.x - o.x, z: x.pos.z - o.z }, along = v.x * d.x + v.z * d.z;
+        if (along < -1 || along > len + x.radius) continue;
+        const lat = Math.abs(v.x * -d.z + v.z * d.x);
+        if (lat > Math.max(1.5, along * Math.tan(half)) + x.radius) continue;
+        // it travels along the ground: fliers, jumpers and anything high above the slam point are untouched
+        const g = w.level.groundAt(x.pos.x, x.pos.z, x.pos.y + 0.5);
+        if (x.flying || x.pos.y - g > 0.6 || Math.abs(x.pos.y - a.pos.y) > 3) continue;
+        const dir = norm({ x: v.x, y: 0, z: v.z }), bh = w.barrierHit(a.team, { x: o.x, y: o.y + 0.5, z: o.z }, dir, Math.hypot(v.x, v.z));
+        if (bh) { w.hitBarrier(bh.owner, 300, a, bh.owner.center); continue; }
+        w.damage(a, x, 90, { kind: 'ability' }); applyCC(w, a, x, 'stun', 1.6);
+      }
+      w.fx('shatter', o, { to: { x: o.x + d.x * len, y: o.y, z: o.z + d.z * len }, r: len, color: '#ffd76a', actor: a });
+      w.sfx('slam', o, a); w.sfx('boom', o, a);
+    });
+    return true;
+  },
+  pilotroll(w, a) {
+    dash(a, moveDir(a), 5, 0.3, 'roll', w.time);
+    w.sfx('dash', a.pos, a);
+    return true;
+  },
+  callmech(w, a) {
+    // Tenkai-Oh drops out of the sky onto the pilot: full frame, the mech's saved ult comes back with it
+    const t = w.time, def = a.baseDef, keep = a.sv.mechUlt ?? 0;
+    a.def = def;
+    a.hp = def.hp; a.maxArmor = def.armor; a.armor = def.armor; a.shields = [];
+    if (a.barrier.max) a.barrier = { hp: a.barrier.max, max: a.barrier.max, up: false, regenAt: 0, brokenUntil: 0 };
+    a.ammo = 'ammo' in def.primary && def.primary.ammo ? def.primary.ammo : 0; a.reloadUntil = 0; a.nextShot = t + 0.5;
+    a.flight = 100; a.set('ccimmune', t, 1); a.set('spawnprot', t, 0.6);
+    w.after(0.01, () => { a.ult = keep; });                  // castAbility zeroes the gauge after this returns
+    for (const x of w.enemies(a)) if (dist3(x.pos, a.pos) < 5) { w.damage(a, x, 50, { kind: 'ability' }); }
+    w.fx('ultflash', a.center, { color: def.glow, actor: a }); w.fx('slam', a.pos, { r: 5, color: def.glow, actor: a });
+    w.sfx('mechland', a.pos, a); w.sfx('ultcall', a.center, a);
+    w.emit({ t: 'msg', text: `${def.name.toUpperCase()} IS BACK`, color: def.color });
     return true;
   },
   colossus(w, a) {
@@ -501,6 +567,40 @@ export function tickAbilities(w: World, dt: number) {
     if (a.forced.kind === 'flashstep') {
       const hit: Set<number> = (a as any)._dashHit ?? new Set();
       for (const x of w.enemies(a)) if (!hit.has(x.id) && dist3(x.center, a.center) < 1.6 + x.radius) { hit.add(x.id); w.damage(a, x, 50, { kind: 'ability' }); w.fx('slash', x.center, { color: '#8ad8ff' }); }
+    } else if (a.forced.kind === 'dawncharge') {
+      // steer toward the aim (slowly: a charging mech carries its momentum)
+      const cur = a.sv.chargeYaw ?? a.yaw;
+      let dy = a.input.yaw - cur; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+      const ny = cur + Math.max(-1.3 * dt, Math.min(1.3 * dt, dy));
+      a.sv.chargeYaw = ny; a.yaw = ny;
+      const sp = Math.hypot(a.forced.vx, a.forced.vz);
+      a.forced.vx = Math.sin(ny) * sp; a.forced.vz = Math.cos(ny) * sp;
+      const hit: Set<number> = (a as any)._chargeHit ?? new Set();
+      let pin = w.actors.find(x => x.id === a.sv.pinned);
+      for (const x of w.enemies(a)) {
+        if (x === pin || hit.has(x.id) || dist3(x.pos, a.pos) > a.radius + x.radius + 0.7 || Math.abs(x.pos.y - a.pos.y) > 2.5 * a.scale) continue;
+        hit.add(x.id);
+        if (x.forced?.kind === 'abysscharge') {
+          // COUNTER: two charging mechs meet head-on - the Abyss Charge breaks, Gorgoth is dazed
+          interrupt(w, x, a); applyCC(w, a, x, 'stun', 1.2); w.damage(a, x, 80, { kind: 'ability' });
+          w.emit({ t: 'counter', actor: a, target: x, text: 'Dawn Charge breaks the Abyss Charge head-on' });
+          w.fx('slam', x.pos, { r: 3, color: '#ffd76a', actor: a }); w.sfx('slam', x.pos, a);
+          a.forced.until = t; break;
+        }
+        if (!pin && !ccBlocked(w, x) && x.def.frame !== 'mech' && !x.isBoss) { pin = x; a.sv.pinned = x.id; w.sfx('pin', x.center, a); continue; }
+        if (x.def.frame === 'mech' || x.isBoss) { w.damage(a, x, 60, { kind: 'ability' }); a.forced.until = t; w.fx('slam', x.pos, { r: 2, color: '#ffd76a' }); break; }
+        // knocked aside, away from the charge line
+        const f = a.forward(), side = (x.pos.x - a.pos.x) * -f.z + (x.pos.z - a.pos.z) * f.x >= 0 ? 1 : -1;
+        w.damage(a, x, 30, { kind: 'ability' });
+        if (!ccBlocked(w, x)) x.forced = { vx: -f.z * side * 11 + f.x * 5, vy: 4, vz: f.x * side * 11 + f.z * 5, until: t + 0.3, kind: 'knock' };
+      }
+      (a as any)._chargeHit = hit;
+      if (pin && pin.alive) {
+        const f = a.forward();
+        pin.pos = { x: a.pos.x + f.x * (a.radius + pin.radius + 0.2), y: a.pos.y, z: a.pos.z + f.z * (a.radius + pin.radius + 0.2) };
+        pin.vel = { x: 0, y: 0, z: 0 }; pin.set('stun', t, 0.1);
+        w.level.collide(pin.pos, pin.radius, pin.height);
+      }
     } else if (a.forced.kind === 'abysscharge') {
       let pin = w.actors.find(x => x.id === a.sv.pinned);
       if (!pin) {

@@ -45,6 +45,7 @@ const R: Record<string, Layer[]> = {
   botdown: [{ w: 'square', f: 800, f1: 100, d: 0.4, v: 0.12 }],
   eject: [{ n: true, d: 0.8, v: 0.35, hp: 400, lp: 4000, lp1: 1000 }, { w: 'sawtooth', f: 200, f1: 900, d: 0.6, v: 0.12 }],
   jump: [{ n: true, d: 0.08, v: 0.08, lp: 1200 }],
+  dash: [{ n: true, d: 0.22, v: 0.22, bp: 900, q: 0.8 }, { w: 'sine', f: 220, f1: 110, d: 0.18, v: 0.08 }],
   mechjump: [{ n: true, d: 0.5, v: 0.35, lp: 800, lp1: 2000 }, { w: 'sawtooth', f: 60, f1: 120, d: 0.4, v: 0.15, lp: 500 }],
   doublejump: [{ w: 'sine', f: 600, f1: 1200, d: 0.12, v: 0.12 }, { n: true, d: 0.1, v: 0.1, hp: 3000 }],
   land: [{ n: true, d: 0.1, v: 0.15, lp: 600 }],

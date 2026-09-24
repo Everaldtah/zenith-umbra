@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator } from './Animator';
 import { heroModel } from './Assets';
-import { buildHammer, type HammerProp } from './Hammer';
+import { buildHammer, buildBlaster, type HammerProp } from './Hammer';
 
 const BRIGHT_SUITS = new Set(['mirei']);
+const _jp = new THREE.Vector3();
 import { skinsFor, type Skin } from '../data/skins';
 
 const rimChunk = `
@@ -134,10 +135,14 @@ export class CharacterView {
   barrierMesh: THREE.Mesh | null = null;
   scaleFit = 1;
   hammer: HammerProp | null = null;
+  /** the hero this view was built for: the World swaps defs (mech <-> pilot), and the view is rebuilt then */
+  defId: string;
+  jets: THREE.Mesh[] = [];
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
   constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic') {
+    this.defId = actor.def.id;
     this.rimColor = new THREE.Color(actor.team === viewerTeam ? '#5cc8ff' : '#ff3b5c');
     this.look = lookUniforms(this.rimColor);
     const skins = skinsFor(actor.def.id, actor.def.team);
@@ -222,6 +227,26 @@ export class CharacterView {
       this.hammer = buildHammer(anim.height);
       m.add(this.hammer.group);
       anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
+    }
+    // a pilot's sidearm rides in the right hand, barrel along the forearm (so it points where the arm aims)
+    if (this.actor.def.gunProp && anim.ok && anim.bones.hand_R && anim.rest.hand_R) {
+      const gun = buildBlaster(anim.height), r = anim.rest.hand_R;
+      const Z = r.dir.clone().normalize(), up = Math.abs(Z.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      const Xb = new THREE.Vector3().crossVectors(up, Z).normalize(), Yb = new THREE.Vector3().crossVectors(Z, Xb);
+      const Qg = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xb, Yb, Z));
+      const inv = r.q.clone().invert();
+      gun.quaternion.copy(inv).multiply(Qg);
+      gun.position.copy(Z.clone().multiplyScalar(anim.height * 0.06).add(Yb.clone().multiplyScalar(-anim.height * 0.035)).applyQuaternion(inv));
+      gun.scale.setScalar(1.5);
+      anim.bones.hand_R.add(gun);
+    }
+    // foot thrusters (flight): additive flame cones placed under the feet while flying
+    if (this.actor.def.jets && anim.ok) {
+      for (let i = 0; i < 2; i++) {
+        const f = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1, 14, 1, true), new THREE.MeshBasicMaterial({ color: '#ffb347', transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        f.geometry.translate(0, -0.5, 0); f.rotation.x = Math.PI;          // base at the sole, tip pointing down
+        f.visible = false; this.group.add(f); this.jets.push(f);
+      }
     }
     // materials: keep the concept colours, add rim + a hint of emission for readability in dark maps
     this.collectMats();
@@ -309,6 +334,7 @@ export class CharacterView {
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer, swingSide: an.attackSide,
+      move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
     });
     if (this.hammer) {
@@ -320,6 +346,18 @@ export class CharacterView {
       this.hammer.core.emissiveIntensity = 2.4 + (on ? 3 * Math.max(0, 1 - Math.abs(age - 0.29) / 0.15) : 0) + (a.has('titan', time) ? 1.5 : 0);
     }
     if (a.def.frame === 'drone') this.model.rotation.z = Math.sin(time * 2 + a.id) * 0.1;
+    if (this.jets.length) {
+      const on = a.flying && !!a.def.jets;
+      for (let i = 0; i < 2; i++) {
+        const f = this.jets[i], b = this.anim.bones[i === 0 ? 'foot_L' : 'foot_R'];
+        f.visible = on && !!b;
+        if (!f.visible || !b) continue;
+        b.getWorldPosition(_jp); this.group.worldToLocal(_jp);
+        f.position.copy(_jp);
+        const k = a.scale * (0.9 + Math.random() * 0.25) * (a.input.jumpHeld ? 1.5 : 1);
+        f.scale.set(a.scale, k * 1.1, a.scale);
+      }
+    }
   }
 
   dispose() {

@@ -60,6 +60,8 @@ export interface HeroDef {
   inspiration: string;
   voice: [number, number];   // synth "voice" (base pitch, timbre) for ability callouts
   pilot?: { id: string; name: string; bio: string };   // tanks are piloted mecha: the pilot ejects when the frame falls
+  jets?: number;         // seconds of boosted flight (mech foot thrusters), hold SPACE in the air
+  gunProp?: boolean;     // carries a procedural sidearm (the pilot out of the mech)
 }
 
 const isAbility = (x: WeaponDef | AbilityDef): x is AbilityDef => (x as AbilityDef).id !== undefined;
@@ -72,10 +74,11 @@ export const HEROES: HeroDef[] = [
     hp: 400, armor: 250, speed: 5.0, height: 3.3, radius: 0.95, color: '#f4d35e', glow: '#ffd76a',
     primary: { kind: 'melee', name: 'Dawnbreaker Rocket Hammer', damage: 85, rate: 1.1, range: 5, sweep: true, delay: 0.24, sfx: 'hammer', fx: 'sun' },
     secondary: { id: 'bulwark', name: 'Solar Bulwark', key: 'RMB', cooldown: 0, hold: true, desc: 'Raise a 1400 HP sun-shield in front of you. Regenerates when lowered.' },
-    ability1: { id: 'anchor', name: 'Dawn Anchor', key: 'SHIFT', cooldown: 8, desc: 'Launch a rocket fist that drags the first enemy hit toward you (40 dmg).', counter: "Interrupts Gorgoth's Abyss Charge and every channel." },
-    ability2: { id: 'sunburst', name: 'Purging Sunburst', key: 'E', cooldown: 12, desc: 'Burst of dawnlight: cleanse nearby allies of curses, burns, roots and silence, 2s immunity. 30 dmg to enemies.', counter: "Burns away Enra's Eclipse Brand and Hex's Grievous Hex." },
+    ability1: { id: 'dawncharge', name: 'Dawn Charge', key: 'SHIFT', cooldown: 8, desc: 'Rocket forward (steer with the mouse). The first enemy hit is pinned and carried; drive them into a wall for 250 damage and a stun. Others in the way are knocked aside. SHIFT again to stop.', counter: "Meets Gorgoth's Abyss Charge head-on: it breaks and Gorgoth is stunned." },
+    ability2: { id: 'shatter', name: 'Solar Shatter', key: 'E', cooldown: 12, desc: 'Slam the hammer into the ground: a 16m shockwave knocks down every grounded enemy in front of you (90 dmg, 1.6s stun). Enemy barriers block it.' },
     ult: { id: 'colossus', name: 'Dawn Colossus Awakening', key: 'Q', cooldown: 0, charge: 2300, desc: 'The sun-reactor goes critical: Tenkai-Oh grows into a 7-metre giant - four times a hero’s height - for 60s. +800 armor, +25% damage, +20% speed and a longer hammer reach; the landing stomp deals 120 and stuns for 1s. Shrinks back when it ends.' },
-    passive: { name: 'Heavy Frame', desc: 'Immune to knockback. Armor absorbs 30% of every hit.' },
+    passive: { name: 'Heavy Frame / Sun Thrusters', desc: 'Immune to knockback, armor absorbs 30% of every hit. Hold SPACE in the air to fly on the foot thrusters for up to 6s. When the frame is destroyed Haruto fights on foot until he can call Tenkai-Oh back.' },
+    jets: 6,
     lore: 'Tenkai-Oh was forged in Hangar Zero as the first Guardian Frame, piloted by Haruto Daimon - a mechanic\'s son who refused to let the Eclipse take another city. Its sun-reactor was stolen by the Syndicate once. It will not happen twice.',
     inspiration: 'Classic super robot shows - hot-blooded pilot, a rocket-driven hammer, the giant dawn-light transformation.',
     voice: [110, 0.8],
@@ -204,5 +207,24 @@ export const HEROES: HeroDef[] = [
 ];
 
 export const HERO: Record<string, HeroDef> = Object.fromEntries(HEROES.map(h => [h.id, h]));
+
+// ---- pilots on foot: when Tenkai-Oh's frame is destroyed, Haruto ejects and keeps fighting (a mech-pilot tank in the
+// hero-shooter tradition) until his Call Mech gauge fills and the frame drops back from the sky
+export const PILOTS: Record<string, HeroDef> = {
+  tenkai: {
+    id: 'haruto', name: 'Haruto Daimon', title: "Tenkai-Oh's pilot", team: 'zenith', role: 'tank', frame: 'human', rival: 'gorgoth',
+    hp: 175, armor: 0, speed: 5.9, height: 1.75, radius: 0.4, color: '#f4d35e', glow: '#ffd76a',
+    primary: { kind: 'hitscan', name: 'Sunspark Blaster', damage: 16, rate: 7, range: 35, spread: 0.012, ammo: 20, reload: 1.3, sfx: 'blaster', fx: 'sun' },
+    secondary: { kind: 'projectile', name: 'Flare Round', damage: 45, splash: 1.5, rate: 0.8, range: 40, speed: 45, sfx: 'cannon', fx: 'sun' },
+    ability1: { id: 'pilotroll', name: 'Combat Roll', key: 'SHIFT', cooldown: 5, desc: 'Roll 5m in the direction you are moving.' },
+    ability2: { id: 'none', name: 'Out of the mech', key: 'E', cooldown: 0, desc: 'Survive until Tenkai-Oh is back.' },
+    ult: { id: 'callmech', name: 'Call Tenkai-Oh', key: 'Q', cooldown: 0, charge: 400, desc: 'Tenkai-Oh drops from the sky at full health and Haruto climbs back into the cockpit.' },
+    passive: { name: 'Pilot', desc: 'Out of the mech, the Call Tenkai-Oh gauge charges fast (20/s plus damage dealt).' },
+    lore: "Seventeen, hot-blooded, and the only pilot Tenkai-Oh's sun-reactor ever synchronised with.",
+    inspiration: 'The mech pilot who keeps fighting after the frame goes down.',
+    voice: [180, 0.3], gunProp: true,
+  },
+};
+export const PILOT_BY_ID: Record<string, HeroDef> = Object.fromEntries(Object.values(PILOTS).map(p => [p.id, p]));
 export const TEAM_NAME: Record<TeamId, string> = { zenith: 'Zenith Vanguard', umbra: 'Umbra Syndicate' };
 export const TEAM_COLOR: Record<TeamId, string> = { zenith: '#5cc8ff', umbra: '#ff3b5c' };

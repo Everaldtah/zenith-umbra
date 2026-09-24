@@ -1,6 +1,6 @@
 // Deterministic fixed-step simulation: movement, combat, projectiles, zones, capture point.
 // Rendering, audio and HUD only read state and drain `events`.
-import { HERO, type HeroDef, type TeamId, isAbility } from '../data/heroes';
+import { HERO, PILOTS, PILOT_BY_ID, type HeroDef, type TeamId, isAbility } from '../data/heroes';
 import { MAP, type MapDef } from '../data/maps';
 import { Level, STEP, type V3 } from '../engine/Physics';
 import { Actor } from './Actor';
@@ -19,6 +19,7 @@ export type GameEvent =
   | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; side?: number; actor?: Actor; target?: Actor }
   | { t: 'dmg'; src: Actor | null; tgt: Actor; amt: number; crit: boolean; heal?: boolean; pos: V3 }
   | { t: 'kill'; src: Actor | null; tgt: Actor }
+  | { t: 'demech'; src: Actor | null; tgt: Actor }
   | { t: 'cast'; actor: Actor; id: string; name: string }
   | { t: 'counter'; actor: Actor; target: Actor; text: string }
   | { t: 'msg'; text: string; color?: string };
@@ -60,7 +61,7 @@ export class World {
 
   // ------------------------------------------------------------------ setup
   addHero(heroId: string, team?: TeamId): Actor {
-    const def: HeroDef = HERO[heroId] ?? ROBOTS[heroId] ?? this.extraDefs[heroId];
+    const def: HeroDef = HERO[heroId] ?? PILOT_BY_ID[heroId] ?? ROBOTS[heroId] ?? this.extraDefs[heroId];
     const a = new Actor(def, team ?? def.team);
     a.isRobot = !!ROBOTS[heroId];
     a.spawn = this.map.spawns[a.team];
@@ -81,6 +82,7 @@ export class World {
     a.yaw = a.team === 'zenith' ? Math.PI / 2 : -Math.PI / 2;
     if (a.isRobot) a.yaw = -Math.PI / 2;
     a.pitch = 0;
+    a.def = a.baseDef;
     a.hp = a.def.hp; a.maxArmor = a.def.armor; a.armor = a.def.armor; a.scale = 1;
     a.shields = []; a.st = {}; a.sv = {}; a.src = {}; a.forced = null;
     a.alive = true; a.respawnAt = 0; a.flight = 100; a.flying = false;
@@ -266,8 +268,27 @@ export class World {
     tgt.shields.push({ amt, until: this.time + dur, kind });
   }
 
+  /** a destroyed frame: explode it, pop the pilot out on foot (keeps the mech's ult for later) */
+  demech(a: Actor, src: Actor | null) {
+    const t = this.time, p = PILOTS[a.def.id], f = a.forward();
+    const killer = src && src !== a ? src : (a.lastHitBy && t - a.lastHitAt < 6 ? a.lastHitBy : null);
+    this.fx('burst', a.center, { r: 4, color: a.def.glow }); this.fx('eject', { x: a.pos.x, y: a.pos.y + a.height * 0.62, z: a.pos.z }, { color: a.def.glow, actor: a });
+    this.sfx('mechdown', a.center); this.sfx('eject', a.center);
+    this.emit({ t: 'msg', text: `${a.def.name.toUpperCase()} DOWN - ${p.name.toUpperCase()} FIGHTS ON`, color: a.def.color });
+    this.emit({ t: 'demech', src: killer, tgt: a });
+    a.sv.mechUlt = a.ult;
+    a.clear('titan'); a.scale = 1;
+    a.def = p;
+    a.hp = p.hp; a.maxArmor = 0; a.armor = 0; a.shields = [];
+    a.barrier.up = false; a.forced = null; a.flying = false; a.charging = false;
+    a.ult = 0; a.ammo = p.primary.ammo ?? 0; a.reloadUntil = 0; a.nextShot = t + 0.4;
+    a.vel = { x: -f.x * 4, y: 9, z: -f.z * 4 }; a.grounded = false;
+    a.set('spawnprot', t, 0.8);
+  }
+
   kill(tgt: Actor, src: Actor | null) {
     if (!tgt.alive) return;
+    if (tgt.def === tgt.baseDef && PILOTS[tgt.def.id]) { this.demech(tgt, src); return; }
     tgt.alive = false; tgt.deathAt = this.time; tgt.deaths++;
     tgt.respawnAt = tgt.noRespawn ? 0 : this.time + (tgt.isRobot ? 3 : this.mode === 'aitest' ? 4 : this.mode === 'campaign' ? 8 : 6);
     tgt.forced = null; tgt.flying = false; tgt.barrier.up = false; tgt.beamOn = false; tgt.flameOn = false;
@@ -467,7 +488,7 @@ export class World {
       }
     }
     if (!a.alive) return;
-    a.ult = Math.min(a.def.ult.charge, a.ult + (this.mode === 'aitest' ? 30 : 5) * dt);
+    a.ult = Math.min(a.def.ult.charge, a.ult + (a.def !== a.baseDef ? 20 : this.mode === 'aitest' ? 30 : 5) * dt);
     if (a.barrier.max && !a.barrier.up && t > a.barrier.regenAt && t > a.barrier.brokenUntil) a.barrier.hp = Math.min(a.barrier.max, a.barrier.hp + 150 * dt);
     if (a.has('stealth', t) && (a.has('revealed', t) || a.has('sealed', t))) {
       a.clear('stealth');
@@ -481,7 +502,8 @@ export class World {
       updateWeapons(this, a, dt);
       const silenced = a.has('silence', t);
       if (!silenced) {
-        if (this.pressed(a, 'a1')) castAbility(this, a, a.def.ability1.id, 'a1');
+        if (a.forced?.kind === 'dawncharge' && this.pressed(a, 'a1') && t - (a.sv.chargeStart ?? 0) > 0.3) a.forced.until = t;
+        else if (this.pressed(a, 'a1')) castAbility(this, a, a.def.ability1.id, 'a1');
         if (this.pressed(a, 'a2')) castAbility(this, a, a.def.ability2.id, 'a2');
         if (this.pressed(a, 'ult') && a.ult >= a.def.ult.charge) castAbility(this, a, a.def.ult.id, 'ult');
         const S = a.def.secondary;
@@ -521,14 +543,16 @@ export class World {
       let wx = (fx * mz + rx * mx) * spd, wz = (fz * mz + rz * mx) * spd;
       if (rooted) { wx = 0; wz = 0; }
       // flight
-      const canFly = (d.frame === 'flyer' || d.frame === 'drone') && !a.has('grounded', t) && !rooted;
+      const canFly = (d.frame === 'flyer' || d.frame === 'drone' || !!d.jets) && !a.has('grounded', t) && !rooted;
       if (d.frame === 'drone') a.flying = true;
       else if (canFly && inp.jumpHeld && a.flight > 5 && (!a.grounded || !this.pressed(a, 'jump'))) a.flying = true;
       if (!canFly || a.flight <= 0) a.flying = false;
       if (a.flying && d.frame !== 'drone') {
-        const target = inp.jumpHeld ? 5.5 : inp.descend ? -7 : -1.1;
+        const target = inp.jumpHeld ? (d.jets ? 6.5 : 5.5) : inp.descend ? -7 : d.jets ? -1.8 : -1.1;
         a.vel.y += (target - a.vel.y) * Math.min(1, dt * 5);
-        a.flight -= (inp.jumpHeld ? 15 : 4.5) * dt;
+        // thrusters burn a fixed fuel tank (d.jets seconds); wings hover cheaply
+        a.flight -= (d.jets ? 100 / d.jets : inp.jumpHeld ? 15 : 4.5) * dt;
+        if (d.jets) { wx *= 1.45; wz *= 1.45; if (t >= (a.sv.jetSfx ?? 0)) { a.sv.jetSfx = t + 0.35; this.sfx('flame', a.pos, a); } }
         if (a.grounded && !inp.jumpHeld) a.flying = false;
       } else if (d.frame === 'drone') {
         // over the void groundAt is -Infinity: hold the altitude of the last solid ground instead of diving forever
@@ -564,7 +588,7 @@ export class World {
       a.pos.x += a.vel.x * dt / n; a.pos.y += a.vel.y * dt / n; a.pos.z += a.vel.z * dt / n;
       if (L.collide(a.pos, a.colRadius, a.colHeight)) hitWall = true;
     }
-    if (hitWall && a.forced?.kind === 'abysscharge') a.forced.until = t;
+    if (hitWall && (a.forced?.kind === 'abysscharge' || a.forced?.kind === 'dawncharge')) { if (a.forced.kind === 'dawncharge') a.sv.chargeWall = 1; a.forced.until = t; }
     const [X, Z] = L.size;
     a.pos.x = Math.max(-X - 1, Math.min(X + 1, a.pos.x)); a.pos.z = Math.max(-Z - 1, Math.min(Z + 1, a.pos.z));
     // AI walkers never step off a ledge into the void on their own (knockbacks / pulls still can)

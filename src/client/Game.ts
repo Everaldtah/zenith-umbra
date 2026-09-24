@@ -244,6 +244,9 @@ export class Game {
     // ---- views
     const viewer = { team: me?.team ?? 'zenith', sees: (a: Actor) => !me || w.perceivable(me, a) };
     for (const a of w.actors) {
+      // the World swaps hero defs (Tenkai-Oh's pilot ejecting / calling the mech back): rebuild that actor's view
+      const old = this.views.get(a.id);
+      if (old && old.defId !== a.def.id) { this.scene.remove(old.group); old.dispose(); this.views.delete(a.id); }
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);

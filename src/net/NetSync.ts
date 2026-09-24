@@ -3,6 +3,7 @@
 import type { World, GameEvent, Proj, Zone } from '../game/World';
 import type { Actor, Input } from '../game/Actor';
 import type { Coop } from './Coop';
+import { HERO, PILOT_BY_ID } from '../data/heroes';
 
 const ST = ['stun', 'root', 'silence', 'grounded', 'antiheal', 'brand', 'bleed', 'tethered', 'linked', 'ccimmune', 'stealth', 'revealed', 'sealed', 'undying', 'dmgamp', 'vuln', 'judgment', 'asura', 'lifesteal', 'parry', 'phased', 'spawnprot', 'hot', 'marked', 'glide', 'speed', 'slow'];
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -110,6 +111,8 @@ export class ClientSync {
         this.map.set(id, a);
         a.pos = { x, y, z };
       }
+      // mech destroyed / called back on the host: follow the hero swap (Tenkai-Oh <-> Haruto on foot)
+      if (a.def.id !== defId) { const nd = HERO[defId] ?? PILOT_BY_ID[defId] ?? w.extraDefs[defId]; if (nd) a.def = nd; }
       const mine = netId === this.coop.me;
       if (mine) {
         this.me = a; a.isPlayer = true;

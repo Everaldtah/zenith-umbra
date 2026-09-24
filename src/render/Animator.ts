@@ -32,6 +32,7 @@ export interface AnimState {
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
+  move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets'
   swingSide?: number;       // +1 sweeps right-to-left, -1 left-to-right (swings alternate)
   angel?: boolean;          // Mirei: angelic combat-medic flight (upright hover, swept-back dash, glide)
   gliding?: boolean;        // slow-fall glide with the wings spread
@@ -49,26 +50,48 @@ const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAx
 // wind up behind the shoulder, sweep flat through the front with the weight rolling onto the lead foot, follow through
 // past the other shoulder, settle back into the guard (hammer upright in front, head by the right shoulder).
 export const SWING_TIME = 0.85;
+// th: yaw of the haft around the body (0 = straight ahead, + = toward the left side), ph: haft elevation,
+// d: grip distance from the shoulder centre in ARM LENGTHS (1 = arms locked straight), gy: grip height above the
+// shoulders in body heights. Reference (Reinhardt): both hands together at the bottom of the haft, arms straight out
+// at ~90 degrees to the torso at shoulder height through the whole sweep, the head travelling flat at that height.
 type HPose = { th: number; ph: number; d: number; gy: number };
-const GUARD: HPose = { th: -0.45, ph: 1.05, d: 0.26, gy: -0.14 };
+const GUARD: HPose = { th: -0.45, ph: 1.05, d: 0.8, gy: -0.2 };
 const smooth = (u: number) => u * u * (3 - 2 * u);
-function hammerPose(p: number, side: number, shield: boolean, casting: boolean) {
-  if (shield) return { th: -0.75, ph: -1.15, d: 0.2, gy: -0.26, imp: 0, w: 0, side };      // lowered while the shield is up
-  if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side };
-  const K: [number, HPose][] = [
-    [0, GUARD],
-    [0.2, { th: -side * 1.75, ph: 0.45, d: 0.24, gy: -0.02 }],      // wind-up: drawn back at shoulder height
-    [0.34, { th: 0, ph: 0.0, d: 0.42, gy: -0.1 }],                   // impact: arms long, head through the target
-    [0.5, { th: side * 1.55, ph: 0.1, d: 0.34, gy: -0.12 }],        // follow-through
-    [0.68, { th: side * 1.1, ph: 0.55, d: 0.28, gy: -0.14 }],       // settle
-    [1, GUARD],
-  ];
+function keyed(K: [number, HPose][], p: number) {
   let k = 0;
   while (k < K.length - 2 && p > K[k + 1][0]) k++;
   const [p0, a] = K[k], [p1, b] = K[k + 1];
   const u = smooth(Math.min(1, Math.max(0, (p - p0) / (p1 - p0))));
   const L = (x: number, y: number) => x + (y - x) * u;
-  return { th: L(a.th, b.th), ph: L(a.ph, b.ph), d: L(a.d, b.d), gy: L(a.gy, b.gy), imp: Math.max(0, 1 - Math.abs(p - 0.34) / 0.14), w: Math.min(1, p / 0.1, (1 - p) / 0.25), side };
+  return { th: L(a.th, b.th), ph: L(a.ph, b.ph), d: L(a.d, b.d), gy: L(a.gy, b.gy) };
+}
+function hammerPose(p: number, side: number, shield: boolean, casting: boolean, mode: string, cp: number) {
+  if (mode === 'dawncharge') return { th: -2.3, ph: -0.35, d: 0.85, gy: -0.25, imp: 0, w: 1, side: 1 };       // trailing low behind the right hip
+  if (mode === 'shatter' && cp < 1) {
+    // overhead wind-up, then the head is driven down into the ground in front
+    const K: [number, HPose][] = [
+      [0, GUARD],
+      [0.32, { th: 0, ph: 1.35, d: 0.35, gy: 0.3 }],     // hammer raised high over the head, arms up
+      [0.55, { th: 0, ph: 1.1, d: 0.45, gy: 0.36 }],     // top of the lift
+      [0.72, { th: 0, ph: -0.95, d: 0.95, gy: -0.12 }],  // slam: arms long, head on the ground ahead
+      [0.9, { th: 0, ph: -0.9, d: 0.9, gy: -0.14 }],
+      [1, GUARD],
+    ];
+    const q = keyed(K, cp);
+    return { ...q, imp: Math.max(0, 1 - Math.abs(cp - 0.74) / 0.12) * 1.4, w: 1, side: 1 };
+  }
+  if (shield) return { th: -0.75, ph: -1.15, d: 0.6, gy: -0.36, imp: 0, w: 0, side };      // lowered while the shield is up
+  if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side };
+  const K: [number, HPose][] = [
+    [0, GUARD],
+    [0.2, { th: -side * 1.75, ph: 0.55, d: 0.75, gy: 0.04 }],  // wind-up: head drawn back high over the shoulder
+    [0.34, { th: 0, ph: -0.02, d: 1.0, gy: 0.0 }],             // impact: arms locked straight out at shoulder height
+    [0.5, { th: side * 1.6, ph: 0.05, d: 0.97, gy: 0.0 }],     // follow-through, still at full reach
+    [0.68, { th: side * 1.1, ph: 0.5, d: 0.75, gy: -0.1 }],    // settle
+    [1, GUARD],
+  ];
+  const q = keyed(K, p);
+  return { ...q, imp: Math.max(0, 1 - Math.abs(p - 0.34) / 0.14), w: Math.min(1, p / 0.1, (1 - p) / 0.25), side };
 }
 
 export class Animator {
@@ -294,8 +317,10 @@ export class Animator {
     const pq = punching ? s.attackAge / 0.42 : 9;
     this.punchExt = pq < 0.14 ? -0.35 * pq / 0.14 : pq < 0.26 ? -0.35 + 1.35 * (pq - 0.14) / 0.12 : Math.max(0, 1 - (pq - 0.26) / 0.74);
     this.punchW = pq >= 1 ? 0 : pq < 0.85 ? 1 : (1 - pq) / 0.15;
-    const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05) : null;
-    const hTw = hs ? Math.max(-0.95, Math.min(0.95, hs.th * 0.55)) * hs.w : 0;
+    const cp = s.move === 'shatter' ? s.castAge / 0.75 : 9;
+    const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05 && s.move !== 'shatter', s.move ?? '', cp) : null;
+    const charging = s.move === 'dawncharge';
+    const hTw = hs ? Math.max(-0.7, Math.min(0.7, hs.th * 0.45)) * hs.w : 0;
     const pTw = -0.45 * Math.max(0, this.punchExt) * this.punchW;
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
@@ -403,6 +428,7 @@ export class Animator {
     hipsOff.z += lunge;
     // hammer: weight rolls onto the front foot at impact; jab: a small step into the punch
     if (hs) { hipsOff.z += hs.imp * 0.09 * this.legLen; hipsOff.y -= hs.imp * 0.06 * this.legLen + (hs.w > 0 ? 0.02 * this.legLen : 0); }
+    if (charging) hipsOff.y -= 0.07 * this.legLen;
     hipsOff.z += Math.max(0, this.punchExt) * this.punchW * 0.05 * this.legLen;
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
     if (s.angel && s.flying) hipsOff.y += Math.sin(s.time * 1.8) * 0.025 * this.legLen * (1 - Math.min(1, speed / (this.legLen * 6)));
@@ -433,9 +459,9 @@ export class Animator {
     const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
     const breath = Math.sin(s.time * 1.6) * 0.015;
     const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
-    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0))).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0) + (charging ? 0.38 : 0))).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
     if (this.bones.spine) this.applyDelta('spine', Ds);
-    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6));
+    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6 + (charging ? -0.35 : 0)));
     this.applyDelta('chest', Dc);
     const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
     if (this.bones.neck) this.applyDelta('neck', Dn);
@@ -484,13 +510,25 @@ export class Animator {
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
       // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
       let over: { hand: THREE.Vector3; w: number } | null = null;
-      if (hs && (i === 1 || !(s.barrier || this.cast > 0.05 || this.punchW > 0.01))) {
-        const L_ = this.height, C = R.chest.p.clone().add(hipsOff);
+      const leftFree = s.move === 'shatter' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
+      if (hs && (i === 1 || !leftFree)) {
+        const L_ = this.height;
+        const Sh = R.upperarm_L && R.upperarm_R ? R.upperarm_L.p.clone().add(R.upperarm_R.p).multiplyScalar(0.5).add(hipsOff) : R.chest.p.clone().add(hipsOff);
         const dirH = new THREE.Vector3(Math.sin(hs.th), 0, Math.cos(hs.th));
         const H = new THREE.Vector3(Math.sin(hs.th) * Math.cos(hs.ph), Math.sin(hs.ph), Math.cos(hs.th) * Math.cos(hs.ph));
-        const G = C.clone().add(new THREE.Vector3(0, hs.gy * L_, 0)).addScaledVector(dirH, hs.d * L_);
-        over = { hand: i === 1 ? G : G.clone().addScaledVector(H, 0.2 * this.hammerLen), w: 1 };
+        const G = Sh.clone().add(new THREE.Vector3(0, hs.gy * L_, 0)).addScaledVector(dirH, hs.d * this.armLen);
+        const hand = i === 1 ? G : G.clone().addScaledVector(H, 0.12 * this.hammerLen);
+        // the off hand lets go at the extremes (grip behind its shoulder or out of reach): a two-handed grip there
+        // tears an auto-rigged shoulder; it rejoins the haft as the hammer comes round
+        let wh = 1;
+        if (i === 0) {
+          const rel = hand.clone().sub(shoulder), reach = l1 + l2;
+          wh = Math.min(1, Math.max(0, 1 - (rel.length() / reach - 1.0) * 4)) * Math.min(1, Math.max(0, rel.z / (0.35 * reach) + 0.6));
+        }
+        over = { hand, w: wh };
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
+      } else if (i === 0 && charging) {
+        over = { hand: shoulder.clone().add(new THREE.Vector3(-0.15, 0.05, 0.75).multiplyScalar(l1 + l2)), w: 1 };
       } else if (i === 0 && this.punchW > 0.01) {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);

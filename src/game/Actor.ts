@@ -48,7 +48,11 @@ export class Actor {
   controller: { think(dt: number): void } | null = null;
   spawn: [number, number] = [0, 0];
 
+  /** the hero as picked: a pilot on foot (def swapped by the World) returns to this on Call Mech / respawn */
+  baseDef: HeroDef;
+
   constructor(public def: HeroDef, public team: TeamId) {
+    this.baseDef = def;
     this.hp = def.hp;
     this.armor = this.maxArmor = def.armor;
     this.ammo = 'ammo' in def.primary && def.primary.ammo ? def.primary.ammo : 0;

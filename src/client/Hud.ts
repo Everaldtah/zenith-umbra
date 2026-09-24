@@ -102,8 +102,9 @@ export class Hud {
       this.ultWasReady = ready;
       const P = me.def.primary;
       this.ammo.innerHTML = P.kind === 'charge' ? `<b>${me.charging ? Math.round(me.charge * 100) + '%' : 'DRAW'}</b>` : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${P.ammo}</small>`) : '<b>∞</b>';
-      this.flight.style.display = me.def.frame === 'flyer' ? '' : 'none';
-      if (me.def.frame === 'flyer') this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : 'FLIGHT'}</span>`;
+      const flies = me.def.frame === 'flyer' || !!me.def.jets;
+      this.flight.style.display = flies ? '' : 'none';
+      if (flies) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>`;
       const st: string[] = [];
       const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'BLOOD PACT', '#ff2d55']];
       for (const [k, n, c] of S2) if (me.has(k, t)) st.push(`<span style="--c:${c}">${n}</span>`);
@@ -187,8 +188,9 @@ export class Hud {
         if (mine && !e.heal) { this.hitmark.className = 'hitmark on' + (e.crit ? ' crit' : ''); setTimeout(() => this.hitmark.className = 'hitmark', 120); }
       }
       if (onMe) { this.root.classList.add('hurt'); setTimeout(() => this.root.classList.remove('hurt'), 150); }
-    } else if (e.t === 'kill') {
-      const k = el('div', 'kf', `<b class="${e.src?.team ?? ''}">${e.src ? e.src.def.name : 'The Void'}</b><i>${e.src ? '⟶' : '↓'}</i><b class="${e.tgt.team}">${e.tgt.def.name}</b>`);
+    } else if (e.t === 'kill' || e.t === 'demech') {
+      // a destroyed mech shows as the frame's name with a broken-frame marker (the pilot fights on)
+      const k = el('div', 'kf', `<b class="${e.src?.team ?? ''}">${e.src ? e.src.def.name : 'The Void'}</b><i>${e.t === 'demech' ? '⟶⚙' : e.src ? '⟶' : '↓'}</i><b class="${e.tgt.team}">${e.t === 'demech' ? e.tgt.baseDef.name : e.tgt.def.name}</b>`);
       if (me && (e.src === me || e.tgt === me)) k.classList.add('me');
       this.feed.prepend(k);
       setTimeout(() => k.remove(), 6000);

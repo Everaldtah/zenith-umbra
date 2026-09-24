@@ -177,6 +177,12 @@ export class Bot {
       i.jumpHeld = (t < this.flyUntil && alt < 4.5 && a.flight > 10) || (hGoal > 1.2 && a.flight > 10) || (gnd === -Infinity && a.flight > 5);
       if (i.jumpHeld && a.grounded) i.jump = true;
       i.descend = false;
+    } else if (a.def.jets) {
+      // thruster mechs: burn up to meet an airborne target in hammer range (drones hovering out of reach)
+      const tg = this.target, up = tg ? tg.pos.y - a.pos.y : 0, near = tg ? Math.hypot(tg.pos.x - a.pos.x, tg.pos.z - a.pos.z) : 99;
+      const want = !!tg && tg.alive && up > 2.2 && near < 9 && a.flight > 12 && (a.flying || a.flight > 55);
+      i.jumpHeld = want ? up > 0.8 : i.jump;
+      if (want && a.grounded) i.jump = true;
     } else i.jumpHeld = i.jump;
     // unstick
     if (t - this.stuck.t > 1.2) {
@@ -298,15 +304,31 @@ export class Bot {
     const vis = (x: Actor) => w.visible(a, x);
     switch (a.def.id) {
       case 'tenkai': {
-        // COUNTER: Dawn Anchor the charging Gorgoth
-        if (rival && rival.forced?.kind === 'abysscharge' && dist3(rival.pos, a.pos) < 24 && vis(rival) && rdy('anchor')) { this.castAt('a1', rival.center); break; }
-        const cleanse = allies.some(x => dist3(x.pos, a.pos) < 10 && ['brand', 'antiheal', 'root', 'silence', 'tethered'].some(s => x.has(s, t)));
-        if (cleanse && rdy('sunburst')) { this.castAt('a2'); break; }
-        if (tg && d > 6 && d < 20 && vis(tg) && rdy('anchor') && Math.random() < 0.4) { this.castAt('a1', tg.center); break; }
+        // COUNTER: meet Gorgoth's Abyss Charge head-on with a Dawn Charge
+        if (rival && rival.forced?.kind === 'abysscharge' && dist3(rival.pos, a.pos) < 20 && vis(rival) && rdy('dawncharge')) { this.castAt('a1', rival.center); break; }
+        // Solar Shatter: grounded foes bunched in the cone toward the target
+        if (tg && rdy('shatter')) {
+          const ang = Math.atan2(tg.pos.x - a.pos.x, tg.pos.z - a.pos.z);
+          const cone = foes.filter(x => vis(x) && !x.flying && Math.abs(x.pos.y - a.pos.y) < 1.5 && dist3(x.pos, a.pos) < 14
+            && Math.abs(wrap(Math.atan2(x.pos.x - a.pos.x, x.pos.z - a.pos.z) - ang)) < 0.4);
+          if (cone.length >= 2 || (cone.length === 1 && d < 7 && Math.random() < 0.25)) { this.castAt('a2', tg.pos); break; }
+        }
+        // Dawn Charge: a visible target on flat, solid ground in charge range (never charge over a drop)
+        if (tg && d > 7 && d < 20 && vis(tg) && rdy('dawncharge') && Math.abs(tg.pos.y - a.pos.y) < 1.2 && Math.random() < 0.3) {
+          let solid = true;
+          for (let k = 1; k <= 5 && solid; k++) { const u = k / 5; solid = w.level.groundAt(a.pos.x + (tg.pos.x - a.pos.x) * u, a.pos.z + (tg.pos.z - a.pos.z) * u, a.pos.y + 1) > a.pos.y - 1.5; }
+          if (solid) { this.castAt('a1', tg.center); break; }
+        }
         // Dawn Colossus: wake up the giant when a fight is on (two foes close, or a duel going badly)
         if (ultReady && tg && d < 12 && (near(a.pos, 14, foes).length >= 2 || a.health / a.maxHp < 0.6)) { this.castAt('ult', tg.pos); break; }
         // Solar Bulwark: raise when under fire
         if (t - a.lastDamagedAt < 0.8 && a.barrier.hp > 350 && tg && d > 5) this.holdAlt = t + 1.2 + Math.random();
+        break;
+      }
+      case 'haruto': {
+        // pilot on foot: call the mech back the moment the gauge is full, roll out of trouble meanwhile
+        if (ultReady) { this.castAt('ult'); break; }
+        if (t - a.lastDamagedAt < 0.4 && rdy('pilotroll') && Math.random() < 0.3) { this.castAt('a1'); break; }
         break;
       }
       case 'mirei': {
