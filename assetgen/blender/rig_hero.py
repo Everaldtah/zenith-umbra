@@ -319,7 +319,9 @@ def leg_columns(z):
 ank = leg_columns(0.07 * H)
 kz = (J["knee_l"][1] + J["knee_r"][1]) / 2
 kne = leg_columns(min(kz, 0.3 * H))
-if ank and kne and ank[0] - ank[1] > 0.05 * H:
+# only when the pose detector was rejected or unsure: a confident pose beats columns (a bow tip at ankle height is a 'column')
+weak_pose = "silhouette" in LOG or P.get("score", 0) < 0.8
+if weak_pose and ank and kne and ank[0] - ank[1] > 0.05 * H:
     for s, k in (("l", 0), ("r", 1)):
         J[f"ankle_{s}"] = (ank[k], J[f"ankle_{s}"][1])
         J[f"knee_{s}"] = (kne[k], J[f"knee_{s}"][1])

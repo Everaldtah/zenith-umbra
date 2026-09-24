@@ -107,6 +107,7 @@ for aid, path in jobs:
                 remesh=True, remesh_band=1, remesh_project=0, verbose=False)
             glb.export(f"/kaggle/working/glb/{aid}.glb", extension_webp=False)
             publish("asset", id=aid, ptype=ptype, secs=round(time.time() - t0), gpu=os.environ.get("CUDA_VISIBLE_DEVICES"))
+            open(f"/tmp/first{os.environ.get('CUDA_VISIBLE_DEVICES')}", "w").write("1")
             break
         except Exception:
             publish("asset-error", id=aid, ptype=ptype, trace=traceback.format_exc()[-1500:])
@@ -148,16 +149,18 @@ try:
     sh(f"cd /tmp && {py} -c \"from huggingface_hub import snapshot_download as s; s('microsoft/TRELLIS.2-4B'); s('microsoft/TRELLIS-image-large', allow_patterns=['ckpts/ss_dec*']); import timm; timm.create_model('vit_large_patch16_dinov3.lvd1689m', pretrained=True)\"", "download-models")
     procs = []
     for g in range(2):
+        if not jobs[g::2]: continue          # an idle worker still loads a 4B pipeline into host RAM - don't start it
         if g == 1:
-            # loading two 4B pipelines at once exhausts the VM's RAM: wait until worker 0 has moved its weights to the GPU
-            for _ in range(900):
-                if os.path.exists("/tmp/loaded0") or procs[0].poll() is not None: break
+            # the VM's RAM can't hold worker 1's pipeline load next to worker 0's first cascade (worker 0 was OOM-killed
+            # silently, every time): wait until worker 0 has finished its first asset
+            for _ in range(1800):
+                if os.path.exists("/tmp/first0") or procs[0].poll() is not None: break
                 time.sleep(2)
         env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(g), "JOBS": json.dumps(jobs[g::2]), "NTFY_TOPIC": TOPIC, "PTYPE": PTYPE}
         procs.append(subprocess.Popen([py, "/tmp/worker.py"], env=env, stdout=open(f"/tmp/worker{g}.log", "w"), stderr=subprocess.STDOUT))
     for p in procs: p.wait()
     made = sorted(os.path.basename(p) for p in glob.glob(f"{OUT}/*.glb"))
-    logs = {g: open(f"/tmp/worker{g}.log").read()[-2500:] for g in range(2)}
+    logs = {g: open(f"/tmp/worker{g}.log").read()[-2500:] for g in range(2) if os.path.exists(f"/tmp/worker{g}.log")}
     publish("done", made=made, minutes=round((time.time() - t0) / 60, 1), logs=logs if len(made) < len(jobs) else "")
     subprocess.run("rm -rf /tmp/TRELLIS.2 /tmp/ext", shell=True)
 except SystemExit:

@@ -63,7 +63,7 @@
   },
   "yuzu": {
    "height": 1.62,
-   "tris": 26000,
+   "tris": 25998,
    "bones": [
     "humanoid"
    ]
