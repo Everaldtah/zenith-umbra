@@ -1,0 +1,295 @@
+// Procedural animation for the shared humanoid rig (Blender auto-rig and the fallback mannequin use the same bone names).
+// Everything is solved in MODEL space (Y up, +Z forward, +X = character's left) as a delta on top of the rest pose:
+//  - legs: 2-bone IK toward foot targets driven by a distance-based gait phase, so planted feet never slide
+//  - spine/neck/head: FK lean + aim pitch; arms: swing, or IK toward the aim line when attacking / casting
+//  - flyers: body lean into velocity, dangling legs, flapping wing bones; mechs: slow heavy stride with stomp events
+import * as THREE from 'three';
+
+export const BONES = ['root', 'hips', 'spine', 'chest', 'neck', 'head',
+  'shoulder_L', 'upperarm_L', 'forearm_L', 'hand_L', 'shoulder_R', 'upperarm_R', 'forearm_R', 'hand_R',
+  'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R'] as const;
+type BoneName = typeof BONES[number];
+const CHILD: Partial<Record<BoneName, BoneName>> = {
+  hips: 'spine', spine: 'chest', chest: 'neck', neck: 'head', shoulder_L: 'upperarm_L', upperarm_L: 'forearm_L', forearm_L: 'hand_L',
+  shoulder_R: 'upperarm_R', upperarm_R: 'forearm_R', forearm_R: 'hand_R', thigh_L: 'shin_L', shin_L: 'foot_L', thigh_R: 'shin_R', shin_R: 'foot_R',
+};
+
+export interface AnimState {
+  dt: number; time: number;
+  vel: THREE.Vector3;       // world velocity
+  yaw: number; pitch: number;
+  grounded: boolean; flying: boolean; frame: string;
+  attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
+  stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
+  scale: number;
+}
+
+interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
+
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAxisAngle(axis, a);
+
+export class Animator {
+  bones: Partial<Record<BoneName, THREE.Object3D>> = {};
+  rest: Partial<Record<BoneName, Rest>> = {};
+  parentQ = new Map<THREE.Object3D, THREE.Quaternion>();   // model-space rotation of non-rig parents
+  hipsParentInv = new THREE.Matrix3();
+  hipsRestLocal = new THREE.Vector3();
+  legLen = 1; thigh = 0.5; shin = 0.5; hipW = 0.1; hipH = 1; footY = 0.05; armLen = 0.6; height = 1.8;
+  phase = 0;                   // gait phase in cycles
+  foot = [new THREE.Vector3(), new THREE.Vector3()];   // current foot targets (model space)
+  lean = new THREE.Vector2();  // smoothed lean
+  bob = 0; landDip = 0; flap = 0; moveBlend = 0; airBlend = 0; flyBlend = 0; atk = 0; cast = 0;
+  onStep: ((side: number, heavy: boolean) => void) | null = null;
+  ok = false;
+  private lastStance = [true, true];
+
+  constructor(public model: THREE.Object3D) {
+    model.traverse(o => {
+      const n = o.name.replace(/\./g, '_') as BoneName;
+      if ((BONES as readonly string[]).includes(n) && !this.bones[n]) this.bones[n] = o;
+    });
+    const need: BoneName[] = ['hips', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'chest', 'head'];
+    this.ok = need.every(n => this.bones[n]);
+    if (this.ok) this.bind();
+  }
+
+  private bind() {
+    const m = this.model;
+    const inv = new THREE.Matrix4().copy(m.matrixWorld).invert();
+    m.updateMatrixWorld(true);
+    inv.copy(m.matrixWorld).invert();
+    const pos = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    for (const n of BONES) {
+      const b = this.bones[n]; if (!b) continue;
+      new THREE.Matrix4().multiplyMatrices(inv, b.matrixWorld).decompose(pos, q, s);
+      this.rest[n] = { q: q.clone(), p: pos.clone(), dir: new THREE.Vector3(0, 1, 0) };
+      // parents that aren't rig bones: remember their (static) model-space rotation
+      const par = b.parent;
+      if (par && !this.parentQ.has(par)) {
+        new THREE.Matrix4().multiplyMatrices(inv, par.matrixWorld).decompose(pos, q, s);
+        this.parentQ.set(par, q.clone());
+      }
+    }
+    for (const n of BONES) {
+      const r = this.rest[n]; if (!r) continue;
+      const c = CHILD[n];
+      if (c && this.rest[c]) r.dir.copy(this.rest[c]!.p).sub(r.p).normalize();
+      else if (n.startsWith('foot')) r.dir.set(0, -0.2, 1).normalize();
+      else if (n.startsWith('hand')) r.dir.copy(this.rest[n.replace('hand', 'forearm') as BoneName]?.dir ?? Y);
+      else if (n.startsWith('wing')) r.dir.set(n.endsWith('L') ? 1 : -1, 0.3, -0.3).normalize();
+      else if (n === 'head') r.dir.set(0, 1, 0);
+    }
+    const R = this.rest as Record<BoneName, Rest>;
+    this.thigh = R.thigh_L.p.distanceTo(R.shin_L.p);
+    this.shin = R.shin_L.p.distanceTo(R.foot_L.p);
+    this.legLen = this.thigh + this.shin;
+    this.hipW = Math.abs(R.thigh_L.p.x - R.thigh_R.p.x) / 2;
+    this.hipH = R.hips.p.y;
+    this.footY = (R.foot_L.p.y + R.foot_R.p.y) / 2;
+    this.height = R.head.p.y * 1.08;
+    if (R.upperarm_L && R.hand_L) this.armLen = R.upperarm_L.p.distanceTo(R.forearm_L.p) + R.forearm_L.p.distanceTo(R.hand_L.p);
+    const hp = this.bones.hips!.parent!;
+    const pm = new THREE.Matrix4().multiplyMatrices(inv, hp.matrixWorld);
+    this.hipsParentInv.setFromMatrix4(pm).invert();
+    this.hipsRestLocal.copy(this.bones.hips!.position);
+    this.foot[0].set(R.foot_L.p.x, this.footY, R.foot_L.p.z);
+    this.foot[1].set(R.foot_R.p.x, this.footY, R.foot_R.p.z);
+  }
+
+  /** model-space rotation currently applied to a bone's parent */
+  private modelQ = new Map<THREE.Object3D, THREE.Quaternion>();
+  private setModelQ(n: BoneName, Qm: THREE.Quaternion) {
+    const b = this.bones[n]; if (!b) return;
+    const par = b.parent!;
+    const pq = this.modelQ.get(par) ?? this.parentQ.get(par) ?? new THREE.Quaternion();
+    b.quaternion.copy(pq).invert().multiply(Qm);
+    this.modelQ.set(b, Qm.clone());
+  }
+  /** delta D (model space) applied on top of the rest orientation */
+  private applyDelta(n: BoneName, D: THREE.Quaternion) {
+    const r = this.rest[n]; if (!r) return;
+    this.setModelQ(n, _q.copy(D).multiply(r.q));
+  }
+  /** rotate a bone so its rest direction points along `dir` (model space), keeping twist minimal */
+  private aimBone(n: BoneName, dir: THREE.Vector3, base?: THREE.Quaternion): THREE.Quaternion {
+    const r = this.rest[n]; if (!r) return new THREE.Quaternion();
+    const from = base ? _v3.copy(r.dir).applyQuaternion(base) : r.dir;
+    const D = new THREE.Quaternion().setFromUnitVectors(_v2.copy(from).normalize(), _v.copy(dir).normalize());
+    if (base) D.multiply(base);
+    this.applyDelta(n, D);
+    return D;
+  }
+
+  /** 2-bone IK: returns [upperDir, lowerDir] model space */
+  private ik(root: THREE.Vector3, target: THREE.Vector3, l1: number, l2: number, pole: THREE.Vector3): [THREE.Vector3, THREE.Vector3] {
+    const d = _v.copy(target).sub(root);
+    let len = d.length();
+    const maxL = (l1 + l2) * 0.999;
+    if (len > maxL) { d.multiplyScalar(maxL / len); len = maxL; }
+    len = Math.max(len, Math.abs(l1 - l2) + 1e-3);
+    const dir = d.clone().normalize();
+    const a = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+    const pd = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir)));
+    if (pd.lengthSq() < 1e-6) pd.set(0, 0, 1); pd.normalize();
+    const knee = root.clone().add(dir.clone().multiplyScalar(a)).add(pd.multiplyScalar(h));
+    const end = root.clone().add(d);
+    return [knee.clone().sub(root).normalize(), end.sub(knee).normalize()];
+  }
+
+  update(s: AnimState) {
+    if (!this.ok) return;
+    const R = this.rest as Record<BoneName, Rest>;
+    const dt = Math.min(0.05, s.dt);
+    this.modelQ.clear();
+    const heavy = s.frame === 'mech';
+    const flyer = s.frame === 'flyer';
+    // velocity in model space (character faces +Z at its yaw)
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
+    const lvx = (s.vel.x * cy - s.vel.z * sy) / s.scale, lvz = (s.vel.x * sy + s.vel.z * cy) / s.scale;
+    // rig units: the model is scaled to hero height, so convert m/s into model units
+    const k = this.height / Math.max(0.5, s.scale);
+    void k;
+    const speed = Math.hypot(lvx, lvz);
+    const moving = s.grounded && speed > 0.4 && !s.rooted ? 1 : 0;
+    this.moveBlend += (moving - this.moveBlend) * Math.min(1, dt * 10);
+    this.airBlend += ((s.grounded ? 0 : 1) - this.airBlend) * Math.min(1, dt * 8);
+    this.flyBlend += ((s.flying ? 1 : 0) - this.flyBlend) * Math.min(1, dt * 5);
+    this.atk = Math.max(0, 1 - s.attackAge / (s.attackKind === 'secondary' || s.attackKind === 'lance' ? 0.45 : 0.3));
+    this.cast = Math.max(0, 1 - s.castAge / 0.55);
+    this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
+    // ---------------- gait: stride scales with speed; phase advances with distance so feet stay planted
+    const stride = this.legLen * (heavy ? 1.15 : 1.0) * (0.8 + Math.min(1.1, speed / 6) * 0.9);
+    const cycleLen = stride * 2;
+    this.phase += (speed * dt) / cycleLen * (moving ? 1 : 0);
+    // move direction in model space
+    const md = speed > 0.01 ? _v2.set(lvx / speed, 0, lvz / speed).clone() : new THREE.Vector3(0, 0, 1);
+    const lift = this.legLen * (heavy ? 0.16 : 0.22) * Math.min(1, speed / 3 + 0.3);
+    const duty = 0.58;
+    const hipsOff = new THREE.Vector3();
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      const restFoot = new THREE.Vector3(side * this.hipW * 1.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z);
+      const ph = ((this.phase + i * 0.5) % 1 + 1) % 1;
+      const tgt = restFoot.clone();
+      if (this.moveBlend > 0.01) {
+        let off: number, up = 0;
+        if (ph < duty) { off = 0.5 - ph / duty; }                      // stance: foot travels back at ground speed
+        else { const u = (ph - duty) / (1 - duty); off = -0.5 + u; up = Math.sin(u * Math.PI); }   // swing
+        const stanceNow = ph < duty;
+        if (stanceNow && !this.lastStance[i] && moving) this.onStep?.(i, heavy);
+        this.lastStance[i] = stanceNow;
+        tgt.addScaledVector(md, off * stride * this.moveBlend);
+        tgt.y += up * lift * this.moveBlend;
+      }
+      // airborne: knees up (jump), trailing dangle (flying)
+      if (this.airBlend > 0.01) {
+        const tuck = flyer ? 0.25 : Math.max(0, Math.min(1, (s.vel.y + 4) / 10));
+        const air = new THREE.Vector3(side * this.hipW * 1.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
+        if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
+        tgt.lerp(air, this.airBlend);
+      }
+      this.foot[i].lerp(tgt, Math.min(1, dt * (this.moveBlend > 0.5 ? 60 : 14)));
+    }
+    // body bob: lowest at mid-stance (twice per cycle)
+    const bobPh = this.phase * 2 * Math.PI * 2;
+    this.bob = (Math.cos(bobPh) * 0.5 - 0.5) * this.legLen * (heavy ? 0.06 : 0.035) * this.moveBlend;
+    hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0);
+    if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
+    // lean into acceleration / velocity
+    const leanTarget = new THREE.Vector2(
+      Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.12),
+      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? 0.45 : heavy ? 0.08 : 0.14));
+    this.lean.lerp(leanTarget, Math.min(1, dt * 6));
+    const hipSway = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.07 : 0.05) * this.moveBlend;
+    // ---------------- hips
+    const Dh = rot(Y, hipSway).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5));
+    if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
+    this.applyDelta('hips', Dh);
+    const hb = this.bones.hips!;
+    hb.position.copy(this.hipsRestLocal).add(_v.copy(hipsOff).applyMatrix3(this.hipsParentInv));
+    // ---------------- spine chain
+    const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
+    const hit = Math.max(0, 1 - s.hitAge / 0.25);
+    const breath = Math.sin(s.time * 1.6) * 0.015;
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - hit * 0.12 + breath + this.cast * 0.1)).multiply(rot(Y, -hipSway * 0.8));
+    if (this.bones.spine) this.applyDelta('spine', Ds);
+    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - hit * 0.1 + breath)).multiply(rot(Y, -hipSway * 0.6 + (this.atk * (s.attackKind === 'secondary' ? -0.35 : -0.12))));
+    this.applyDelta('chest', Dc);
+    const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
+    if (this.bones.neck) this.applyDelta('neck', Dn);
+    const Dhd = Dn.clone().multiply(rot(X, aimP * 0.3 + Math.sin(s.time * 0.7) * 0.02));
+    this.applyDelta('head', Dhd);
+    // ---------------- legs (IK)
+    const hipsPos = R.hips.p.clone().add(hipsOff);
+    for (let i = 0; i < 2; i++) {
+      const L = i === 0 ? 'L' : 'R';
+      const th = R[`thigh_${L}` as BoneName], sh = R[`shin_${L}` as BoneName];
+      const hipJ = th.p.clone().sub(R.hips.p).applyQuaternion(Dh).add(hipsPos);
+      const ft = this.foot[i].clone(); ft.y = Math.max(ft.y, this.footY * 0.6);
+      const pole = new THREE.Vector3(0, 0, 1).applyQuaternion(Dh);
+      const [ud, ld] = this.ik(hipJ, ft, this.thigh, this.shin, pole);
+      const Dt = this.aimBone(`thigh_${L}` as BoneName, ud);
+      void sh;
+      this.aimBone(`shin_${L}` as BoneName, ld);
+      void Dt;
+      // feet stay level with the ground, toes pitch a little during swing
+      const toe = (this.foot[i].y - this.footY) / Math.max(1e-3, this.legLen) * -1.2;
+      this.applyDelta(`foot_${L}` as BoneName, rot(X, toe).premultiply(rot(Y, hipSway * 0.3)));
+    }
+    // ---------------- arms
+    const armSwing = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.25 : 0.4) * this.moveBlend * Math.min(1, speed / 5 + 0.3);
+    const aimDir = new THREE.Vector3(0, Math.sin(s.pitch), Math.cos(s.pitch)).normalize();
+    for (let i = 0; i < 2; i++) {
+      const L = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
+      const ua = `upperarm_${L}` as BoneName, fa = `forearm_${L}` as BoneName;
+      if (!this.bones[ua] || !this.bones[fa]) continue;
+      if (this.bones[`shoulder_${L}` as BoneName]) this.applyDelta(`shoulder_${L}` as BoneName, Dc);
+      const shoulder = R[ua].p.clone().sub(R.chest.p).applyQuaternion(Dc).add(R.chest.p).add(hipsOff);
+      const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[`hand_${L}` as BoneName] ?? R[fa]).p) || l1;
+      // relaxed pose: rest direction pulled 25% toward straight down, swung with the gait
+      const restD = R[ua].dir.clone().applyQuaternion(Dc);
+      const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), flyer && s.flying ? 0.05 : 0.3).normalize();
+      relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1));
+      if (flyer && s.flying) relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0), -0.3 * this.flyBlend);
+      // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
+      const lead = i === 1 ? 1 : 0.35;
+      const act = Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
+      if (act > 0.01) {
+        const reach = aimDir.clone().multiplyScalar((l1 + l2) * (0.72 + 0.15 * Math.sin(Math.min(1, act) * Math.PI)));
+        const hand = shoulder.clone().add(reach);
+        hand.x += -side * (l1 + l2) * 0.25;             // hands converge toward the centre line
+        if (s.attackKind === 'secondary' && this.atk > 0) hand.x += side * Math.sin(this.atk * Math.PI) * (l1 + l2) * 0.8;   // slash arc
+        const [u, l] = this.ik(shoulder, hand, l1, l2, new THREE.Vector3(side * 0.4, -1, -0.6));
+        const w = Math.min(1, act);
+        const uD = relaxed.clone().lerp(u, w).normalize();
+        const Du = this.aimBone(ua, uD);
+        const lD = relaxed.clone().lerp(l, w).normalize();
+        this.aimBone(fa, lD);
+        void Du;
+      } else {
+        const Du = this.aimBone(ua, relaxed);
+        // slight natural elbow bend
+        const lD = relaxed.clone().applyAxisAngle(new THREE.Vector3(side, 0, 0), 0).lerp(new THREE.Vector3(0, -0.3, 1), 0.18 + 0.15 * this.moveBlend).normalize();
+        this.aimBone(fa, lD);
+        void Du;
+      }
+      const hn = `hand_${L}` as BoneName;
+      if (this.bones[hn]) this.setModelQ(hn, (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q));
+    }
+    // ---------------- wings
+    if (this.bones.wing_L || this.bones.wing_R) {
+      const rate = s.flying ? (s.vel.y > 1 ? 4.2 : 2.6) : 0.8;
+      this.flap += dt * rate;
+      const amp = s.flying ? (s.vel.y > 1 ? 0.55 : 0.35) : 0.08;
+      const f = Math.sin(this.flap * 2 * Math.PI) * amp;
+      const fold = (1 - this.flyBlend) * 0.35;
+      for (const [n, side] of [['wing_L', 1], ['wing_R', -1]] as [BoneName, number][]) {
+        if (!this.bones[n]) continue;
+        this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (f - fold))).multiply(rot(Y, side * fold * 0.6)));
+      }
+    }
+  }
+}

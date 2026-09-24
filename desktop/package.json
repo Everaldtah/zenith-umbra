@@ -1,0 +1,12 @@
+{
+  "name": "zenith-umbra",
+  "productName": "ZENITH UMBRA",
+  "version": "1.0.0",
+  "description": "ZENITH//UMBRA - original anime hero shooter, Windows desktop build",
+  "main": "main.cjs",
+  "private": true,
+  "author": "EveraldTah",
+  "license": "MIT",
+  "scripts": { "start": "electron .", "build": "node build.mjs" },
+  "devDependencies": { "@electron/packager": "^18.3.6", "electron": "^38.0.0", "electron-builder": "^26.15.3" }
+}

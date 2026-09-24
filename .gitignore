@@ -1,0 +1,14 @@
+node_modules
+dist
+assetgen/out
+assetgen/build
+assetgen/models
+assetgen/__pycache__
+desktop/node_modules
+desktop/out
+desktop/game
+.vercel
+*.log
+tests/e2e/shots
+tests/sim-report.jsonl
+tests/diag.txt
