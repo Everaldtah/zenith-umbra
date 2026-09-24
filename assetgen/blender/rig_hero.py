@@ -230,12 +230,18 @@ def silhouette_joints():
     shx = max(min(abs(tl), abs(tr)) * 0.8, H * 0.08)
     # arms: occupied cells outside the torso between hip and shoulder; hand = the lowest such cell on each side
     arms = {}
+    # below the pelvis the centre column is empty (gap between the legs): the legs themselves must not count as arms,
+    # so there the body span is at least as wide as the pelvis row
+    _, hl0, hr0 = torso_w(int(hipz / R_))
     for side, sg in (("l", 1), ("r", -1)):
         pts = []
         for zi in range(int(hipz * 0.7 / R_), int(shz / R_)):
             _, l0, r0 = torso_w(zi)
+            if zi * R_ < hipz + 0.03 * H: l0, r0 = min(l0, hl0), max(r0, hr0)
             for s in segs(zi):
                 c0, c1 = X(s[0]), X(s[1])
+                # below the pelvis the leg columns themselves are never the arm
+                if zi * R_ < hipz + 0.03 * H and not robe and min(abs((c0 + c1) / 2 - leg[0]), abs((c0 + c1) / 2 - leg[1])) < 0.1 * H: continue
                 if sg > 0 and c0 > r0 + R_ and c0 > 0: pts.append(((c0 + c1) / 2, zi * R_))
                 if sg < 0 and c1 < l0 - R_ and c1 < 0: pts.append(((c0 + c1) / 2, zi * R_))
         if len(pts) > 5:
@@ -276,6 +282,49 @@ if not (P.get("ok") and plausible(J)):
 for k in ("shoulder", "elbow", "wrist", "hip", "knee", "ankle"):
     L, R = J[f"{k}_l"], J[f"{k}_r"]
     if L[0] < R[0]: J[f"{k}_l"], J[f"{k}_r"] = R, L
+# a wrist the detector put inside the chest / above the shoulder (weapon arms confuse it): use the silhouette arm
+cxb = float(np.median(co[co[:, 2] > 0.5 * H, 0])) if (co[:, 2] > 0.5 * H).any() else 0.0
+Js = None
+for s, sg in (("l", 1), ("r", -1)):
+    wx, sx = J[f"wrist_{s}"][0] - cxb, J[f"shoulder_{s}"][0] - cxb
+    if sg * wx < abs(sx) * 0.8 or J[f"wrist_{s}"][1] > J[f"shoulder_{s}"][1] + 0.05 * H:
+        if Js is None:
+            keep = LOG.get("silhouette"); Js = silhouette_joints()
+            if keep is None: LOG.pop("silhouette", None)
+            else: LOG["silhouette"] = keep
+        J[f"wrist_{s}"] = Js[f"wrist_{s}"]
+        J[f"elbow_{s}"] = ((J[f"shoulder_{s}"][0] + Js[f"wrist_{s}"][0]) / 2, (J[f"shoulder_{s}"][1] + Js[f"wrist_{s}"][1]) / 2)
+        LOG.setdefault("wrist_fixed", []).append(s)
+# legs from the geometry itself: where the two legs are separate columns, knees / ankles sit on the column centres
+# (pose landmarks drift on armoured legs - crossed or splayed legs tear the mesh when the IK bends them)
+def leg_columns(z):
+    band = co[(co[:, 2] > z - 0.02 * H) & (co[:, 2] < z + 0.02 * H), 0]
+    if len(band) < 20: return None
+    R_ = H / 100; x0 = band.min()
+    occ = np.zeros(int((band.max() - x0) / R_) + 3, dtype=bool); occ[((band - x0) / R_).astype(int)] = True
+    occ = occ | np.roll(occ, 1) | np.roll(occ, -1)
+    segs_, i = [], 0
+    while i < len(occ):
+        if occ[i]:
+            j = i
+            while j < len(occ) and occ[j]: j += 1
+            segs_.append((x0 + i * R_, x0 + j * R_)); i = j
+        else: i += 1
+    c = float(np.median(co[co[:, 2] > 0.5 * H, 0])) if (co[:, 2] > 0.5 * H).any() else 0.0
+    L_ = [s for s in segs_ if (s[0] + s[1]) / 2 > c + 0.02 * H]; R2 = [s for s in segs_ if (s[0] + s[1]) / 2 < c - 0.02 * H]
+    if not L_ or not R2: return None
+    l = max(L_, key=lambda s: s[1] - s[0]); r = max(R2, key=lambda s: s[1] - s[0])
+    if l[0] < c < l[1] or r[0] < c < r[1]: return None
+    return (l[0] + l[1]) / 2, (r[0] + r[1]) / 2
+ank = leg_columns(0.07 * H)
+kz = (J["knee_l"][1] + J["knee_r"][1]) / 2
+kne = leg_columns(min(kz, 0.3 * H))
+if ank and kne and ank[0] - ank[1] > 0.05 * H:
+    for s, k in (("l", 0), ("r", 1)):
+        J[f"ankle_{s}"] = (ank[k], J[f"ankle_{s}"][1])
+        J[f"knee_{s}"] = (kne[k], J[f"knee_{s}"][1])
+        J[f"hip_{s}"] = ((kne[k] + J[f"hip_{s}"][0]) / 2 if abs(J[f"hip_{s}"][0] - kne[k]) < 0.06 * H else kne[k], J[f"hip_{s}"][1])
+    LOG["leg_columns"] = [round(float(v), 3) for v in (*ank, *kne)]
 # sanity: joints must be vertically ordered, feet near the ground
 bad = []
 repaired = []
@@ -539,9 +588,14 @@ rigid = 0
 for k, cnt in enumerate(counts):
     if cnt >= 0.15 * len(co) or cnt < 3: continue
     m = inv == k
-    # held items (swords, bows, staffs, orbs): anything within reach of a hand is carried by that hand
+    avg = Wt[m].mean(0)
+    # held items (swords, bows, staffs, orbs): anything within reach of a hand is carried by that hand -
+    # except leg / hip armour (shells beside a mech's fists, holstered scabbards): pieces that follow the legs or
+    # hips and never rise above the pelvis stay on the body, or the idle arm pose rips them off ("double legs")
+    lower_body = names[int(np.argmax(avg))].split("_")[0] in ("thigh", "shin", "foot", "hips")
+    armour = lower_body and float(co[m, 2].max()) < bones["hips"][0].z + H * 0.05
     held = None
-    for s in ("L", "R"):
+    for s in ("L", "R") if not armour else ():
         hn = f"hand_{s}"
         if hn not in gi: continue
         A, B = np.array(bones[hn][0]), np.array(bones[hn][1])
@@ -552,7 +606,6 @@ for k, cnt in enumerate(counts):
     if held is not None:
         w2 = np.zeros(Wt.shape[1], dtype=Wt.dtype); w2[held[0]] = 1
         Wt[m] = w2; rigid += 1; continue
-    avg = Wt[m].mean(0)
     top2 = np.argsort(-avg)[:2]
     w2 = np.zeros_like(avg); w2[top2] = avg[top2]; w2 /= max(w2.sum(), 1e-6)
     Wt[m] = w2; rigid += 1

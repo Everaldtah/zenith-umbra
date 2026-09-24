@@ -285,7 +285,7 @@ export class Animator {
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       // feet sit under the hips, which turn toward the movement direction (lower-body yaw)
-      const restFoot = new THREE.Vector3(side * this.hipW * 1.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z).applyAxisAngle(Y, this.hipYaw);
+      const restFoot = new THREE.Vector3((i === 0 ? R.foot_L : R.foot_R).p.x + side * this.hipW * 0.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z).applyAxisAngle(Y, this.hipYaw);
       const ph = ((this.phase + i * 0.5) % 1 + 1) % 1;
       let tgt: THREE.Vector3;
       if (!s.grounded || this.airBlend > 0.5) {
@@ -330,7 +330,7 @@ export class Animator {
       // airborne: knees up (jump), trailing dangle (flying)
       if (this.airBlend > 0.01) {
         const tuck = flyer ? 0.25 : Math.max(0, Math.min(1, (s.vel.y + 4) / 10));
-        const air = new THREE.Vector3(side * this.hipW * 1.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
+        const air = new THREE.Vector3((i === 0 ? R.foot_L : R.foot_R).p.x + side * this.hipW * 0.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
         if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
         tgt.lerp(air, this.airBlend);
       }

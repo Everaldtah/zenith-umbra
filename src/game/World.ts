@@ -517,7 +517,10 @@ export class World {
         a.flight -= (inp.jumpHeld ? 15 : 4.5) * dt;
         if (a.grounded && !inp.jumpHeld) a.flying = false;
       } else if (d.frame === 'drone') {
-        const want = (a.sv.hoverY ?? (L.groundAt(a.pos.x, a.pos.z, a.pos.y) + 3.2));
+        // over the void groundAt is -Infinity: hold the altitude of the last solid ground instead of diving forever
+        const gnd = L.groundAt(a.pos.x, a.pos.z, a.pos.y);
+        if (Number.isFinite(gnd)) a.sv.hoverGround = gnd;
+        const want = a.sv.hoverY ?? ((a.sv.hoverGround ?? a.pos.y - 3.2) + 3.2);
         a.vel.y += ((want - a.pos.y) * 2 - a.vel.y) * Math.min(1, dt * 3);
       }
       const k = a.grounded ? 14 : a.flying ? 4 : 2.5;
@@ -535,8 +538,10 @@ export class World {
       if (!a.flying && d.frame !== 'drone') a.vel.y -= G * dt * (a.has('glide', t) && a.vel.y < 0 ? 0.18 : 1);
     }
     // integrate with sub-steps so fast dashes don't tunnel
+    // a non-finite velocity would make the sub-step count infinite and freeze the whole simulation
+    if (!Number.isFinite(a.vel.x + a.vel.y + a.vel.z)) a.vel = { x: 0, y: 0, z: 0 };
     const sp = Math.hypot(a.vel.x, a.vel.y, a.vel.z) * dt;
-    const n = Math.max(1, Math.ceil(sp / 0.3));
+    const n = Math.min(64, Math.max(1, Math.ceil(sp / 0.3)));
     let hitWall = false;
     const y0 = a.pos.y, x0 = a.pos.x, z0 = a.pos.z;
     for (let i = 0; i < n; i++) {

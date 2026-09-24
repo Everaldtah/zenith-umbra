@@ -12,6 +12,8 @@ describe('campaign levels are beatable by an AI squad', () => {
       let lastState = '';
       for (let i = 0; i < 60 * 600 && !w.winner; i++) {
         w.step(1 / 60); w.events.length = 0;
+        if (i % 3600 === 0) appendFileSync('tests/campaign-progress.log', `${L.id} t=${w.time.toFixed(0)} state=${d.state}${d.enc ?? ''} boss=${d.boss ? Math.round(d.boss.health) : '-'} alive=${w.actors.filter(a => a.alive).length} wall=${(performance.now() / 1000).toFixed(0)}
+`);
         if (d.state !== lastState) { log.push(`${w.time.toFixed(0)}s:${d.state}${d.state === 'fight' ? d.enc : ''}`); lastState = d.state; }
       }
       const heroes = w.actors.filter(a => a.team === 'zenith');

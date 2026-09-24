@@ -16,3 +16,4 @@ tests/campaign-run.log
 tests/lab-report.json
 
 .vercel
+tests/prof/

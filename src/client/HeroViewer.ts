@@ -34,6 +34,8 @@ export class HeroViewer {
   private drag: { x: number; y: number } | null = null;
   private tmpV = new THREE.Vector3();
   private stage: HTMLElement;
+  // framing box of the posed model (model-local): drones / colossi are much wider than their nominal height
+  private fit: { model: THREE.Object3D | null; minY: number; maxY: number; rad: number; age: number } = { model: null, minY: 0, maxY: 1, rad: 0.5, age: 0 };
 
   constructor(host: HTMLElement, private onClose: () => void) {
     this.root = document.createElement('div');
@@ -170,8 +172,14 @@ export class HeroViewer {
     v.group.position.set(0, a.pos.y, 0);         // keep the model on the turntable
     v.group.rotation.y = 0;
     v.rim.value = 0;
-    // camera orbit around the model
-    const H = a.height, r = Math.max(2.4, H * 2.1) * this.zoom;
+    // camera orbit around the model, distance fitted to the posed bounds (whole body + wings in frame, feet clear of
+    // the animation buttons along the bottom of the stage)
+    const H = a.height, F = this.measure(v, dt);
+    const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const fh = F.maxY - F.minY;
+    const fitR = Math.max(fh / 0.74, (2.25 * F.rad) / Math.max(0.5, this.camera.aspect)) / (2 * tanH) + F.rad * 0.5;
+    const r = Math.max(2.4, fitR) * this.zoom;
+    const vh = 2 * tanH * Math.max(2.4, fitR);
     const cx = Math.sin(this.yaw) * Math.cos(this.tilt) * r, cz = Math.cos(this.yaw) * Math.cos(this.tilt) * r;
     // zooming in drifts the focus up to the face
     // the close-up frames the head bone itself (crowns, horns and hair make "a fraction of the height" miss the face)
@@ -179,10 +187,38 @@ export class HeroViewer {
     let headY = H * 0.9;
     const hb = v.anim.bones.head;
     if (hb) { hb.getWorldPosition(this.tmpV); headY = this.tmpV.y + H * 0.04 - v.group.position.y; }
-    const focus = H * 0.52 * (1 - zk) + headY * zk + (m === 'fly' ? 1.2 : 0);
+    const body = Math.max(F.minY + vh * 0.31, (F.minY + F.maxY) / 2);
+    const focus = body * (1 - zk) + headY * zk + (m === 'fly' ? 1.2 : 0);
     this.camera.position.set(cx, focus + Math.sin(this.tilt) * r, cz);
     this.camera.lookAt(0, focus, 0);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** posed bounds of the current model, re-measured when it swaps (mannequin -> GLB) and settled after the first frames */
+  private measure(v: CharacterView, dt: number) {
+    const F = this.fit;
+    if (F.model !== v.model) { F.model = v.model; F.age = 0; }
+    F.age += dt;
+    if (F.age < 0.6) {
+      const box = new THREE.Box3(), bb = new THREE.Box3();
+      v.group.updateWorldMatrix(true, true);
+      v.model.traverse(o => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !m.visible) return;
+        if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).computeBoundingBox();
+        else if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+        bb.copy((m as THREE.SkinnedMesh).isSkinnedMesh ? (m as THREE.SkinnedMesh).boundingBox! : m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
+        box.union(bb);
+      });
+      if (!box.isEmpty()) {
+        const gy = v.group.position.y;
+        F.minY = Math.min(0, box.min.y - gy); F.maxY = box.max.y - gy;
+        F.rad = Math.max(-box.min.x, box.max.x, -box.min.z, box.max.z, 0.3);
+        const ring = this.scene.getObjectByName('ring') as THREE.Mesh;
+        ring.scale.setScalar(Math.max(1, this.actor!.def.radius * 1.6, F.rad * 0.8));
+      }
+    }
+    return F;
   }
 
   close() {

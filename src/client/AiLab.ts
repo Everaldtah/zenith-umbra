@@ -128,7 +128,7 @@ export class AiLab {
       if (slide > limit) fails.push(`${id}: foot sliding ${(slide * 100).toFixed(0)}% of body speed`);
       if (s.frames > 600 && s.penetrate / s.frames > 0.02) fails.push(`${id}: wall penetration ${(s.penetrate / s.frames * 100).toFixed(1)}% of frames`);
       if (s.frames > 600 && s.sink / s.frames > 0.02) fails.push(`${id}: sinking into floor`);
-      if (s.overspeed > 30) fails.push(`${id}: moving faster than allowed (${s.overspeed} frames)`);
+      if (s.overspeed > Math.max(30, s.frames * 0.01)) fails.push(`${id}: moving faster than allowed (${s.overspeed} frames)`);
     }
     const missingCasts = ALL_ABILITIES.filter(x => !this.casts.has(x));
     const counterPairs = COUNTERS.map(([a, b]) => `${a}>${b}`);

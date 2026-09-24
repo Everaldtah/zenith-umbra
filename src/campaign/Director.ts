@@ -6,6 +6,8 @@ import { dist3, norm, type World } from '../game/World';
 import type { Nav } from '../ai/Nav';
 import { BOSSES, ENEMIES, type BossDef, type Level } from './data';
 
+const floorOr = (g: number, fallback: number) => Number.isFinite(g) ? g : fallback;
+
 type Tele = { shape: 'circle' | 'line'; x: number; z: number; x2?: number; z2?: number; r: number; dmg: number; knock: number; fx: string; color: string };
 
 export class Director {
@@ -157,7 +159,7 @@ export class Director {
   // ------------------------------------------------------------------ telegraphed damage
   tele(owner: Actor, tl: Tele, delay: number) {
     const w = this.w;
-    w.zones.push({ id: Math.floor(Math.random() * 1e9), kind: 'tele', owner, team: owner.team, x: tl.x, y: w.level.groundAt(tl.x, tl.z, owner.pos.y + 20), z: tl.z, r: tl.r, born: w.time, until: w.time + delay + 0.3, next: 1e9, data: { ...tl, fireAt: w.time + delay, done: false } });
+    w.zones.push({ id: Math.floor(Math.random() * 1e9), kind: 'tele', owner, team: owner.team, x: tl.x, y: floorOr(w.level.groundAt(tl.x, tl.z, owner.pos.y + 20), owner.pos.y), z: tl.z, r: tl.r, born: w.time, until: w.time + delay + 0.3, next: 1e9, data: { ...tl, fireAt: w.time + delay, done: false } });
   }
   private resolve(tl: Tele, owner: Actor) {
     const w = this.w;
@@ -179,7 +181,7 @@ export class Director {
         }
       }
     }
-    const p = { x: tl.x, y: w.level.groundAt(tl.x, tl.z, 40), z: tl.z };
+    const p = { x: tl.x, y: floorOr(w.level.groundAt(tl.x, tl.z, 40), 0), z: tl.z };
     w.fx(tl.fx, p, { r: tl.r, color: tl.color }); w.sfx(tl.fx === 'slam' ? 'slam' : 'boom', p);
   }
 }
@@ -274,7 +276,19 @@ function bossThink(b: BossBrain, dt: number) {
   const want = def.frame === 'drone' ? 16 : def.id === 'qelvaris' ? 12 : 10;
   const k = t < b.busyUntil ? 0 : dd > want + 3 ? 1 : dd < want - 3 ? -0.6 : 0;
   i.mz = k; i.mx = Math.sin(t * 0.3 + a.id) * 0.5;
-  if (def.frame === 'drone') a.sv.hoverY = w.level.groundAt(a.pos.x, a.pos.z, 60) + (b.submerged ? -20 : 6 + Math.sin(t * 0.6) * 2);
+  // flying colossi are leashed to the arena: backing off / strafing must not carry them out over the void,
+  // where the melee heroes can never reach them
+  const [ax, az] = d.level.arena, ox = ax - a.pos.x, oz = az - a.pos.z, od = Math.hypot(ox, oz);
+  if (def.frame === 'drone' && od > 17) {
+    const yaw = a.yaw, pull = Math.min(1, (od - 17) / 5);
+    const fz = (ox * Math.sin(yaw) + oz * Math.cos(yaw)) / od, fx = (ox * -Math.cos(yaw) + oz * Math.sin(yaw)) / od;
+    i.mz = i.mz * (1 - pull) + fz * pull; i.mx = i.mx * (1 - pull) + fx * pull;
+  }
+  if (def.frame === 'drone') {
+    // over the void there is no ground: keep the last hover height (a -Infinity target froze the simulation)
+    const g = w.level.groundAt(a.pos.x, a.pos.z, 60);
+    if (Number.isFinite(g)) a.sv.hoverY = g + (b.submerged ? -20 : 4.5 + Math.sin(t * 0.6) * 1.5);
+  }
   i.fire = !b.submerged && t > b.busyUntil && Math.random() < 0.6;
   // weak point pulse after phase changes
   // ---- continuous attacks
@@ -373,7 +387,7 @@ function bossThink(b: BossBrain, dt: number) {
       b.submerged = true; a.set('phased', t, 2.6); w.fx('burst', a.pos, { r: 6, color: col });
       const p = P(tg);
       d.tele(a, { shape: 'circle', ...p, r: 6, dmg: 85, knock: 16, fx: 'slam', color: col }, 2);
-      w.after(2, () => { b.submerged = false; a.pos.x = p.x; a.pos.z = p.z; a.pos.y = w.level.groundAt(p.x, p.z, 40); });
+      w.after(2, () => { b.submerged = false; a.pos.x = p.x; a.pos.z = p.z; a.pos.y = floorOr(w.level.groundAt(p.x, p.z, 40), a.pos.y); });
       b.busyUntil = t + 2.5; w.sfx('singularity', a.pos); break;
     }
     case 'divebomb': {

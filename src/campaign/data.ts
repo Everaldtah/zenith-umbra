@@ -32,7 +32,7 @@ export const BOSSES: Record<string, BossDef> = {
     attacks: ['sweep', 'crescents', 'blink', 'stomp', 'summon'], summon: 'minion_lancer', weak: 'its single eye' }),
   boss_leviathan: boss({ id: 'boss_leviathan', name: 'HIVE LEVIATHAN', title: 'Colossus Mk-III · the Deep Coil', hp: 4200, armor: 400, height: 16, radius: 3.4, frame: 'mech', glow: '#2de0c8',
     attacks: ['dive', 'barrage', 'sweep', 'shockwave', 'summon'], summon: 'minion_bomber', weak: 'the glowing vents on its hood' }),
-  boss_phoenix: boss({ id: 'boss_phoenix', name: 'SOLAR PHOENIX', title: 'Colossus Mk-IV · the Sunburner', hp: 4300, armor: 300, height: 15, radius: 3.2, frame: 'drone', glow: '#ff9d2a', speed: 6,
+  boss_phoenix: boss({ id: 'boss_phoenix', name: 'SOLAR PHOENIX', title: 'Colossus Mk-IV · the Sunburner', hp: 3800, armor: 300, height: 15, radius: 3.2, frame: 'drone', glow: '#ff9d2a', speed: 6,
     attacks: ['beam', 'firerain', 'divebomb', 'shockwave', 'summon'], summon: 'minion_swarmer', weak: 'the burning core between its wings' }),
   boss_genesis: boss({ id: 'boss_genesis', name: 'OMEGA GENESIS', title: "Qel'Varis's Throne Colossus", hp: 5400, armor: 800, height: 18, radius: 4, frame: 'mech', glow: '#b56dff',
     attacks: ['stomp', 'sweep', 'barrage', 'beam', 'halo', 'shockwave', 'summon'], summon: 'minion_sentinel', weak: 'the throne cockpit in its chest' }),

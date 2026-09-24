@@ -6,7 +6,12 @@ import type { Actor } from '../game/Actor';
 import { dist3, type World } from '../game/World';
 import type { Nav } from './Nav';
 
-const wrap = (a: number) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+// modulo, not a subtract loop: a runaway angle (1e20 / Infinity) would otherwise spin forever and freeze the sim
+const wrap = (a: number) => {
+  if (!Number.isFinite(a)) { (globalThis as any).__badAngle ??= new Error(`non-finite angle ${a}`).stack; return 0; }
+  const t = (a + Math.PI) % (2 * Math.PI);
+  return (t < 0 ? t + 2 * Math.PI : t) - Math.PI;
+};
 
 export class Bot {
   target: Actor | null = null;
