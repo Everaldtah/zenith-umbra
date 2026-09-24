@@ -9,7 +9,7 @@ import { castAbility, tickAbilities } from './abilities';
 import { updateWeapons } from './weapons';
 
 export const G = 24;
-export type Mode = 'training' | 'skirmish' | 'spectate' | 'aitest';
+export type Mode = 'training' | 'skirmish' | 'spectate' | 'aitest' | 'campaign' | 'gallery';
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
@@ -45,16 +45,19 @@ export class World {
   point = { owner: null as TeamId | null, capture: 0, capTeam: null as TeamId | null, progress: { zenith: 0, umbra: 0 }, contested: false, unlockAt: 8, r: 6 };
   winner: TeamId | null = null;
   timeLimit = 360;
+  /** campaign hooks: enemy/boss definitions and the encounter director */
+  extraDefs: Record<string, HeroDef> = {};
+  director: { update(dt: number): void; onKill?(a: Actor, src: Actor | null): void } | null = null;
   stats = { counters: 0, casts: {} as Record<string, number>, sfx: {} as Record<string, number>, fx: {} as Record<string, number> };
 
-  constructor(mapId: string, public mode: Mode) {
-    this.map = MAP[mapId];
+  constructor(mapId: string | MapDef, public mode: Mode) {
+    this.map = typeof mapId === 'string' ? MAP[mapId] : mapId;
     this.level = new Level(this.map);
   }
 
   // ------------------------------------------------------------------ setup
   addHero(heroId: string, team?: TeamId): Actor {
-    const def: HeroDef = HERO[heroId] ?? ROBOTS[heroId];
+    const def: HeroDef = HERO[heroId] ?? ROBOTS[heroId] ?? this.extraDefs[heroId];
     const a = new Actor(def, team ?? def.team);
     a.isRobot = !!ROBOTS[heroId];
     a.spawn = this.map.spawns[a.team];
@@ -262,7 +265,7 @@ export class World {
   kill(tgt: Actor, src: Actor | null) {
     if (!tgt.alive) return;
     tgt.alive = false; tgt.deathAt = this.time; tgt.deaths++;
-    tgt.respawnAt = this.time + (tgt.isRobot ? 3 : this.mode === 'aitest' ? 4 : 6);
+    tgt.respawnAt = tgt.noRespawn ? 0 : this.time + (tgt.isRobot ? 3 : this.mode === 'aitest' ? 4 : this.mode === 'campaign' ? 8 : 6);
     tgt.forced = null; tgt.flying = false; tgt.barrier.up = false; tgt.beamOn = false; tgt.flameOn = false;
     const killer = src && src !== tgt ? src : (tgt.lastHitBy && this.time - tgt.lastHitAt < 6 ? tgt.lastHitBy : null);
     if (killer) {
@@ -274,6 +277,7 @@ export class World {
     this.attackers.delete(tgt.id);
     this.zones = this.zones.filter(z => !(z.owner === tgt && z.kind === 'tether'));
     this.emit({ t: 'kill', src: killer, tgt });
+    this.director?.onKill?.(tgt, killer);
     this.sfx(tgt.def.frame === 'mech' ? 'mechdown' : tgt.isRobot ? 'botdown' : 'down', tgt.center);
     this.fx('death', tgt.center, { color: tgt.def.glow, actor: tgt });
     if (tgt.def.pilot) {
@@ -424,7 +428,8 @@ export class World {
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
     this.zones = this.zones.filter(z => z.until > t);
-    if (this.mode !== 'training') this.updatePoint(dt);
+    if (this.director) this.director.update(dt);
+    else if (this.mode !== 'training') this.updatePoint(dt);
   }
 
   pressed(a: Actor, k: 'a1' | 'a2' | 'ult' | 'alt' | 'jump' | 'fire') {

@@ -6,7 +6,7 @@ import { Animator } from './Animator';
 import { heroModel } from './Assets';
 
 const rimChunk = `
-  float zuRim = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 2.5);
+  float zuRim = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 2.5);
   totalEmissiveRadiance += zuRimColor * zuRim * zuRimStrength;
 `;
 
@@ -223,7 +223,7 @@ export class CharacterView {
       grounded: a.grounded, flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
-      barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale,
+      barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
     });
     if (a.def.frame === 'drone') this.model.rotation.z = Math.sin(time * 2 + a.id) * 0.1;
   }

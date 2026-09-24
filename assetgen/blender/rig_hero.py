@@ -18,6 +18,7 @@ ap.add_argument("--height", type=float, default=1.8); ap.add_argument("--tris", 
 ap.add_argument("--wings", action="store_true"); ap.add_argument("--mech", action="store_true"); ap.add_argument("--static", action="store_true")
 ap.add_argument("--yaw", type=float, default=0.0); ap.add_argument("--python", default="python")
 ap.add_argument("--debug", default="")
+ap.add_argument("--geodesic", action="store_true"); ap.add_argument("--keep-main", action="store_true")
 a = ap.parse_args(argv)
 HERE = os.path.dirname(os.path.abspath(__file__))
 T0 = time.time()
@@ -47,6 +48,12 @@ def diag(o):
 nb, db = len(big.data.vertices), diag(big)
 for o in parts:
     if o is not big and len(o.data.vertices) < 0.01 * nb and diag(o) < 0.12 * db: bpy.data.objects.remove(o)
+    elif o is not big and a.keep_main:
+        # props standing next to the character (stands, pedestals): drop parts whose centre is outside the body
+        cb = sum((o.matrix_world @ Vector(c) for c in o.bound_box), Vector()) / 8
+        bb = [big.matrix_world @ Vector(c) for c in big.bound_box]
+        if not (min(v.x for v in bb) < cb.x < max(v.x for v in bb)) or cb.z < min(v.z for v in bb) + (max(v.z for v in bb) - min(v.z for v in bb)) * 0.15:
+            bpy.data.objects.remove(o)
 parts = [o for o in scene.objects if o.type == "MESH"]
 for o in scene.objects: o.select_set(o in parts)
 bpy.context.view_layer.objects.active = big
@@ -156,20 +163,111 @@ J = {
     "ankle_l": lm("ankle_l", (leg_x, H * 0.05)), "ankle_r": lm("ankle_r", (-leg_x, H * 0.05)),
     "nose": lm("nose", (0, H * 0.9)),
 }
+def silhouette_joints():
+    """Skeleton from the front silhouette alone: crotch gap, leg columns, shoulder break, A-pose arm clusters."""
+    R_ = H / 100
+    xs, zs = co[:, 0], co[:, 2]
+    gx0 = xs.min(); nx = int((xs.max() - gx0) / R_) + 1; nz = int(H / R_) + 1
+    G = np.zeros((nz, nx), dtype=bool)
+    G[np.clip((zs / R_).astype(int), 0, nz - 1), np.clip(((xs - gx0) / R_).astype(int), 0, nx - 1)] = True
+    for _ in range(2):   # close pin-holes
+        G = G | np.roll(G, 1, 0) | np.roll(G, -1, 0) | np.roll(G, 1, 1) | np.roll(G, -1, 1)
+    cx = int((0 - gx0) / R_)
+    def segs(row):
+        r = G[row]; out = []; i = 0
+        while i < nx:
+            if r[i]:
+                j = i
+                while j < nx and r[j]: j += 1
+                out.append((i, j)); i = j
+            else: i += 1
+        return out
+    X = lambda c: gx0 + c * R_
+    # crotch: first row (going up) where the centre column is filled
+    crotch = None
+    for zi in range(int(0.12 * nz), int(0.65 * nz)):
+        if G[zi, max(0, cx - 1):cx + 2].any(): crotch = zi * R_; break
+    robe = crotch is None or crotch < 0.3 * H
+    hipz = (0.47 if not a.mech else 0.44) * H if robe else min(crotch + 0.04 * H, 0.6 * H)
+    # legs: two biggest segments at shin height
+    ss = sorted(segs(int(0.15 * nz)), key=lambda s: s[1] - s[0], reverse=True)[:2]
+    if len(ss) == 2 and not robe:
+        lx = sorted([(X(s[0]) + X(s[1])) / 2 for s in ss])
+        leg = (max(lx[1], H * 0.04), min(lx[0], -H * 0.04))
+    else:
+        leg = (H * (0.09 if a.mech else 0.06), -H * (0.09 if a.mech else 0.06))
+    # torso segment (containing the centre) width per row -> shoulders at the sharpest widening below the neck
+    def torso_w(zi):
+        for s in segs(zi):
+            if s[0] <= cx <= s[1]: return X(s[1]) - X(s[0]), X(s[0]), X(s[1])
+        return 0.0, 0.0, 0.0
+    best, shz = -1, (0.78 if a.mech else 0.81) * H
+    prev = torso_w(int(0.92 * nz))[0]
+    for zi in range(int(0.9 * nz), int(0.66 * nz), -1):
+        wv = torso_w(zi)[0]
+        if wv - prev > best and wv < W * 0.95: best, shz = wv - prev, zi * R_
+        prev = wv
+    shz = min(max(shz - 0.02 * H, (0.72 if a.mech else 0.77) * H), (0.86 if a.mech else 0.84) * H)
+    tw, tl, tr = torso_w(int((shz - 0.08 * H) / R_))
+    shx = max(min(abs(tl), abs(tr)) * 0.8, H * 0.08)
+    # arms: occupied cells outside the torso between hip and shoulder; hand = the lowest such cell on each side
+    arms = {}
+    for side, sg in (("l", 1), ("r", -1)):
+        pts = []
+        for zi in range(int(hipz * 0.7 / R_), int(shz / R_)):
+            _, l0, r0 = torso_w(zi)
+            for s in segs(zi):
+                c0, c1 = X(s[0]), X(s[1])
+                if sg > 0 and c0 > r0 + R_ and c0 > 0: pts.append(((c0 + c1) / 2, zi * R_))
+                if sg < 0 and c1 < l0 - R_ and c1 < 0: pts.append(((c0 + c1) / 2, zi * R_))
+        if len(pts) > 5:
+            p = min(pts, key=lambda q: q[1])
+            arms[side] = (p[0], p[1] + 0.03 * H)
+        else:
+            arms[side] = (sg * (shx + 0.12 * H), hipz + 0.02 * H)
+    J2 = {"shoulder_l": (shx, shz), "shoulder_r": (-shx, shz), "wrist_l": arms["l"], "wrist_r": arms["r"],
+          "hip_l": (leg[0], hipz), "hip_r": (leg[1], hipz), "ankle_l": (leg[0], 0.05 * H), "ankle_r": (leg[1], 0.05 * H), "nose": (0, 0.9 * H)}
+    for s in ("l", "r"):
+        J2[f"elbow_{s}"] = ((J2[f"shoulder_{s}"][0] + J2[f"wrist_{s}"][0]) / 2, (J2[f"shoulder_{s}"][1] + J2[f"wrist_{s}"][1]) / 2)
+        J2[f"knee_{s}"] = (J2[f"hip_{s}"][0], 0.05 * H + (hipz - 0.05 * H) * 0.5)
+    LOG["silhouette"] = {"crotch": round(crotch or 0, 3), "robe": robe, "shz": round(shz, 3)}
+    return J2
+
+def plausible(J):
+    sh = (J["shoulder_l"][1] + J["shoulder_r"][1]) / 2; hp = (J["hip_l"][1] + J["hip_r"][1]) / 2
+    ok = J["nose"][1] > 0.78 * H and 0.64 * H < sh < 0.9 * H and 0.34 * H < hp < 0.64 * H and sh - hp > 0.18 * H
+    ok &= abs(J["shoulder_l"][0] - J["shoulder_r"][0]) > 0.1 * H
+    ok &= min(abs(J["wrist_l"][0] - J["wrist_r"][0]), 9) > abs(J["shoulder_l"][0] - J["shoulder_r"][0]) * 0.9   # A-pose hands outside the shoulders
+    ok &= all(J[f"wrist_{s}"][1] < J[f"shoulder_{s}"][1] + 0.05 * H for s in "lr")
+    return bool(ok)
+
+if not (P.get("ok") and plausible(J)):
+    LOG["pose_rejected"] = bool(P.get("ok"))
+    J = silhouette_joints()
 # enforce left = +X (MediaPipe's subject-left should already land there in a front view)
 for k in ("shoulder", "elbow", "wrist", "hip", "knee", "ankle"):
     L, R = J[f"{k}_l"], J[f"{k}_r"]
     if L[0] < R[0]: J[f"{k}_l"], J[f"{k}_r"] = R, L
 # sanity: joints must be vertically ordered, feet near the ground
 bad = []
-for s in ("l", "r"):
+repaired = []
+for s, sg in (("l", 1), ("r", -1)):
+    # repair individual joints first (the detector often snaps knees onto the hips on armoured legs)
+    if J[f"ankle_{s}"][1] > H * 0.2: J[f"ankle_{s}"] = (J[f"hip_{s}"][0], H * 0.05); repaired.append(f"ankle_{s}")
+    hz, az = J[f"hip_{s}"][1], J[f"ankle_{s}"][1]
+    kz = J[f"knee_{s}"][1]
+    if not (az + (hz - az) * 0.25 < kz < hz - (hz - az) * 0.25):
+        J[f"knee_{s}"] = ((J[f"hip_{s}"][0] + J[f"ankle_{s}"][0]) / 2, az + (hz - az) * 0.52); repaired.append(f"knee_{s}")
+    ez, sz, wz = J[f"elbow_{s}"][1], J[f"shoulder_{s}"][1], J[f"wrist_{s}"][1]
+    if not (wz - H * 0.05 < ez < sz + H * 0.02) or abs(J[f"elbow_{s}"][0]) < abs(J[f"shoulder_{s}"][0]) * 0.6:
+        J[f"elbow_{s}"] = ((J[f"shoulder_{s}"][0] + J[f"wrist_{s}"][0]) / 2, (sz + wz) / 2); repaired.append(f"elbow_{s}")
     if not (J[f"ankle_{s}"][1] < J[f"knee_{s}"][1] < J[f"hip_{s}"][1] < J[f"shoulder_{s}"][1]): bad.append(f"leg order {s}")
-    if J[f"ankle_{s}"][1] > H * 0.2: bad.append(f"ankle high {s}")
+LOG["repaired"] = repaired
 if bad:
     LOG["fallback"] = bad
     for s, sg in (("l", 1), ("r", -1)):
         J[f"hip_{s}"] = (sg * leg_x, hip_z); J[f"knee_{s}"] = (sg * leg_x, H * 0.27); J[f"ankle_{s}"] = (sg * leg_x, H * 0.05)
-LOG["method"] = "pose" if P.get("ok") and not bad else "pose+heuristic" if P.get("ok") else "heuristic"
+LOG["method"] = "silhouette" if "silhouette" in LOG else "pose" if not bad else "pose+heuristic"
 LOG["pose_score"] = round(P.get("score", 0), 3)
 
 def V(x, z, y=None): return Vector((x, depth(x, z) if y is None else y, z))
@@ -209,7 +307,7 @@ if a.wings:
     back_y = float(np.percentile(co[(co[:, 2] > chest.z - H * 0.1) & (np.abs(co[:, 0]) < sh_x * 0.6), 1], 75)) if len(co) else chest.y
     for S_, sg in (("L", 1), ("R", -1)):
         bones[f"wing_{S_}"] = (Vector((sg * sh_x * 0.35, back_y, chest.z + H * 0.04)), Vector((sg * W * 0.45, back_y + H * 0.05, chest.z + H * 0.14)), "chest")
-LOG["joints"] = {k: [round(v, 3) for v in J[k]] for k in J}
+LOG["joints"] = {k: [round(float(v), 3) for v in J[k]] for k in J}
 
 # ---------------------------------------------------------------- armature
 arm_data = bpy.data.armatures.new("Rig"); arm = bpy.data.objects.new("Rig", arm_data); scene.collection.objects.link(arm)
@@ -231,32 +329,58 @@ def zero_weight_fraction(o):
         if sum(g.weight for g in v.groups) < 1e-4: zero += 1
     return zero / max(1, len(o.data.vertices))
 
+def heat_on(o):
+    for g in list(o.vertex_groups): o.vertex_groups.remove(g)
+    bpy.ops.object.select_all(action="DESELECT"); o.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
+    try: bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    except Exception as e: LOG["heat_error"] = str(e)[:200]; return 1.0
+    return zero_weight_fraction(o)
+
+# 1) bone heat straight on a copy of the mesh (works for most TRELLIS meshes)
 bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
 bpy.ops.object.duplicate(); proxy = bpy.context.view_layer.objects.active; proxy.name = "proxy"
-rm = proxy.modifiers.new("rm", "REMESH"); rm.mode = "VOXEL"; rm.voxel_size = H / 110; rm.use_smooth_shade = True
-bpy.ops.object.modifier_apply(modifier="rm")
-for g in list(proxy.vertex_groups): proxy.vertex_groups.remove(g)
-bpy.ops.object.select_all(action="DESELECT"); proxy.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
+for m in list(proxy.modifiers): proxy.modifiers.remove(m)
 method = "heat"
-try:
-    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-except Exception as e:
-    method = "envelope"; LOG["heat_error"] = str(e)[:200]
-if zero_weight_fraction(proxy) > 0.08:
-    method = "envelope"
-    for g in list(proxy.vertex_groups): proxy.vertex_groups.remove(g)
-    bpy.ops.object.select_all(action="DESELECT"); proxy.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
-    bpy.ops.object.parent_set(type="ARMATURE_ENVELOPE")
-LOG["weights"] = method
-# transfer to the real mesh
+zf = 1.0 if a.geodesic else heat_on(proxy)
+deform_names = [n for n in bones if n != "root"]
 for g in list(obj.vertex_groups): obj.vertex_groups.remove(g)
-for n in bones:
-    if n != "root": obj.vertex_groups.new(name=n)
-bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
-dt = obj.modifiers.new("dt", "DATA_TRANSFER"); dt.object = proxy; dt.use_vert_data = True
-dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
-dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
-bpy.ops.object.modifier_apply(modifier="dt")
+for n in deform_names: obj.vertex_groups.new(name=n)
+if zf <= 0.03:
+    # transfer heat weights to the real mesh (same topology, so this is exact)
+    bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+    dt = obj.modifiers.new("dt", "DATA_TRANSFER"); dt.object = proxy; dt.use_vert_data = True
+    dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "TOPOLOGY"
+    dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
+    bpy.ops.object.modifier_apply(modifier="dt")
+else:
+    # 2) geodesic voxel weights (weights.py, system python) - robust on open / self-intersecting meshes
+    method = "geodesic"
+    tmpn = os.path.abspath(a.out)[:-4] + "_w"
+    faces = np.array([list(p.vertices)[:3] for p in obj.data.polygons], dtype=np.int64)
+    np.savez(tmpn + "_in.npz", verts=verts(), faces=faces,
+             bones_a=np.array([list(bones[n][0]) for n in deform_names], dtype=np.float32), bones_b=np.array([list(bones[n][1]) for n in deform_names], dtype=np.float32))
+    r = subprocess.run([a.python, os.path.join(HERE, "weights.py"), tmpn + "_in.npz", tmpn + "_out.npz"], capture_output=True, text=True)
+    if "WEIGHTS_OK" not in r.stdout:
+        LOG["geodesic_error"] = (r.stdout + r.stderr)[-400:]
+        method = "envelope"
+        for g in list(proxy.vertex_groups): proxy.vertex_groups.remove(g)
+        bpy.ops.object.select_all(action="DESELECT"); proxy.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
+        bpy.ops.object.parent_set(type="ARMATURE_ENVELOPE")
+        bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+        dt = obj.modifiers.new("dt", "DATA_TRANSFER"); dt.object = proxy; dt.use_vert_data = True
+        dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "TOPOLOGY"
+        dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
+        bpy.ops.object.modifier_apply(modifier="dt")
+    else:
+        Wg = np.load(tmpn + "_out.npz")["w"]
+        for bi, n in enumerate(deform_names):
+            vg = obj.vertex_groups[n]; col = Wg[:, bi]; nz = np.where(col > 1e-3)[0]
+            q = np.round(col[nz] * 50) / 50
+            for val in np.unique(q):
+                if val > 0: vg.add(nz[q == val].tolist(), float(val), "REPLACE")
+    for f in (tmpn + "_in.npz", tmpn + "_out.npz"):
+        if os.path.exists(f): os.remove(f)
+LOG["weights"] = method; LOG["zero_frac"] = round(zf, 3)
 bpy.data.objects.remove(proxy)
 
 # ---- region fix-ups (numpy): feet belong to the lower leg chain, wings to wing bones

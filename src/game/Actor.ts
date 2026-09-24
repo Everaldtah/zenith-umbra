@@ -41,6 +41,9 @@ export class Actor {
   anim = { attackAt: -9, attackKind: 'primary' as string, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0 };
   isPlayer = false;
   isRobot = false;
+  noRespawn = false;
+  isBoss = false;
+  netId = '';                 // co-op: which peer controls this actor ('' = local / AI)
   controller: { think(dt: number): void } | null = null;
   spawn: [number, number] = [0, 0];
 

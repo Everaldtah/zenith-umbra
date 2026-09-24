@@ -1,0 +1,177 @@
+{
+ "models": {
+  "bot_dummy": {
+   "height": 1.9,
+   "tris": 12000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "bot_sentry": {
+   "height": 1.7,
+   "tris": 12000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "bot_drone": {
+   "height": 1.0,
+   "tris": 0,
+   "bones": []
+  },
+  "tenkai": {
+   "height": 3.3,
+   "tris": 34000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "gorgoth": {
+   "height": 3.4,
+   "tris": 33999,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "mirei": {
+   "height": 1.65,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "nocturne": {
+   "height": 1.75,
+   "tris": 25999,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "kaien": {
+   "height": 1.8,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "raijin": {
+   "height": 1.8,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "yuzu": {
+   "height": 1.62,
+   "tris": 25999,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "hex": {
+   "height": 1.95,
+   "tris": 23319,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "kagemaru": {
+   "height": 1.78,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "enra": {
+   "height": 2.05,
+   "tris": 26000,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "haruto": {
+   "height": 1.75,
+   "tris": 25999,
+   "bones": [
+    "humanoid"
+   ]
+  },
+  "vorn": {
+   "height": 1.85,
+   "tris": 23357,
+   "bones": [
+    "humanoid"
+   ]
+  }
+ },
+ "props": {
+  "prop_amatsu_lantern": {
+   "height": 1
+  },
+  "prop_amatsu_sakura": {
+   "height": 1
+  },
+  "prop_amatsu_torii": {
+   "height": 1
+  },
+  "prop_cathedral_grave": {
+   "height": 1
+  },
+  "prop_cathedral_organ": {
+   "height": 1
+  },
+  "prop_cathedral_spire": {
+   "height": 1
+  },
+  "prop_hangar_crane": {
+   "height": 1
+  },
+  "prop_hangar_crate": {
+   "height": 1
+  },
+  "prop_hangar_fist": {
+   "height": 1
+  },
+  "prop_kurogane_sign": {
+   "height": 1
+  },
+  "prop_kurogane_stall": {
+   "height": 1
+  },
+  "prop_kurogane_vending": {
+   "height": 1
+  },
+  "prop_rift_obelisk": {
+   "height": 1
+  },
+  "prop_rift_ruin": {
+   "height": 1
+  },
+  "prop_training_barrier": {
+   "height": 1
+  },
+  "prop_training_target": {
+   "height": 1
+  }
+ },
+ "textures": [
+  "env/sky_amatsu.webp",
+  "env/sky_cathedral.webp",
+  "env/sky_hangar.webp",
+  "env/sky_kurogane.webp",
+  "env/sky_rift.webp",
+  "env/sky_training.webp",
+  "env/tex_amatsu_ground.webp",
+  "env/tex_amatsu_wall.webp",
+  "env/tex_cathedral_ground.webp",
+  "env/tex_cathedral_wall.webp",
+  "env/tex_hangar_ground.webp",
+  "env/tex_hangar_wall.webp",
+  "env/tex_kurogane_ground.webp",
+  "env/tex_kurogane_wall.webp",
+  "env/tex_rift_ground.webp",
+  "env/tex_rift_wall.webp",
+  "env/tex_training_ground.webp",
+  "env/tex_training_wall.webp"
+ ]
+}

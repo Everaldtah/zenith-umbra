@@ -47,6 +47,7 @@ export class Game {
   camPos = new THREE.Vector3();
   timeScale = 1;
   labMapIdx = 0;
+  galleryAngle = 0;
   onExit: (() => void) | null = null;
   onPause: ((p: boolean) => void) | null = null;
   onEnd: (() => void) | null = null;
@@ -304,6 +305,12 @@ export class Game {
       }
       const f = new THREE.Vector3(Math.sin(this.camYaw) * Math.cos(this.camPitch), Math.sin(this.camPitch), Math.cos(this.camYaw) * Math.cos(this.camPitch));
       cam.lookAt(cam.position.clone().add(f));
+    } else if (this.match?.world.mode === 'gallery') {
+      // animation bench: slow orbit, close enough to read the rig
+      const a = this.match.world.actors[0], t = this.match.world.time * 0.35 + (this.galleryAngle ?? 0);
+      const r = Math.max(3.2, a.height * 2.3);
+      cam.position.set(a.pos.x + Math.sin(t) * r, a.pos.y + a.height * 0.75, a.pos.z + Math.cos(t) * r);
+      cam.lookAt(a.pos.x, a.pos.y + a.height * 0.5, a.pos.z);
     } else this.spectatorCamera(dt);
     if (shake > 0.002) { cam.position.x += (Math.random() - 0.5) * shake; cam.position.y += (Math.random() - 0.5) * shake; cam.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
     this.camPos.copy(cam.position);
@@ -332,6 +339,7 @@ export class Game {
   }
   private spectateLabel() {
     if (this.match?.player) return '';
+    if (this.match?.world.mode === 'gallery') { const a = this.match.world.actors[0]; return `${a.def.name.toUpperCase()} · ${(a.controller as any)?.step?.toUpperCase() ?? ''} · Esc back`; }
     const a = this.match ? this.spectateTarget() : null;
     return a ? `SPECTATING ${a.def.name.toUpperCase()} · 1-0 pick hero · F free cam · [ ] speed ${this.timeScale}x${this.match?.world.mode === 'aitest' ? ' · N next map' : ''} · Esc exit` : '';
   }

@@ -49,7 +49,8 @@ export class Bot {
     const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0);
     this.target = vis.sort((p, q) => score(p) - score(q))[0] ?? null;
     const P = w.map.point;
-    const pointOpen = w.mode !== 'training' && t > w.point.unlockAt - 4;
+    const campaign = w.mode === 'campaign';
+    const pointOpen = w.mode !== 'training' && !campaign && t > w.point.unlockAt - 4;
     const hurt = a.health / a.maxHp;
     const role = a.def.role;
     if (role === 'support') {
@@ -76,6 +77,18 @@ export class Bot {
       const k = d > 0.1 ? (d - want) / d : 0;
       this.goal = { x: a.pos.x + (tg.x - a.pos.x) * k, y: tg.y, z: a.pos.z + (tg.z - a.pos.z) * k };
       if (t > this.strafeUntil) { this.strafe = Math.random() < 0.5 ? -1 : 1; this.strafeUntil = t + 0.6 + Math.random() * 1.2; }
+    } else if (campaign) {
+      // companions escort the human squad
+      this.mode = 'objective';
+      const lead = w.actors.find(x => x.alive && x.team === a.team && (x.isPlayer || x.netId));
+      const wp = (w.director as any)?.waypoint?.() as V3 | undefined;
+      if (!lead && wp) {
+        const ang = (a.id * 2.4) % (Math.PI * 2);
+        this.goal = { x: wp.x + Math.cos(ang) * 3, y: wp.y, z: wp.z + Math.sin(ang) * 3 };
+      } else if (lead) {
+        const ang = (a.id * 2.4) % (Math.PI * 2);
+        this.goal = { x: lead.pos.x - Math.sin(lead.yaw) * 3 + Math.cos(ang) * 3, y: lead.pos.y, z: lead.pos.z - Math.cos(lead.yaw) * 3 + Math.sin(ang) * 3 };
+      }
     } else if (pointOpen) {
       this.mode = 'objective';
       const ang = (a.id * 2.4) % (Math.PI * 2);

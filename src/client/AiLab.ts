@@ -28,6 +28,7 @@ export class AiLab {
   startedAt = performance.now();
   panel: HTMLElement;
   private prevFoot = new Map<string, THREE.Vector3>();
+  private wasPlanted = new Map<string, boolean>();
   private tmp = new THREE.Vector3();
 
   constructor(parent: HTMLElement) {
@@ -89,8 +90,10 @@ export class AiLab {
           bone.getWorldPosition(this.tmp);
           const key = `${a.id}${side}`;
           const prev = this.prevFoot.get(key);
-          const low = this.tmp.y - a.pos.y < v.anim.footY * v.scaleFit * a.scale + 0.03;
-          if (prev && low && dt > 0) {
+          const idx = side === 'L' ? 0 : 1;
+          const planted = !!v.anim.plant[idx] && (this.wasPlanted.get(key) ?? false);
+          this.wasPlanted.set(key, !!v.anim.plant[idx]);
+          if (prev && planted && dt > 0) {
             const slide = Math.hypot(this.tmp.x - prev.x, this.tmp.z - prev.z) / dt;
             s.slideSum += slide / sp; s.slideN++; s.slideMax = Math.max(s.slideMax, slide / sp);
           }

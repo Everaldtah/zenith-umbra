@@ -21,7 +21,8 @@ export interface AnimState {
   grounded: boolean; flying: boolean; frame: string;
   attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
-  scale: number;
+  scale: number;            // world metres per model unit
+  pos: THREE.Vector3;       // actor world position (feet)
 }
 
 interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
@@ -44,6 +45,9 @@ export class Animator {
   onStep: ((side: number, heavy: boolean) => void) | null = null;
   ok = false;
   private lastStance = [true, true];
+  plant: (THREE.Vector3 | null)[] = [null, null];                // world-space planted foot positions
+  private swingFrom: (THREE.Vector3 | null)[] = [null, null];
+  private restepT = [0, 0];
 
   constructor(public model: THREE.Object3D) {
     model.traverse(o => {
@@ -160,29 +164,63 @@ export class Animator {
     this.atk = Math.max(0, 1 - s.attackAge / (s.attackKind === 'secondary' || s.attackKind === 'lance' ? 0.45 : 0.3));
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
-    // ---------------- gait: stride scales with speed; phase advances with distance so feet stay planted
-    const stride = this.legLen * (heavy ? 1.15 : 1.0) * (0.8 + Math.min(1.1, speed / 6) * 0.9);
-    const cycleLen = stride * 2;
+    // ---------------- gait. Feet are LOCKED IN WORLD SPACE while planted (no sliding when the body turns or
+    // changes speed); each swing lands on the spot the stride predicts. Phase advances with distance travelled.
+    // faster = higher cadence + shorter stance, not longer reach: a planted foot must stay inside the leg's range
+    const run = Math.min(1, speed / (this.legLen * 7));
+    const stride = this.legLen * (heavy ? 0.6 + 0.4 * run : 0.55 + 0.55 * run);
+    const duty = heavy ? 0.6 - 0.1 * run : 0.62 - 0.22 * run;
+    const cycleLen = stride * 2;                    // one cycle = a left and a right step
+    const travel = cycleLen * duty;                 // how far the body moves over a planted foot
     this.phase += (speed * dt) / cycleLen * (moving ? 1 : 0);
-    // move direction in model space
     const md = speed > 0.01 ? _v2.set(lvx / speed, 0, lvz / speed).clone() : new THREE.Vector3(0, 0, 1);
     const lift = this.legLen * (heavy ? 0.16 : 0.22) * Math.min(1, speed / 3 + 0.3);
-    const duty = 0.58;
     const hipsOff = new THREE.Vector3();
+    const toModel = (w: THREE.Vector3) => { const dx = (w.x - s.pos.x) / s.scale, dz = (w.z - s.pos.z) / s.scale; return new THREE.Vector3(dx * cy - dz * sy, (w.y - s.pos.y) / s.scale, dx * sy + dz * cy); };
+    const toWorld = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * s.scale, s.pos.y + m.y * s.scale, s.pos.z + (-m.x * sy + m.z * cy) * s.scale);
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       const restFoot = new THREE.Vector3(side * this.hipW * 1.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z);
       const ph = ((this.phase + i * 0.5) % 1 + 1) % 1;
-      const tgt = restFoot.clone();
-      if (this.moveBlend > 0.01) {
-        let off: number, up = 0;
-        if (ph < duty) { off = 0.5 - ph / duty; }                      // stance: foot travels back at ground speed
-        else { const u = (ph - duty) / (1 - duty); off = -0.5 + u; up = Math.sin(u * Math.PI); }   // swing
-        const stanceNow = ph < duty;
-        if (stanceNow && !this.lastStance[i] && moving) this.onStep?.(i, heavy);
-        this.lastStance[i] = stanceNow;
-        tgt.addScaledVector(md, off * stride * this.moveBlend);
-        tgt.y += up * lift * this.moveBlend;
+      let tgt: THREE.Vector3;
+      if (!s.grounded || this.airBlend > 0.5) {
+        this.plant[i] = null;
+        tgt = restFoot.clone();
+      } else if (moving) {
+        const stance = ph < duty;
+        if (stance) {
+          if (!this.plant[i]) {
+            // touch-down: plant where the stride says this foot lands, then keep it there in the world
+            const land = restFoot.clone().addScaledVector(md, travel * (0.5 - ph / duty));
+            this.plant[i] = toWorld(land); this.plant[i]!.y = s.pos.y + this.footY * s.scale;
+            this.onStep?.(i, heavy);
+          }
+          tgt = toModel(this.plant[i]!);
+        } else {
+          // swing: from lift-off toward the predicted landing spot, with a lift arc
+          const u = (ph - duty) / (1 - duty);
+          if (this.plant[i]) { this.swingFrom[i] = toModel(this.plant[i]!); this.plant[i] = null; }
+          const from = this.swingFrom[i] ?? restFoot.clone().addScaledVector(md, -travel / 2);
+          const land = restFoot.clone().addScaledVector(md, travel / 2);
+          const k = u * u * (3 - 2 * u);
+          tgt = from.clone().lerp(land, k);
+          tgt.y = this.footY + Math.sin(u * Math.PI) * lift;
+          // swingFrom is in model space of lift-off; body has moved since, so correct by the distance covered
+          this.swingFrom[i] = from.addScaledVector(md, -(speed * dt));
+        }
+        this.lastStance[i] = stance;
+      } else {
+        // standing: feet stay put in the world; re-step if the body turned or drifted too far from them
+        if (!this.plant[i]) { this.plant[i] = toWorld(restFoot); this.plant[i]!.y = s.pos.y + this.footY * s.scale; }
+        let m = toModel(this.plant[i]!);
+        if (m.distanceTo(restFoot) > this.legLen * 0.32 && this.restepT[i] <= 0 && this.restepT[1 - i] <= 0) { this.restepT[i] = 0.22; this.swingFrom[i] = m.clone(); }
+        if (this.restepT[i] > 0) {
+          this.restepT[i] -= dt;
+          const u = 1 - Math.max(0, this.restepT[i]) / 0.22;
+          m = this.swingFrom[i]!.clone().lerp(restFoot, u); m.y = this.footY + Math.sin(u * Math.PI) * lift * 0.5;
+          if (this.restepT[i] <= 0) { this.plant[i] = toWorld(restFoot); this.plant[i]!.y = s.pos.y + this.footY * s.scale; this.onStep?.(i, heavy); }
+        }
+        tgt = m;
       }
       // airborne: knees up (jump), trailing dangle (flying)
       if (this.airBlend > 0.01) {
@@ -191,7 +229,11 @@ export class Animator {
         if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
         tgt.lerp(air, this.airBlend);
       }
-      this.foot[i].lerp(tgt, Math.min(1, dt * (this.moveBlend > 0.5 ? 60 : 14)));
+      // never reach further than the leg allows (keeps IK stable on hard stops)
+      const off = tgt.clone().sub(restFoot); off.y = 0;
+      const maxOff = this.legLen * 0.75;
+      if (off.length() > maxOff) { tgt.sub(off).add(off.setLength(maxOff)); this.plant[i] = null; }
+      this.foot[i].copy(tgt);
     }
     // body bob: lowest at mid-stance (twice per cycle)
     const bobPh = this.phase * 2 * Math.PI * 2;
