@@ -552,6 +552,11 @@ export class World {
       a.pos.x = x0; a.pos.z = z0; a.vel.x = 0; a.vel.z = 0;
       if (a.isBoss) a.forced = null;    // colossi stop at the edge instead of charging into the void
     }
+    // colossi remember their last solid footing; separation pushes or charges that end over the void snap back
+    if (a.isBoss && a.def.frame !== 'drone') {
+      if (L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.5) > a.pos.y - 3) { a.sv.safeX = a.pos.x; a.sv.safeZ = a.pos.z; a.sv.safeY = a.pos.y; }
+      else if (a.sv.safeX !== undefined) { a.pos.x = a.sv.safeX; a.pos.z = a.sv.safeZ; a.pos.y = Math.max(a.pos.y, a.sv.safeY); a.vel.x = a.vel.z = 0; a.forced = null; }
+    }
     // sweep from last frame's height so fast falls can't tunnel through thin floors
     const g = L.groundAt(a.pos.x, a.pos.z, Math.max(a.pos.y, Math.min(y0, a.pos.y + 3)), a.radius);
     if (a.pos.y <= g + 1e-3 && a.vel.y <= 0.01) {

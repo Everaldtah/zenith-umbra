@@ -91,6 +91,8 @@ for k, m in pipe.models.items():
         if hasattr(m, "convert_to") and getattr(m, "dtype", None) == torch.bfloat16: m.convert_to(torch.float16)
     except Exception as e: print("fp16 convert", k, e)
 pipe.cuda()
+import gc; gc.collect()
+open(f"/tmp/loaded{os.environ.get('CUDA_VISIBLE_DEVICES')}", "w").write("1")
 publish("loaded", gpu=os.environ.get("CUDA_VISIBLE_DEVICES"), mem=round(torch.cuda.memory_allocated() / 1e9, 2))
 jobs = json.loads(os.environ["JOBS"])
 for aid, path in jobs:
@@ -122,7 +124,7 @@ try:
     pip = f"{py} -m pip install -q"
     sh(f"{pip} torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124", "torch-2.6")
     sh(f"{pip} xformers==0.0.29.post3 --index-url https://download.pytorch.org/whl/cu124", "xformers")
-    sh(f"{pip} imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja trimesh 'transformers>=4.56' pandas zstandard kornia timm>=1.0.20 rembg onnxruntime-gpu 'numpy<2' pillow huggingface_hub safetensors scipy", "basic-deps")
+    sh(f"{pip} imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja trimesh 'transformers>=4.56' pandas zstandard kornia 'timm>=1.0.20' rembg onnxruntime-gpu 'numpy<2' pillow huggingface_hub safetensors scipy", "basic-deps")
     sh(f"{pip} git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8", "utils3d")
     sh("git clone -q --recursive https://github.com/microsoft/TRELLIS.2.git /tmp/TRELLIS.2", "clone-trellis2")
     sh("mkdir -p /tmp/ext && git clone -q -b v0.4.0 https://github.com/NVlabs/nvdiffrast.git /tmp/ext/nvdiffrast", "clone-nvdiffrast")
@@ -146,6 +148,11 @@ try:
     sh(f"cd /tmp && {py} -c \"from huggingface_hub import snapshot_download as s; s('microsoft/TRELLIS.2-4B'); s('microsoft/TRELLIS-image-large', allow_patterns=['ckpts/ss_dec*']); import timm; timm.create_model('vit_large_patch16_dinov3.lvd1689m', pretrained=True)\"", "download-models")
     procs = []
     for g in range(2):
+        if g == 1:
+            # loading two 4B pipelines at once exhausts the VM's RAM: wait until worker 0 has moved its weights to the GPU
+            for _ in range(900):
+                if os.path.exists("/tmp/loaded0") or procs[0].poll() is not None: break
+                time.sleep(2)
         env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(g), "JOBS": json.dumps(jobs[g::2]), "NTFY_TOPIC": TOPIC, "PTYPE": PTYPE}
         procs.append(subprocess.Popen([py, "/tmp/worker.py"], env=env, stdout=open(f"/tmp/worker{g}.log", "w"), stderr=subprocess.STDOUT))
     for p in procs: p.wait()

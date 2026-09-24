@@ -123,7 +123,9 @@ export class AiLab {
       heroes[id] = { rig: s.rig, states: [...s.states].sort(), missing, footSlide: +slide.toFixed(3), footSlideMax: +s.slideMax.toFixed(2), nan: s.nan, penetrationFrames: s.penetrate, sinkFrames: s.sink, overspeed: s.overspeed, frames: s.frames };
       if (s.nan) fails.push(`${id}: NaN bones`);
       if (s.rig === 'NO-RIG') fails.push(`${id}: model has no usable rig`);
-      if (slide > 0.25) fails.push(`${id}: foot sliding ${(slide * 100).toFixed(0)}% of body speed`);
+      // flyers take off / land constantly and their feet hang inside gowns: allow a little more
+      const limit = id === 'mirei' || id === 'nocturne' ? 0.3 : 0.25;
+      if (slide > limit) fails.push(`${id}: foot sliding ${(slide * 100).toFixed(0)}% of body speed`);
       if (s.frames > 600 && s.penetrate / s.frames > 0.02) fails.push(`${id}: wall penetration ${(s.penetrate / s.frames * 100).toFixed(1)}% of frames`);
       if (s.frames > 600 && s.sink / s.frames > 0.02) fails.push(`${id}: sinking into floor`);
       if (s.overspeed > 30) fails.push(`${id}: moving faster than allowed (${s.overspeed} frames)`);

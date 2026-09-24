@@ -32,6 +32,7 @@ export class HeroViewer {
   yaw = 0.5; tilt = 0.12; zoom = 1; auto = true;
   private raf = 0; private t = 0; private last = performance.now();
   private drag: { x: number; y: number } | null = null;
+  private tmpV = new THREE.Vector3();
   private stage: HTMLElement;
 
   constructor(host: HTMLElement, private onClose: () => void) {
@@ -173,7 +174,12 @@ export class HeroViewer {
     const H = a.height, r = Math.max(2.4, H * 2.1) * this.zoom;
     const cx = Math.sin(this.yaw) * Math.cos(this.tilt) * r, cz = Math.cos(this.yaw) * Math.cos(this.tilt) * r;
     // zooming in drifts the focus up to the face
-    const focus = H * (0.52 + 0.38 * Math.max(0, Math.min(1, (1 - this.zoom) / 0.65))) + (m === 'fly' ? 1.2 : 0);
+    // the close-up frames the head bone itself (crowns, horns and hair make "a fraction of the height" miss the face)
+    const zk = Math.max(0, Math.min(1, (1 - this.zoom) / 0.65));
+    let headY = H * 0.9;
+    const hb = v.anim.bones.head;
+    if (hb) { hb.getWorldPosition(this.tmpV); headY = this.tmpV.y + H * 0.04 - v.group.position.y; }
+    const focus = H * 0.52 * (1 - zk) + headY * zk + (m === 'fly' ? 1.2 : 0);
     this.camera.position.set(cx, focus + Math.sin(this.tilt) * r, cz);
     this.camera.lookAt(0, focus, 0);
     this.renderer.render(this.scene, this.camera);

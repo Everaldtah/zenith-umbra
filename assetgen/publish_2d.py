@@ -4,7 +4,10 @@ import glob, os, sys
 from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 PUB = os.path.join(HERE, '..', 'public')
-SRC = [os.path.join(HERE, 'out', d, 'img') for d in ('campaign', 'models2', 'pilots', 'concepts')]   # earlier dirs win
+SRC = [os.path.join(HERE, 'out', d, 'img') for d in ('campaign', 'models2', 'pilots', 'concepts')]
+ARTFIX = os.path.join(HERE, 'out', 'artfix', 'img')
+# art regenerated from each model's own concept (matches the 3D model): portrait pick, key-art pick
+FIX = {'enra': (0, 0), 'gorgoth': (1, 0), 'haruto': (0, 1), 'hex': (0, 0), 'kagemaru': (0, 0), 'kaien': (0, 0), 'mirei': (1, 0), 'nocturne': (0, 1), 'qelvaris': (0, 1), 'raijin': (0, 1), 'tenkai': (0, 1), 'vorn': (0, 0), 'yuzu': (0, 0)}   # earlier dirs win
 KEY_PICK = {'qelvaris': 1, 'enra': 0, 'gorgoth': 0, 'hex': 1, 'kagemaru': 0, 'kaien': 1, 'mirei': 1, 'nocturne': 0, 'raijin': 0, 'tenkai': 0, 'yuzu': 1, 'haruto': 0, 'vorn': 1}
 MAP_PICK = {'amatsu': 0, 'cathedral': 1, 'hangar': 0, 'kurogane': 1, 'rift': 0, 'training': 0}
 
@@ -58,4 +61,21 @@ for p in sorted(glob.glob(os.path.join(HERE, 'out', 'campaign', 'img', '*.png'))
         im = Image.open(p).convert('RGB'); W, H = im.size
         save(im, 'img/key_qelvaris.webp', 82); s = int(W * 0.62); x0 = (W - s) // 2
         save(im.crop((x0, int(H * .06), x0 + s, int(H * .06) + s)), 'img/portrait_qelvaris.webp', 85, (256, 256)); n += 2
+for hid, (pk, kk) in FIX.items():
+    pp, kp = os.path.join(ARTFIX, f'portrait_{hid}_{pk}.png'), os.path.join(ARTFIX, f'key_{hid}_{kk}.png')
+    if os.path.exists(pp): save(Image.open(pp).convert('RGB'), f'img/portrait_{hid}.webp', 85, (512, 512)); n += 1
+    if os.path.exists(kp):
+        im = Image.open(kp).convert('RGB')
+        # tighten the frame around the figure (the img2img canvas leaves wide margins)
+        import numpy as np
+        a = np.asarray(im).astype(int); bgc = a[5, 5]
+        mask = (np.abs(a - bgc).sum(2) > 60)
+        ys, xs = np.where(mask)
+        if len(xs):
+            x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+            pad = 40; w = x1 - x0 + 2 * pad; h = y1 - y0 + 2 * pad
+            tw = max(w, int(h * 0.68)); cx = (x0 + x1) // 2
+            box = (max(0, cx - tw // 2), max(0, y0 - pad), min(im.width, cx + tw // 2), min(im.height, y1 + pad))
+            im = im.crop(box)
+        save(im, f'img/key_{hid}.webp', 82); n += 1
 print('published', n)

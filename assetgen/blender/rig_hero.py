@@ -95,6 +95,11 @@ if tris > a.tris:
     bpy.ops.object.modifier_apply(modifier="dec")
 LOG["tris"] = sum(len(p.vertices) - 2 for p in obj.data.polygons)
 for p in obj.data.polygons: p.use_smooth = True
+# consistent outward winding (reconstructed meshes carry flipped faces that single-sided renderers cull as holes)
+bpy.ops.object.select_all(action="DESELECT"); obj.select_set(True); bpy.context.view_layer.objects.active = obj
+bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
+bpy.ops.mesh.normals_make_consistent(inside=False)
+bpy.ops.object.mode_set(mode="OBJECT")
 co = verts()
 W = float(co[:, 0].max() - co[:, 0].min())
 
@@ -257,6 +262,16 @@ def plausible(J):
 if not (P.get("ok") and plausible(J)):
     LOG["pose_rejected"] = bool(P.get("ok"))
     J = silhouette_joints()
+    # the face detector is reliable even when the body pose isn't: anchor neck / shoulders to the nose
+    nose = pts.get("nose")
+    if nose and nose[2] > 0.6 and 0.66 * H < nose[1] < 0.97 * H:
+        want = nose[1] - 0.1 * H
+        for s in ("l", "r"):
+            x, z = J[f"shoulder_{s}"]
+            J[f"shoulder_{s}"] = (x, want)
+            ex, ez = J[f"elbow_{s}"]; J[f"elbow_{s}"] = (ex, min(ez, want - 0.04 * H))
+        J["nose"] = (nose[0], nose[1])
+        LOG["nose_anchor"] = round(float(nose[1] / H), 3)
 # enforce left = +X (MediaPipe's subject-left should already land there in a front view)
 for k in ("shoulder", "elbow", "wrist", "hip", "knee", "ankle"):
     L, R = J[f"{k}_l"], J[f"{k}_r"]
@@ -290,7 +305,8 @@ shL, shR = V(*J["shoulder_l"]), V(*J["shoulder_r"])
 neck = (shL + shR) / 2; neck.z = max(shL.z, shR.z) + H * 0.02
 chest = pelvis.lerp(neck, 0.55)
 spine = pelvis.lerp(neck, 0.22)
-head_top = Vector((neck.x, neck.y, H))
+# the head bone spans the skull, not crowns / horns / hair piled above it
+head_top = Vector((neck.x, neck.y, min(H, J["nose"][1] + 0.1 * H) if J["nose"][1] > neck.z else H))
 head_base = neck.lerp(head_top, 0.25)
 bones = {
     "root": (Vector((0, 0, 0)), Vector((0, 0, H * 0.08)), None),

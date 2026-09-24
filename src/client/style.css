@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@600;800&display=swap');
+@import '../fonts.css';
 :root { --z: #5cc8ff; --u: #ff3b5c; --gold: #ffd76a; --ink: #0b0d14; --panel: rgba(10, 14, 24, .78); --line: rgba(255,255,255,.14); }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; color: #eef2ff; font-family: Rajdhani, system-ui, sans-serif; user-select: none; }
@@ -41,7 +41,7 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .meta .zenith { color: var(--z); } .meta .umbra { color: var(--u); }
 .lore { color: #c3c9e0; font-size: 16px; line-height: 1.35; }
 .pilot { display: flex; gap: 10px; align-items: center; background: rgba(255,215,106,.08); border-left: 3px solid var(--gold); padding: 8px; font-size: 15px; } .pilot img { width: 56px; height: 56px; object-fit: cover; object-position: top; }
-.ab { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0; } .ab b { font-size: 17px; } .ab p { margin: 2px 0; color: #b8c0d8; font-size: 15px; }
+.hd .ab { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0; } .hd .ab b { font-size: 17px; } .hd .ab p { margin: 2px 0; color: #b8c0d8; font-size: 15px; } .hd .ab kbd { flex: none; }
 .ab .ctr { color: var(--gold); font-weight: 700; }
 .rival { margin-top: 12px; color: #c9d2ff; } .rival em { display: block; opacity: .7; font-size: 14px; }
 .bar { grid-column: 1 / -1; display: flex; gap: 14px; justify-content: flex-end; align-items: center; padding: 16px 40px; background: rgba(0,0,0,.5); border-top: 1px solid var(--line); }
@@ -103,7 +103,7 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .portrait img { width: 64px; height: 64px; object-fit: cover; object-position: top; border: 2px solid var(--c); clip-path: polygon(0 0,100% 0,100% 80%,80% 100%,0 100%); }
 .portrait b { display: block; font: 800 20px Orbitron; color: var(--c); } .portrait span { font-size: 14px; opacity: .8; }
 .abil { position: absolute; right: 190px; bottom: 36px; display: flex; gap: 10px; }
-.ab { position: relative; width: 78px; height: 70px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; transform: skewX(-12deg); }
+.hud .ab { position: relative; width: 78px; height: 70px; background: rgba(0,0,0,.55); border: 1px solid var(--line); overflow: hidden; transform: skewX(-12deg); }
 .hud .ab { display: block; margin: 0; }
 .hud .ab .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.18); }
 .hud .ab .k { position: absolute; top: 6px; width: 100%; text-align: center; font: 800 18px Orbitron; transform: skewX(12deg); }

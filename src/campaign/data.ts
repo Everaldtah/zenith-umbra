@@ -26,17 +26,17 @@ const boss = (o: Partial<BossDef> & Pick<BossDef, 'id' | 'name' | 'title' | 'hp'
 } as BossDef);
 
 export const BOSSES: Record<string, BossDef> = {
-  boss_ironmaw: boss({ id: 'boss_ironmaw', name: 'IRONMAW', title: 'Colossus Mk-I · the Grinder', hp: 5200, armor: 800, height: 14, radius: 3.6, frame: 'mech', glow: '#ff8a3d',
+  boss_ironmaw: boss({ id: 'boss_ironmaw', name: 'IRONMAW', title: 'Colossus Mk-I · the Grinder', hp: 3600, armor: 600, height: 14, radius: 3.6, frame: 'mech', glow: '#ff8a3d',
     attacks: ['stomp', 'charge', 'barrage', 'bite', 'summon'], summon: 'minion_swarmer', weak: 'the violet reactor in its chest' }),
-  boss_reaper: boss({ id: 'boss_reaper', name: 'CRESCENT REAPER', title: 'Colossus Mk-II · the Harvester', hp: 5600, armor: 600, height: 16, radius: 3, frame: 'mech', glow: '#d6d6ff', speed: 4,
+  boss_reaper: boss({ id: 'boss_reaper', name: 'CRESCENT REAPER', title: 'Colossus Mk-II · the Harvester', hp: 3900, armor: 500, height: 16, radius: 3, frame: 'mech', glow: '#d6d6ff', speed: 4,
     attacks: ['sweep', 'crescents', 'blink', 'stomp', 'summon'], summon: 'minion_lancer', weak: 'its single eye' }),
-  boss_leviathan: boss({ id: 'boss_leviathan', name: 'HIVE LEVIATHAN', title: 'Colossus Mk-III · the Deep Coil', hp: 6000, armor: 500, height: 16, radius: 3.4, frame: 'mech', glow: '#2de0c8',
+  boss_leviathan: boss({ id: 'boss_leviathan', name: 'HIVE LEVIATHAN', title: 'Colossus Mk-III · the Deep Coil', hp: 4200, armor: 400, height: 16, radius: 3.4, frame: 'mech', glow: '#2de0c8',
     attacks: ['dive', 'barrage', 'sweep', 'shockwave', 'summon'], summon: 'minion_bomber', weak: 'the glowing vents on its hood' }),
-  boss_phoenix: boss({ id: 'boss_phoenix', name: 'SOLAR PHOENIX', title: 'Colossus Mk-IV · the Sunburner', hp: 6200, armor: 400, height: 15, radius: 3.2, frame: 'drone', glow: '#ff9d2a', speed: 6,
+  boss_phoenix: boss({ id: 'boss_phoenix', name: 'SOLAR PHOENIX', title: 'Colossus Mk-IV · the Sunburner', hp: 4300, armor: 300, height: 15, radius: 3.2, frame: 'drone', glow: '#ff9d2a', speed: 6,
     attacks: ['beam', 'firerain', 'divebomb', 'shockwave', 'summon'], summon: 'minion_swarmer', weak: 'the burning core between its wings' }),
-  boss_genesis: boss({ id: 'boss_genesis', name: 'OMEGA GENESIS', title: "Qel'Varis's Throne Colossus", hp: 8000, armor: 1200, height: 18, radius: 4, frame: 'mech', glow: '#b56dff',
+  boss_genesis: boss({ id: 'boss_genesis', name: 'OMEGA GENESIS', title: "Qel'Varis's Throne Colossus", hp: 5400, armor: 800, height: 18, radius: 4, frame: 'mech', glow: '#b56dff',
     attacks: ['stomp', 'sweep', 'barrage', 'beam', 'halo', 'shockwave', 'summon'], summon: 'minion_sentinel', weak: 'the throne cockpit in its chest' }),
-  qelvaris: boss({ id: 'qelvaris', name: "ARCHON QEL'VARIS", title: 'The Star-Forger', hp: 3600, armor: 0, height: 2.3, radius: 0.55, frame: 'human', glow: '#ffd24a', speed: 6.5, hpPerPlayer: 0.5,
+  qelvaris: boss({ id: 'qelvaris', name: "ARCHON QEL'VARIS", title: 'The Star-Forger', hp: 2800, armor: 0, height: 2.3, radius: 0.55, frame: 'human', glow: '#ffd24a', speed: 6.5, hpPerPlayer: 0.5,
     primary: { kind: 'projectile', damage: 22, rate: 2.2, range: 60, speed: 45, sfx: 'star', fx: 'hex' },
     attacks: ['warp', 'gravity', 'orbs', 'summon', 'shockwave'], summon: 'minion_swarmer', weak: 'his orbiting halo' }),
 };

@@ -21,7 +21,7 @@
   },
   "tenkai": {
    "height": 3.3,
-   "tris": 34000,
+   "tris": 33999,
    "bones": [
     "humanoid"
    ]
@@ -35,14 +35,14 @@
   },
   "mirei": {
    "height": 1.65,
-   "tris": 25999,
+   "tris": 26000,
    "bones": [
     "humanoid"
    ]
   },
   "nocturne": {
    "height": 1.75,
-   "tris": 25999,
+   "tris": 26000,
    "bones": [
     "humanoid"
    ]
@@ -56,28 +56,28 @@
   },
   "raijin": {
    "height": 1.8,
-   "tris": 25999,
+   "tris": 26000,
    "bones": [
     "humanoid"
    ]
   },
   "yuzu": {
    "height": 1.62,
-   "tris": 25999,
+   "tris": 26000,
    "bones": [
     "humanoid"
    ]
   },
   "hex": {
    "height": 1.95,
-   "tris": 24061,
+   "tris": 25999,
    "bones": [
     "humanoid"
    ]
   },
   "kagemaru": {
    "height": 1.78,
-   "tris": 25999,
+   "tris": 26000,
    "bones": [
     "humanoid"
    ]

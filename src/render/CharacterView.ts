@@ -217,7 +217,25 @@ export class CharacterView {
     this.collectMats();
     for (const mt of this.mats) {
       const sm = mt as THREE.MeshStandardMaterial;
-      if (sm.isMeshStandardMaterial) { sm.envMapIntensity = 0.8; if (sm.map && !sm.emissiveMap) { sm.emissive = new THREE.Color(0xffffff); sm.emissiveMap = sm.map; sm.emissiveIntensity = 0.18; } }
+      if (sm.isMeshStandardMaterial) {
+        // generated PBR maps carry noisy per-pixel metalness: it mirrors the environment in white/black blotches on
+        // cloth and skin. Keep metal only on mechs (and even then subdued); everything is opaque.
+        const mech = this.actor.def.frame === 'mech';
+        // the generated metal/roughness texture is noise: uniform values per body type read far cleaner (cel-style)
+        sm.metalnessMap = null; sm.roughnessMap = null;
+        sm.metalness = mech ? 0.35 : 0.04;
+        sm.roughness = mech ? 0.42 : 0.72;
+        sm.transparent = false; sm.opacity = 1; sm.alphaTest = 0; sm.depthWrite = true; sm.alphaMap = null;
+        // baked normal / AO maps from image-to-3D light in patches without proper tangents (Draco drops them)
+        sm.normalMap = null; sm.aoMap = null; sm.bumpMap = null;
+        // stray COLOR_0 vertex colours from the voxel reconstruction would tint the texture in blotches
+        sm.vertexColors = false;
+        // reconstructed surfaces can carry inverted faces; draw both sides so they never read as holes
+        sm.side = THREE.DoubleSide;
+        sm.envMapIntensity = 0.6;
+        if (sm.map && !sm.emissiveMap) { sm.emissive = new THREE.Color(0xffffff); sm.emissiveMap = sm.map; sm.emissiveIntensity = 0.16; }
+        sm.needsUpdate = true;
+      }
     }
   }
 
@@ -275,6 +293,7 @@ export class CharacterView {
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
+      melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
     });
     if (a.def.frame === 'drone') this.model.rotation.z = Math.sin(time * 2 + a.id) * 0.1;
   }

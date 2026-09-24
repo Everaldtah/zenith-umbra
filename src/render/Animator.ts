@@ -13,8 +13,8 @@ export const BONES = ['root', 'hips', 'spine', 'chest', 'neck', 'head',
 type BoneName = typeof BONES[number];
 /** spring chains: [segment1, segment2, tip marker, parent, stiffness, damping, max angle (rad)] */
 const CHAINS: [BoneName, BoneName, BoneName, BoneName, number, number, number][] = [
-  ['hair_B_1', 'hair_B_2', 'hair_B_3', 'head', 0.1, 0.86, 1.2], ['hair_L_1', 'hair_L_2', 'hair_L_3', 'head', 0.1, 0.86, 1.2], ['hair_R_1', 'hair_R_2', 'hair_R_3', 'head', 0.1, 0.86, 1.2],
-  ['skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'hips', 0.2, 0.8, 0.75], ['skirt_F_1', 'skirt_F_2', 'skirt_F_3', 'hips', 0.26, 0.78, 0.6],
+  ['hair_B_1', 'hair_B_2', 'hair_B_3', 'head', 0.14, 0.84, 0.8], ['hair_L_1', 'hair_L_2', 'hair_L_3', 'head', 0.14, 0.84, 0.8], ['hair_R_1', 'hair_R_2', 'hair_R_3', 'head', 0.14, 0.84, 0.8],
+  ['skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'hips', 0.26, 0.8, 0.45], ['skirt_F_1', 'skirt_F_2', 'skirt_F_3', 'hips', 0.32, 0.78, 0.35],
 ];
 const CHILD: Partial<Record<BoneName, BoneName>> = {
   hair_B_1: 'hair_B_2', hair_B_2: 'hair_B_3', hair_L_1: 'hair_L_2', hair_L_2: 'hair_L_3', hair_R_1: 'hair_R_2', hair_R_2: 'hair_R_3',
@@ -30,6 +30,7 @@ export interface AnimState {
   grounded: boolean; flying: boolean; frame: string;
   attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
+  melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   scale: number;            // world metres per model unit
   pos: THREE.Vector3;       // actor world position (feet)
 }
@@ -57,6 +58,10 @@ export class Animator {
   plant: (THREE.Vector3 | null)[] = [null, null];                // world-space planted foot positions
   private swingFrom: (THREE.Vector3 | null)[] = [null, null];
   private restepT = [0, 0];
+  // dynamic layer (springs)
+  private hipYaw = 0; private hipYawV = 0; private lastYaw = 0; private turnRoll = 0;
+  private leanV = new THREE.Vector2(); private flinch = 0; private flinchV = 0; private lastHitAge = 9; private flinchDir = 1;
+  private recoil = 0; private recoilV = 0; private lastAtkAge = 9; private readyW = 0;
   // spring chain state: world-space tip + previous tip per chain segment
   private spring = new Map<string, { tip: THREE.Vector3; prev: THREE.Vector3 }>();
   private posCache = new Map<string, THREE.Vector3>();
@@ -109,8 +114,18 @@ export class Animator {
           st.prev.copy(st.tip);
           st.tip.add(vel);
           st.tip.y -= 9.8 * 0.35 * dt * dt * 60;                             // gravity (scaled for readable sway)
-          st.tip.x -= s.vel.x * dt * 0.35; st.tip.z -= s.vel.z * dt * 0.35;    // air drag while moving / flying
+          st.tip.x -= s.vel.x * dt * 0.2; st.tip.z -= s.vel.z * dt * 0.2;      // air drag while moving / flying
           st.tip.lerp(target, 1 - Math.pow(1 - stiff, f));
+          // cloth collides with the legs (thigh-to-ankle capsules) instead of passing through them
+          if (seg.startsWith('skirt') && this.bones.thigh_L && this.bones.foot_L) {
+            const r = this.legLen * 0.17 * s.scale;
+            for (const L of ['L', 'R'] as const) {
+              const A = toW(this.modelPos(`thigh_${L}` as BoneName)), B = toW(this.modelPos(`foot_${L}` as BoneName));
+              const AB = B.clone().sub(A), t = Math.max(0, Math.min(1, st.tip.clone().sub(A).dot(AB) / Math.max(1e-6, AB.lengthSq())));
+              const C = A.addScaledVector(AB, t), d = st.tip.clone().sub(C), dl = d.length();
+              if (dl < r) st.tip.copy(C).addScaledVector(dl > 1e-5 ? d.divideScalar(dl) : rigidDirW, r);
+            }
+          }
           // keep segment length, and never swing further than maxA from the rigid pose
           const d = st.tip.clone().sub(headW);
           let dir = d.lengthSq() > 1e-8 ? d.normalize() : rigidDirW.clone();
@@ -239,6 +254,19 @@ export class Animator {
     this.atk = Math.max(0, 1 - s.attackAge / (s.attackKind === 'secondary' || s.attackKind === 'lance' ? 0.45 : 0.3));
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
+    // ---------------- lower-body yaw: legs face where we move, the torso twists back to the aim (hero-shooter strafing)
+    {
+      let mv = speed > 0.6 && moving ? Math.atan2(lvx, lvz) : 0;
+      if (Math.abs(mv) > 1.95) mv -= Math.sign(mv) * Math.PI;          // backpedal: legs face forward, walk backwards
+      const target = Math.max(-1.05, Math.min(1.05, mv)) * this.moveBlend;
+      const yawRate = (() => { let d = s.yaw - this.lastYaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return dt > 0 ? d / dt : 0; })();
+      this.lastYaw = s.yaw;
+      // when turning in place the legs lag behind the torso for a beat
+      this.hipYawV += ((target - this.hipYaw) * 90 - this.hipYawV * 14) * dt;
+      this.hipYaw += this.hipYawV * dt - (this.moveBlend < 0.5 ? yawRate * dt * 0.35 : 0);
+      this.hipYaw = Math.max(-1.2, Math.min(1.2, this.hipYaw)) * (this.moveBlend < 0.1 ? 0.97 : 1);
+      this.turnRoll += (Math.max(-0.22, Math.min(0.22, -yawRate * 0.04 * this.moveBlend)) - this.turnRoll) * Math.min(1, dt * 8);
+    }
     // ---------------- gait. Feet are LOCKED IN WORLD SPACE while planted (no sliding when the body turns or
     // changes speed); each swing lands on the spot the stride predicts. Phase advances with distance travelled.
     // faster = higher cadence + shorter stance, not longer reach: a planted foot must stay inside the leg's range
@@ -255,7 +283,8 @@ export class Animator {
     const toWorld = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * s.scale, s.pos.y + m.y * s.scale, s.pos.z + (-m.x * sy + m.z * cy) * s.scale);
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
-      const restFoot = new THREE.Vector3(side * this.hipW * 1.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z);
+      // feet sit under the hips, which turn toward the movement direction (lower-body yaw)
+      const restFoot = new THREE.Vector3(side * this.hipW * 1.05, this.footY, (i === 0 ? R.foot_L : R.foot_R).p.z).applyAxisAngle(Y, this.hipYaw);
       const ph = ((this.phase + i * 0.5) % 1 + 1) % 1;
       let tgt: THREE.Vector3;
       if (!s.grounded || this.airBlend > 0.5) {
@@ -313,31 +342,48 @@ export class Animator {
     // body bob: lowest at mid-stance (twice per cycle)
     const bobPh = this.phase * 2 * Math.PI * 2;
     this.bob = (Math.cos(bobPh) * 0.5 - 0.5) * this.legLen * (heavy ? 0.06 : 0.035) * this.moveBlend;
-    hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0);
+    // combat stance: knees soft, weight low; melee heroes lunge into their swings
+    const stance = (1 - this.moveBlend) * (1 - this.airBlend) * (heavy ? 0.03 : 0.045);
+    const lunge = s.melee ? Math.sin(Math.min(1, this.atk) * Math.PI) * 0.12 * this.legLen : 0;
+    hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0) - stance * this.legLen - lunge * 0.3;
+    hipsOff.z += lunge;
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
-    // lean into acceleration / velocity
+    // lean into velocity with a damped spring (overshoots when you stop or turn) + roll into turns
     const leanTarget = new THREE.Vector2(
-      Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.12),
-      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? 0.45 : heavy ? 0.08 : 0.14));
-    this.lean.lerp(leanTarget, Math.min(1, dt * 6));
-    const hipSway = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.07 : 0.05) * this.moveBlend;
-    // ---------------- hips
-    const Dh = rot(Y, hipSway).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5));
+      Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.14) + this.turnRoll,
+      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? 0.45 : heavy ? 0.1 : 0.18));
+    this.leanV.x += ((leanTarget.x - this.lean.x) * 70 - this.leanV.x * 9) * dt;
+    this.leanV.y += ((leanTarget.y - this.lean.y) * 70 - this.leanV.y * 9) * dt;
+    this.lean.x += this.leanV.x * dt; this.lean.y += this.leanV.y * dt;
+    // hit flinch + weapon recoil: impulses into springs
+    if (s.hitAge < this.lastHitAge) { this.flinchV += 7; this.flinchDir = Math.random() < 0.5 ? -1 : 1; }
+    this.lastHitAge = s.hitAge;
+    this.flinchV += (-this.flinch * 160 - this.flinchV * 14) * dt; this.flinch += this.flinchV * dt;
+    if (s.attackAge < this.lastAtkAge && !s.melee) this.recoilV += heavy ? 3 : 5;
+    this.lastAtkAge = s.attackAge;
+    this.recoilV += (-this.recoil * 220 - this.recoilV * 16) * dt; this.recoil += this.recoilV * dt;
+    const hipSway = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.09 : 0.06) * this.moveBlend;
+    const idleShift = Math.sin(s.time * 0.55) * 0.03 * (1 - this.moveBlend);
+    const stepRoll = heavy ? Math.sin(this.phase * 2 * Math.PI) * 0.05 * this.moveBlend : 0;   // mechs rock side to side per stomp
+    // ---------------- hips (face the movement direction)
+    const Dh = rot(Y, this.hipYaw + hipSway).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift + stepRoll));
     if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
     this.applyDelta('hips', Dh);
     const hb = this.bones.hips!;
     hb.position.copy(this.hipsRestLocal).add(_v.copy(hipsOff).applyMatrix3(this.hipsParentInv));
-    // ---------------- spine chain
+    // ---------------- spine chain (unwinds the hip yaw so the chest faces the aim)
     const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
-    const hit = Math.max(0, 1 - s.hitAge / 0.25);
     const breath = Math.sin(s.time * 1.6) * 0.015;
-    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - hit * 0.12 + breath + this.cast * 0.1)).multiply(rot(Y, -hipSway * 0.8));
+    const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2)).multiply(rot(Y, -(this.hipYaw + hipSway) * 0.45 + twist * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
     if (this.bones.spine) this.applyDelta('spine', Ds);
-    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - hit * 0.1 + breath)).multiply(rot(Y, -hipSway * 0.6 + (this.atk * (s.attackKind === 'secondary' ? -0.35 : -0.12))));
+    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway) * 0.55 + twist * 0.6 - idleShift * 0.5));
     this.applyDelta('chest', Dc);
     const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
     if (this.bones.neck) this.applyDelta('neck', Dn);
-    const Dhd = Dn.clone().multiply(rot(X, aimP * 0.3 + Math.sin(s.time * 0.7) * 0.02));
+    // the head keeps the eyes on the aim and glances around when idle
+    const look = Math.sin(s.time * 0.37) * 0.12 * (1 - this.moveBlend) * (1 - Math.min(1, this.atk * 3));
+    const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02));
     this.applyDelta('head', Dhd);
     // ---------------- legs (IK)
     const hipsPos = R.hips.p.clone().add(hipsOff);
@@ -371,6 +417,10 @@ export class Animator {
       const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), flyer && s.flying ? 0.05 : 0.3).normalize();
       relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1));
       if (flyer && s.flying) relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0), -0.3 * this.flyBlend);
+      // weapon-ready stance: elbows forward, hands up in front of the body; relaxes into arm swing at full sprint
+      const readyW = (1 - 0.7 * run) * (1 - this.airBlend * 0.5) * (heavy ? 0.45 : 0.72) * (flyer && s.flying ? 0.35 : 1);
+      relaxed.lerp(new THREE.Vector3(side * 0.3, -0.72, 0.62).applyQuaternion(Dc).normalize(), readyW).normalize();
+      this.readyW = readyW;
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
       const lead = i === 1 ? 1 : 0.35;
       const act = Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
@@ -389,7 +439,9 @@ export class Animator {
       } else {
         const Du = this.aimBone(ua, relaxed);
         // slight natural elbow bend
-        const lD = relaxed.clone().applyAxisAngle(new THREE.Vector3(side, 0, 0), 0).lerp(new THREE.Vector3(0, -0.3, 1), 0.18 + 0.15 * this.moveBlend).normalize();
+        // forearms bend up toward the centre line (holding the weapon / focus) in the ready stance
+        const fore = new THREE.Vector3(-side * 0.35, -0.12, 1).applyQuaternion(Dc).normalize();
+        const lD = relaxed.clone().lerp(fore, 0.18 + 0.15 * this.moveBlend + this.readyW * 0.55).normalize();
         this.aimBone(fa, lD);
         void Du;
       }

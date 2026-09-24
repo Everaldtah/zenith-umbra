@@ -64,12 +64,12 @@ export class Level {
     let hit = false;
     for (const b of this.boxes) {
       const y0 = b.y ?? 0;
-      const top = b.ramp ? null : y0 + b.h;
-      if (b.ramp) continue;                     // ramps are walkable, not walls
-      if (p.y >= (top as number) - STEP * 0.98 || p.y + h <= y0) continue;
       const hx = b.w / 2, hz = b.d / 2;
       const cx = Math.max(b.x - hx, Math.min(p.x, b.x + hx));
       const cz = Math.max(b.z - hz, Math.min(p.z, b.z + hz));
+      // ramps are walkable up their slope but block like a wall wherever the local surface is above step height
+      const top = b.ramp ? (Level.top(b, cx, cz) as number) : y0 + b.h;
+      if (p.y >= top - STEP * 0.98 || p.y + h <= y0) continue;
       const dx = p.x - cx, dz = p.z - cz;
       const d2 = dx * dx + dz * dz;
       if (d2 >= r * r) continue;

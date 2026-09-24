@@ -32,6 +32,9 @@ def sources():
     for f in sorted(glob.glob(str(HERE / 'out' / 'trellis-*' / 'glb' / '*.glb'))):
         stem = Path(f).stem
         found[stem.replace('model_', '', 1) if stem.startswith('model_') else stem] = Path(f)
+    # TRELLIS.2 (higher detail, remeshed) overrides v1 wherever it exists
+    for f in sorted(glob.glob(str(HERE / 'out' / 'trellis2*' / 'glb' / '*.glb'))):
+        found[Path(f).stem] = Path(f)
     return found
 
 

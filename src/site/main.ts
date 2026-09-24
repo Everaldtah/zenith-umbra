@@ -39,7 +39,7 @@ document.getElementById('site')!.innerHTML = `
   <h1><b>ZENITH</b><i>//</i><em>UMBRA</em></h1>
   <p>An original anime hero shooter. Five heroes of the Zenith Vanguard against five villains of the Umbra Syndicate - every one of them with a rival on the other side and an ability built to counter them.</p>
   <div class="btnrow">${mobile ? '<p class="warn">ZENITH//UMBRA is a PC game - visit on a computer with a keyboard and mouse to play.</p>' : `<a class="btn primary" href="#download">DOWNLOAD FOR WINDOWS</a><a class="btn" href="${B}play.html">PLAY IN BROWSER (PC)</a>`}</div>
-  <ul class="feat"><li><b>10</b>original heroes</li><li><b>5</b>story maps + training grounds</li><li><b>1</b>giant mecha tank per side, piloted</li><li><b>2</b>flying healers</li><li><b>5v5</b>vs AI, AI test lab, spectator</li><li><b>Co-op</b>third-person campaign</li></ul>
+  <ul class="feat"><li><b>10</b>original heroes</li><li><b>5</b>story maps + training grounds</li><li><b>1</b>giant mecha tank per side, piloted</li><li><b>2</b>flying healers</li><li><b>5v5</b>vs AI, AI test lab, spectator</li><li><b>Co-op</b>online third-person campaign (up to 4)</li><li><b>50</b>skins in the 3D Hero Viewer</li><li><b>120 Hz</b>physics in the Windows app</li></ul>
 </section>
 <section id="heroes"><h2>THE ROSTER</h2>
   <h3 class="zenith">ZENITH VANGUARD <small>heroes</small></h3><div class="hgrid">${zen.map(heroCard).join('')}</div>
@@ -59,6 +59,7 @@ document.getElementById('site')!.innerHTML = `
 <section id="download" class="download"><h2>PLAY ON PC</h2>
   <div class="dl"><div><h3>Windows desktop app</h3><p>GPU-accelerated build with Ultra graphics, higher-resolution textures and uncapped frame rate. Windows 10/11, 64-bit, any DirectX 11 GPU (tested on an RTX 3050).</p>
     ${mobile ? '<p class="warn">Downloads are for PC only.</p>' : `<a class="btn primary" href="${INSTALLER}">⬇ DOWNLOAD ZenithUmbra-Setup.exe</a>`}<small>Unsigned indie build: if Windows SmartScreen appears, choose "More info → Run anyway".</small></div>
+  <div><h3>Online co-op</h3><p>Host a squad from the campaign menu and friends running the Windows app (or the web version) see it in the lobby and join. The game's own online node on Vercel finds players and connects everyone peer-to-peer, relaying through the node when a direct link isn't possible.</p></div>
   <div><h3>Play in the browser</h3><p>The web build auto-tunes graphics for your GPU. Chrome or Edge on a PC with a keyboard and mouse.</p>${mobile ? '' : `<a class="btn" href="${B}play.html">LAUNCH WEB VERSION</a>`}</div></div>
   <p class="src">Source code: <a href="${REPO}">${REPO.replace('https://', '')}</a></p></section>
 <footer>ZENITH//UMBRA · an original game · characters, art and audio generated for this project</footer>`;
