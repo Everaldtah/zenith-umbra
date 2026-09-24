@@ -484,6 +484,8 @@ export class World {
     const t = this.time, d = a.def, inp = a.input, L = this.level;
     a.yaw = inp.yaw; a.pitch = Math.max(-1.45, Math.min(1.45, inp.pitch));
     const wasGrounded = a.grounded;
+    // colossi can't be dragged, pulled or knocked around by heroes
+    if (a.isBoss && a.forced && (a.forced.kind === 'pull' || a.forced.kind === 'knock')) a.forced = null;
     if (a.forced) {
       const f = a.forced;
       if (t >= f.until) { a.forced = null; f.onEnd?.(); a.vel.x *= 0.3; a.vel.z *= 0.3; if (f.ignoreGravity) a.vel.y = Math.min(a.vel.y, 0); }
@@ -545,7 +547,7 @@ export class World {
     const [X, Z] = L.size;
     a.pos.x = Math.max(-X - 1, Math.min(X + 1, a.pos.x)); a.pos.z = Math.max(-Z - 1, Math.min(Z + 1, a.pos.z));
     // AI walkers never step off a ledge into the void on their own (knockbacks / pulls still can)
-    if (a.controller && !a.isPlayer && (wasGrounded || a.isBoss) && (!a.forced || a.isBoss) && !a.flying && a.def.frame !== 'drone' && a.vel.y <= 0
+    if (a.controller && !a.isPlayer && ((wasGrounded && !a.forced && a.vel.y <= 0) || a.isBoss) && !a.flying && a.def.frame !== 'drone'
       && L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.3) < a.pos.y - 5) {
       a.pos.x = x0; a.pos.z = z0; a.vel.x = 0; a.vel.z = 0;
       if (a.isBoss) a.forced = null;    // colossi stop at the edge instead of charging into the void
