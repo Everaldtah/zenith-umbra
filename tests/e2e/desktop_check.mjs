@@ -8,7 +8,7 @@ await new Promise(r => setTimeout(r, 7000));
 const b = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9333', defaultViewport: null });
 const [p] = (await b.pages()).filter(x => x.url().includes('play.html'));
 await p.evaluate(() => { const m = window.__zu.menu; m.mode = 'spectate'; m.map = 'amatsu'; m.launch(); });
-await new Promise(r => setTimeout(r, 9000));
+await new Promise(r => setTimeout(r, 20000));
 const f0 = await p.evaluate(() => window.__zu.game.framesRendered);
 await new Promise(r => setTimeout(r, 5000));
 const info = await p.evaluate(f0 => { const g = window.__zu.game; const c = g.renderer.getContext(); const e = c.getExtension('WEBGL_debug_renderer_info');

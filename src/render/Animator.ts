@@ -134,7 +134,8 @@ export class Animator {
           st.tip.copy(headW).addScaledVector(dir, len);
         }
         this.aimBone(seg, dirToM(st.tip.clone().sub(headW)), base);
-        this.posCache.clear();
+        // only this chain's downstream bones moved: invalidate just those cache entries
+        this.posCache.delete(next); if (seg === b1) this.posCache.delete(b3);
       }
     }
   }
