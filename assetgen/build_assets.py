@@ -86,7 +86,7 @@ def main():
         aid, p, kind, h = j
         big = aid.startswith('boss_')
         # web: props are background dressing -> heavy decimation; desktop keeps far more detail
-        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.12 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.01)
+        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.3 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.005)
         gltf(p, HQ / f'{aid}.glb', 2048 if kind != 'prop' else 1024, 0.45 if kind == 'prop' else 0.7 if kind == 'static' else None)
         print(f"{'ok ' if ok else 'ERR'} {aid:24s} {(PUB / f'{aid}.glb').stat().st_size / 1e6 if ok else 0:5.2f} MB", flush=True)
         return j, ok

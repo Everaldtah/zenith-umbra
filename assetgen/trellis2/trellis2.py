@@ -87,9 +87,8 @@ pipe = Trellis2ImageTo3DPipeline.from_pretrained("microsoft/TRELLIS.2-4B")
 # T4 has no bf16 tensor cores: run every flow model / decoder in fp16
 for k, m in pipe.models.items():
     try:
-        m.to(torch.float16)
-        if hasattr(m, "dtype"): m.dtype = torch.float16
-        if hasattr(m, "convert_to_fp16"): m.convert_to_fp16()
+        # only the transformer torso runs in reduced precision (inputs / outputs stay fp32, as upstream does)
+        if hasattr(m, "convert_to") and getattr(m, "dtype", None) == torch.bfloat16: m.convert_to(torch.float16)
     except Exception as e: print("fp16 convert", k, e)
 pipe.cuda()
 publish("loaded", gpu=os.environ.get("CUDA_VISIBLE_DEVICES"), mem=round(torch.cuda.memory_allocated() / 1e9, 2))

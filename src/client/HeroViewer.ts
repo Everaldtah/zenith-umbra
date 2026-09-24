@@ -1,6 +1,7 @@
 // Hero viewer: studio-lit 3D turntable for every hero, villain, pilot and campaign colossus, with animation
 // states (treadmill locomotion so the foot IK and spring physics can be inspected) and the skins locker.
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { HEROES, HERO, TEAM_NAME, isAbility, type HeroDef } from '../data/heroes';
 import { BOSSES, ENEMIES } from '../campaign/data';
 import { Actor } from '../game/Actor';
@@ -67,6 +68,8 @@ export class HeroViewer {
 
   private buildStudio() {
     const s = this.scene;
+    s.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    s.environmentIntensity = 0.7;
     s.add(new THREE.HemisphereLight('#dfe8ff', '#20242e', 1.1));
     const key = new THREE.DirectionalLight('#fff4e6', 2.6); key.position.set(3, 6, 4); key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -12, right: 12, top: 20, bottom: -2, near: 0.5, far: 60 });

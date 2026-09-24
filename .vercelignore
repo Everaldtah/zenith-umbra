@@ -1,0 +1,7 @@
+assetgen
+desktop
+tests
+dist
+node_modules
+.git
+*.log

@@ -14,3 +14,5 @@ tests/sim-report.jsonl
 tests/diag.txt
 tests/campaign-run.log
 tests/lab-report.json
+
+.vercel

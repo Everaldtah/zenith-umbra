@@ -50,6 +50,28 @@ function worldUV(g: THREE.BufferGeometry) {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
+/** cherry-blossom canopy (image-to-3D keeps the trunk but loses thin foliage) */
+function blossoms(s: number): THREE.Object3D {
+  const n = 70;
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const mat = new THREE.MeshStandardMaterial({ color: '#ffb3cf', emissive: new THREE.Color('#ff8fb8'), emissiveIntensity: 0.18, roughness: 0.8, flatShading: true });
+  const inst = new THREE.InstancedMesh(geo, mat, n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * s * 0.42;
+    p.set(Math.cos(a) * r, s * (0.62 + rnd() * 0.3) - r * 0.25, Math.sin(a) * r);
+    const k = s * (0.07 + rnd() * 0.07);
+    sc.set(k * 1.3, k, k * 1.3);
+    q.setFromEuler(new THREE.Euler(rnd(), rnd() * 6, rnd()));
+    inst.setMatrixAt(i, m.compose(p, q, sc));
+    inst.setColorAt(i, new THREE.Color().setHSL(0.93 + rnd() * 0.04, 0.7, 0.72 + rnd() * 0.12));
+  }
+  inst.castShadow = true;
+  return inst;
+}
+
 export class MapScene {
   group = new THREE.Group();
   sun: THREE.DirectionalLight;
@@ -216,6 +238,7 @@ export class MapScene {
     m.position.x = -cx; m.position.z = -cz;
     holder.remove(stand);
     holder.add(m);
+    if (id.includes('sakura')) holder.add(blossoms(s));
   }
 
   private makeParticles(m: MapDef, q: Quality) {

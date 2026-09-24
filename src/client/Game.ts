@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PLAY_MAPS } from '../data/maps';
 import { HEROES, HERO } from '../data/heroes';
 import { createMatch, createCampaign, type Match } from '../game/setup';
@@ -58,6 +59,7 @@ export class Game {
   labMapIdx = 0;
   galleryAngle = 0;
   framesRendered = 0;
+  envTex: THREE.Texture | null = null;
   bossCam: { actor: Actor; until: number; t0: number } | null = null;
   hostSync: HostSync | null = null;
   clientSync: ClientSync | null = null;
@@ -140,6 +142,10 @@ export class Game {
     this.bossCam = null;
     const w = this.match.world;
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
+    // image-based lighting so metallic / dark generated materials still catch light
+    this.envTex ??= new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this.envTex;
+    this.scene.environmentIntensity = 0.55;
     this.fx = new Fx(this.scene, q.fxCap);
     const viewerTeam = this.match.player?.team ?? 'zenith';
     for (const a of w.actors) this.addView(a, viewerTeam);
