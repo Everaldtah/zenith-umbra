@@ -20,3 +20,5 @@ tests/prof/
 .venv311/
 cinematic/work/
 film.html.wip
+.venvgpu/
+__pycache__/
