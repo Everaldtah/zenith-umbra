@@ -31,12 +31,22 @@ WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secon
    - Skin weights use bone heat, or a geodesic voxel solver (`blender/weights.py`) when heat fails.
    - Loose armour plates and held weapons bind rigidly to the right bone.
    - Hair, cape and skirt spring-bone chains are detected automatically.
-4. **Runtime animation** is fully procedural (`src/render/Animator.ts`):
-   - two-bone IK legs with feet locked in world space (no sliding), cadence-based gait
-   - aim-driven spine
-   - flyer wing flaps
-   - verlet spring physics for hair and cloth
+4. **Runtime animation** (`src/render/Animator.ts`) layers a mocap clip library over a procedural base:
+   - **clips** (optional, `public/anim/`): Quaternius **Universal Animation Library 1 & 2** (CC0) and **Mixamo** gap-fillers, retargeted on load onto every hero (see *Animation library* below): 8-way idle/walk/jog/sprint blend space, jumps, deaths, hit reactions, melee combos one hit per swing, punches, rolls, parkour
+   - **procedural**, always on top: two-bone IK legs with feet locked in world space (no sliding), aim-driven spine, recoil and flinch, Tenkai-Oh's hammer, flyers and mechs, wing flaps, verlet spring physics for hair and cloth. With no clip library the game is fully procedural, as before
+   - **first-person arms** (`src/render/FirstPerson.ts`): each hero's own model as a viewmodel, with Blender-authored per-hero clips where they exist and a procedural personality per hero otherwise
 5. `build_assets.py` / `publish_2d.py` produce the web tier (1K textures, Draco, WebP) and the desktop tier (2K textures).
+
+## Animation library
+The clips aren't in the repo. Download them yourself (itch.io / Adobe login), pack them, and the game picks them up:
+1. Get **UAL1** and **UAL2** from quaternius.itch.io/universal-animation-library(-2) (glTF). Optionally add **Mixamo** clips as *FBX Binary, Without Skin, 30 fps, In Place* in one folder.
+2. `blender -b -P assetgen/blender/anim_pack.py -- --ual1 UAL1.glb --ual2 UAL2.glb --mixamo mixamo_fbx/ --out public/anim` removes the meshes, writes `UAL1.glb` / `UAL2.glb` / `mixamo.glb` and adds them to `public/anim/manifest.json`. Use `--only "Idle|Jog|..."` to trim the set.
+3. That's all. On load, `src/render/Retarget.ts` maps any humanoid skeleton by bone name and hierarchy: UAL, Mixamo, Rigify, Biped, old Quaternius; T-pose or A-pose; any units, facing or up axis. It bakes each clip to rig-independent poses: bone directions plus torso rotations, in leg lengths. `src/render/ClipLibrary.ts` then sorts them into slots by name. Locomotion is sorted by the direction and speed it actually travels, measured from the planted feet, so pack naming doesn't matter. Mirroring and time reversal fill in missing strafe and backpedal directions. Pin or exclude clips with `"slots"` / `"exclude"` in the manifest. `?anim=procedural` turns the library off.
+4. **Hero first-person arms** (the part that gives each hero personality): `blender -b -P assetgen/blender/fp_arms.py -- --hero raijin --model public/models/raijin.glb --setup work/fp_raijin.blend` builds an authoring scene on the hero's rig. The camera is the in-game eye, and IK hand/elbow controls come with a starter `fp_idle / fp_fire / fp_alt / fp_melee / fp_reload / fp_ability1 / fp_ability2 / fp_ult / fp_hit / fp_land` set. Polish the actions in Blender, then `blender -b work/fp_raijin.blend -P assetgen/blender/fp_arms.py -- --hero raijin --export public/anim` bakes them onto the arm bones and registers `fp_raijin.glb`.
+
+Credits when shipping clips: *Universal Animation Library 1 & 2 by Quaternius (CC0)*; Mixamo clips are free to use in games under Adobe's terms (don't redistribute them as raw animation files).
+
+Tests: `npm test` covers retargeting accuracy across rig styles, clip analysis, the blend space and slots, plus foot sliding in a 60 fps bot match with clips against procedural. `npm run anim:fixtures` writes GLB test packs, and `node tests/e2e/anim.mjs http://localhost:5199/` checks the library, the AI Lab and the first-person arms in the browser.
 
 Sound is fully procedural WebAudio. No audio files are used.
 

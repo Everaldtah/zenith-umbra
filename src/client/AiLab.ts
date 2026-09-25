@@ -12,7 +12,7 @@ const ANIM_STATES = ['idle', 'run', 'strafe', 'backpedal', 'jump', 'fall', 'atta
 const ALL_ABILITIES = HEROES.flatMap(h => [h.ability1.id, h.ability2.id, h.ult.id, ...('id' in h.secondary && !['bulwark', 'zoom'].includes(h.secondary.id) ? [h.secondary.id] : [])]);
 const COUNTERS = HEROES.map(h => [h.id, h.rival]);
 
-interface HeroStats { states: Set<string>; slideSum: number; slideN: number; slideMax: number; nan: number; penetrate: number; sink: number; overspeed: number; frames: number; rig: string; flyFrames: number; wingFrames: number; }
+interface HeroStats { states: Set<string>; slideSum: number; slideN: number; slideMax: number; nan: number; penetrate: number; sink: number; overspeed: number; frames: number; rig: string; flyFrames: number; wingFrames: number; clipFrames: number; clipActions: Set<string>; }
 
 export class AiLab {
   maps: Record<string, { secs: number; kills: number; falls: number; stuck: number; winner: string | null }> = {};
@@ -40,7 +40,7 @@ export class AiLab {
 
   private hs(id: string): HeroStats {
     let s = this.heroes.get(id);
-    if (!s) { s = { states: new Set(), slideSum: 0, slideN: 0, slideMax: 0, nan: 0, penetrate: 0, sink: 0, overspeed: 0, frames: 0, rig: 'mannequin', flyFrames: 0, wingFrames: 0 }; this.heroes.set(id, s); }
+    if (!s) { s = { states: new Set(), slideSum: 0, slideN: 0, slideMax: 0, nan: 0, penetrate: 0, sink: 0, overspeed: 0, frames: 0, rig: 'mannequin', flyFrames: 0, wingFrames: 0, clipFrames: 0, clipActions: new Set() }; this.heroes.set(id, s); }
     return s;
   }
 
@@ -65,8 +65,12 @@ export class AiLab {
       const v = views.get(a.id);
       if (!v) continue;
       s.rig = v.real ? (v.anim.ok ? 'rigged' : 'NO-RIG') : 'mannequin';
-      if (!a.alive) { if (t - a.deathAt < 0.5) s.states.add('death'); continue; }
+      if (!a.alive) { if (t - a.deathAt < 0.5) s.states.add('death'); if (v.anim.clip?.action) s.clipActions.add(v.anim.clip.action); continue; }
       s.frames++;
+      // --- clip library (Quaternius UAL / Mixamo): how much of the body it drives, which one-shots played
+      const cl = v.anim.clip;
+      if (cl && cl.legs > 0.5) s.clipFrames++;
+      if (cl?.action) s.clipActions.add(cl.action);
       // --- animation states actually exercised
       const lv = { x: a.vel.x, z: a.vel.z };
       const sp = Math.hypot(lv.x, lv.z);
@@ -120,7 +124,7 @@ export class AiLab {
     for (const [id, s] of this.heroes) {
       const slide = s.slideN ? s.slideSum / s.slideN : 0;
       const missing = ANIM_STATES.filter(x => !s.states.has(x) && !(x === 'backpedal' || x === 'strafe'));
-      heroes[id] = { rig: s.rig, states: [...s.states].sort(), missing, footSlide: +slide.toFixed(3), footSlideMax: +s.slideMax.toFixed(2), nan: s.nan, penetrationFrames: s.penetrate, sinkFrames: s.sink, overspeed: s.overspeed, frames: s.frames };
+      heroes[id] = { rig: s.rig, states: [...s.states].sort(), missing, footSlide: +slide.toFixed(3), footSlideMax: +s.slideMax.toFixed(2), footSlideSamples: s.slideN, nan: s.nan, clipShare: +(s.clipFrames / Math.max(1, s.frames)).toFixed(2), clipActions: [...s.clipActions].sort(), penetrationFrames: s.penetrate, sinkFrames: s.sink, overspeed: s.overspeed, frames: s.frames };
       if (s.nan) fails.push(`${id}: NaN bones`);
       if (s.rig === 'NO-RIG') fails.push(`${id}: model has no usable rig`);
       // flyers take off / land constantly and their feet hang inside gowns: allow a little more

@@ -9,7 +9,8 @@
     "preview": "vite preview --port 4173",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "serve:local": "node serve-local.mjs 4848"
+    "serve:local": "node serve-local.mjs 4848",
+    "anim:fixtures": "vitest run -c tests/tools/vitest.config.ts tests/tools/animpack.test.ts"
   },
   "dependencies": {
     "mqtt": "^5.16.0",

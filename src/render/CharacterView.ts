@@ -2,8 +2,9 @@
 // team rim light, stealth fade, shields, Solar Bulwark, death collapse.
 import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
-import { Animator } from './Animator';
+import { Animator, type AnimState } from './Animator';
 import { heroModel } from './Assets';
+import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, type HammerProp } from './Hammer';
 
 const BRIGHT_SUITS = new Set(['mirei']);
@@ -65,7 +66,7 @@ export function addLook(mat: THREE.Material, u: LookUniforms) {
 }
 
 // ---------------------------------------------------------------- fallback mannequin (same bone names as the Blender rig)
-function mannequin(a: Actor): THREE.Object3D {
+export function mannequin(a: Actor): THREE.Object3D {
   const d = a.def, H = d.height;
   const mech = d.frame === 'mech', robot = a.isRobot;
   const col = new THREE.Color(d.color), dark = new THREE.Color(a.team === 'zenith' ? '#f2f5ff' : '#1d1a24');
@@ -153,6 +154,7 @@ export class CharacterView {
     this.inner.add(this.model);
     this.anim = new Animator(this.model);
     this.hookStep();
+    this.attachClips();
     this.collectMats();
     const sg = new THREE.SphereGeometry(1, 24, 16);
     this.shieldMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: actor.def.glow, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -181,6 +183,13 @@ export class CharacterView {
   setSkin(id: string) {
     const s = skinsFor(this.actor.def.id, this.actor.def.team).find(x => x.id === id);
     if (s) { this.skin = s; applySkin(this.look, s); }
+  }
+
+  /** Quaternius UAL / Mixamo clip library (public/anim): drives the body wherever it has a clip */
+  private attachClips() {
+    if (animLib) { this.anim.useClips(animLib, this.actor.id); return; }
+    const anim = this.anim;
+    animLibrary().then(l => { if (l && this.anim === anim) anim.useClips(l, this.actor.id); });
   }
 
   private hookStep() { this.anim.onStep = (side, heavy) => this.onStep?.(this.actor, side, heavy); }
@@ -222,6 +231,7 @@ export class CharacterView {
     this.scaleFit = s;
     this.real = true;
     this.hookStep();
+    this.attachClips();
     // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path
     if (this.actor.def.primary.sweep && anim.ok) {
       this.hammer = buildHammer(anim.height);
@@ -276,13 +286,42 @@ export class CharacterView {
     }
   }
 
+  /** gameplay state -> animation state */
+  private animState(dt: number, time: number): AnimState {
+    const a = this.actor, an = a.anim;
+    const p = a.def.primary;
+    return {
+      dt, time, vel: new THREE.Vector3(a.vel.x, a.vel.y, a.vel.z), yaw: a.yaw, pitch: a.pitch,
+      grounded: a.grounded, flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
+      attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
+      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
+      barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
+      melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
+      hammer: !!this.hammer, swingSide: an.attackSide,
+      move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
+      angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
+      attackTime: an.attackKind === 'primary' ? 1 / Math.max(0.1, p.rate) : 'rate' in a.def.secondary ? 1 / Math.max(0.1, a.def.secondary.rate) : 0.6,
+    };
+  }
+
   update(dt: number, time: number, viewer: { team: string; sees: (a: Actor) => boolean }) {
     const a = this.actor;
     this.look.zuTime.value = time;
     this.group.position.set(a.pos.x, a.pos.y, a.pos.z);
     this.group.rotation.y = a.yaw;
     this.inner.scale.setScalar(a.scale);
-    // death: tip over and sink
+    // death: a death clip when the library has one (the body crumples, then sinks), else tip over and sink
+    if (!a.alive && this.anim.clipDeath) {
+      const age = time - a.deathAt;
+      this.inner.rotation.x = 0;
+      this.inner.position.y = -Math.max(0, age - 2.4) * 0.8;
+      this.group.visible = age < 3.8;
+      this.rim.value = 0;
+      if (this.hammer) this.hammer.flame.visible = false;
+      for (const j of this.jets) j.visible = false;
+      this.anim.update({ ...this.animState(dt, time), vel: new THREE.Vector3(), dead: true, deathAge: age, grounded: true, flying: false });
+      return;
+    }
     if (!a.alive) {
       const k = Math.min(1, (time - a.deathAt) / (a.def.frame === 'mech' ? 1.1 : 0.7));
       this.inner.rotation.x = -k * k * Math.PI / 2 * 0.95;
@@ -325,18 +364,8 @@ export class CharacterView {
       this.barrierMesh.position.set(0, 1.9 * a.scale, (1.7 - 3.2) * a.scale);
     }
     // animation
+    this.anim.update(this.animState(dt, time));
     const an = a.anim;
-    this.anim.update({
-      dt, time, vel: new THREE.Vector3(a.vel.x, a.vel.y, a.vel.z), yaw: a.yaw, pitch: a.pitch,
-      grounded: a.grounded, flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
-      attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
-      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
-      barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
-      melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
-      hammer: !!this.hammer, swingSide: an.attackSide,
-      move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
-      angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
-    });
     if (this.hammer) {
       // rocket thruster: roars through the swing, the sun cores flare on impact
       const age = time - an.attackAt, on = an.attackKind === 'primary' && age > 0.12 && age < 0.45;   // fires on the strike, not the wind-up

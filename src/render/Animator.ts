@@ -5,12 +5,10 @@
 //  - flyers: body lean into velocity, dangling legs, flapping wing bones; mechs: slow heavy stride with stomp events
 import * as THREE from 'three';
 
-export const BONES = ['root', 'hips', 'spine', 'chest', 'neck', 'head',
-  'shoulder_L', 'upperarm_L', 'forearm_L', 'hand_L', 'shoulder_R', 'upperarm_R', 'forearm_R', 'hand_R',
-  'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R',
-  'hair_B_1', 'hair_B_2', 'hair_B_3', 'hair_L_1', 'hair_L_2', 'hair_L_3', 'hair_R_1', 'hair_R_2', 'hair_R_3',
-  'skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'skirt_F_1', 'skirt_F_2', 'skirt_F_3'] as const;
-type BoneName = typeof BONES[number];
+import { BONES, RT_INDEX, type BoneName, type RtBone } from './Rig';
+import { ClipLayer, poseDir, type LayerOut } from './ClipLayer';
+import type { ClipLibrary } from './ClipLibrary';
+export { BONES };
 /** spring chains: [segment1, segment2, tip marker, parent, stiffness, damping, max angle (rad)] */
 const CHAINS: [BoneName, BoneName, BoneName, BoneName, number, number, number][] = [
   ['hair_B_1', 'hair_B_2', 'hair_B_3', 'head', 0.14, 0.84, 0.8], ['hair_L_1', 'hair_L_2', 'hair_L_3', 'head', 0.14, 0.84, 0.8], ['hair_R_1', 'hair_R_2', 'hair_R_3', 'head', 0.14, 0.84, 0.8],
@@ -36,6 +34,9 @@ export interface AnimState {
   swingSide?: number;       // +1 sweeps right-to-left, -1 left-to-right (swings alternate)
   angel?: boolean;          // Mirei: angelic combat-medic flight (upright hover, swept-back dash, glide)
   gliding?: boolean;        // slow-fall glide with the wings spread
+  dead?: boolean;           // clip layer: play a death clip (CharacterView only keeps animating the dead if one exists)
+  deathAge?: number;
+  attackTime?: number;      // seconds between primary attacks (melee combo hits are time-scaled to it)
   scale: number;            // world metres per model unit
   pos: THREE.Vector3;       // actor world position (feet)
 }
@@ -108,7 +109,20 @@ export class Animator {
   onStep: ((side: number, heavy: boolean) => void) | null = null;
   ok = false;
   private lastStance = [true, true];
-  plant: (THREE.Vector3 | null)[] = [null, null];                // world-space planted foot positions
+  /** world-space planted foot positions this frame (procedural gait or clip contacts): read by the AI Test Lab */
+  plant: (THREE.Vector3 | null)[] = [null, null];
+  private pplant: (THREE.Vector3 | null)[] = [null, null];      // procedural gait's planted feet
+  // ---- clip layer (Quaternius UAL / Mixamo library, see ClipLayer.ts); null = fully procedural
+  layer: ClipLayer | null = null;
+  clip: LayerOut | null = null;
+  private clipW = 0;                                              // eligibility fade (flying, mechs: procedural)
+  private cplant: (THREE.Vector3 | null)[] = [null, null];
+  private cerr = [new THREE.Vector3(), new THREE.Vector3()];
+  private cLegs = 0;
+  /** drive this rig from an animation library (null: back to fully procedural) */
+  useClips(lib: ClipLibrary | null, seed = 0) { this.layer = lib && this.ok ? new ClipLayer(lib, seed) : null; }
+  /** a death clip is available: the view keeps animating the body instead of tipping it over */
+  get clipDeath() { return !!this.layer?.lib.has('death'); }
   private swingFrom: (THREE.Vector3 | null)[] = [null, null];
   private restepT = [0, 0];
   // dynamic layer (springs)
@@ -292,6 +306,52 @@ export class Animator {
     return [knee.clone().sub(root).normalize(), end.sub(knee).normalize()];
   }
 
+  /**
+   * First-person viewmodel pose: torso and legs at rest, head (and its hair) collapsed out of the camera, arms solved by
+   * IK to hand targets given in MODEL space. `hands[i]` null leaves that arm hanging (out of view). `prop` places the
+   * held prop (Tenkai-Oh's hammer) along a grip.
+   */
+  updateFirstPerson(o: { hands: [THREE.Vector3 | null, THREE.Vector3 | null]; poles?: [THREE.Vector3, THREE.Vector3]; wrist?: [THREE.Quaternion | null, THREE.Quaternion | null];
+    prop?: { pos: THREE.Vector3; dir: THREE.Vector3; side: THREE.Vector3 } | null }) {
+    if (!this.ok) return;
+    const R = this.rest as Record<BoneName, Rest>;
+    this.modelQ.clear();
+    for (const n of ['hips', 'spine', 'chest', 'neck', 'head', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R'] as BoneName[]) if (this.bones[n]) this.applyDelta(n, new THREE.Quaternion());
+    this.bones.hips!.position.copy(this.hipsRestLocal);
+    for (const n of ['head'] as BoneName[]) this.bones[n]?.scale.setScalar(1e-3);
+    for (let i = 0; i < 2; i++) {
+      const S = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
+      const ua = `upperarm_${S}` as BoneName, fa = `forearm_${S}` as BoneName, hn = `hand_${S}` as BoneName;
+      if (!this.bones[ua] || !this.bones[fa]) continue;
+      if (this.bones[`shoulder_${S}` as BoneName]) this.applyDelta(`shoulder_${S}` as BoneName, new THREE.Quaternion());
+      const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[hn] ?? R[fa]).p) || l1;
+      const tgt = o.hands[i];
+      if (tgt) {
+        const [u, l] = this.ik(R[ua].p, tgt, l1, l2, o.poles?.[i] ?? new THREE.Vector3(side * 0.7, -1, -0.2));
+        this.aimBone(ua, u); this.aimBone(fa, l);
+      } else {
+        const down = new THREE.Vector3(side * 0.15, -1, 0).normalize();
+        this.aimBone(ua, down); this.aimBone(fa, down);
+      }
+      if (this.bones[hn]) {
+        const Qh = (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q);
+        const w = o.wrist?.[i];
+        if (w) Qh.premultiply(w);
+        this.setModelQ(hn, Qh);
+      }
+    }
+    if (this.prop) {
+      this.prop.visible = !!o.prop;
+      if (o.prop) {
+        const H = o.prop.dir.clone().normalize(), T = o.prop.side.clone().addScaledVector(H, -o.prop.side.dot(H)).normalize();
+        this.prop.position.copy(o.prop.pos).addScaledVector(H, -0.1 * this.hammerLen);
+        this.prop.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, H, new THREE.Vector3().crossVectors(T, H)));
+      }
+    }
+  }
+  /** undo the first-person head collapse (the view is reused in third person) */
+  restoreHead() { this.bones.head?.scale.setScalar(1); }
+
   update(s: AnimState) {
     if (!this.ok) return;
     const R = this.rest as Record<BoneName, Rest>;
@@ -310,6 +370,15 @@ export class Animator {
     this.moveBlend += (moving - this.moveBlend) * Math.min(1, dt * 10);
     this.airBlend += ((s.grounded ? 0 : 1) - this.airBlend) * Math.min(1, dt * 8);
     this.flyBlend += ((s.flying ? 1 : 0) - this.flyBlend) * Math.min(1, dt * 5);
+    // ---------------- clip layer: a baked mocap / keyframed pose, blended per body region below
+    const eligible = !heavy && s.frame !== 'drone' && !s.flying && !s.hammer && !s.move;
+    this.clipW += ((eligible || s.dead ? 1 : 0) - this.clipW) * Math.min(1, dt * 8);
+    const L = this.layer ? this.layer.update(s, { speed: speed / this.legLen, angle: Math.atan2(lvx, lvz), moveBlend: this.moveBlend, airBlend: this.airBlend, eligible: this.clipW > 0.01 || !!s.dead }) : null;
+    this.clip = L;
+    const cw = L ? (s.dead ? 1 : this.clipW) : 0;
+    const wLegs = L ? L.legs * cw : 0, wTorso = L ? L.torso * cw : 0;
+    const cq = (b: RtBone) => (L && L.pose.w[RT_INDEX[b]] ? L.pose.q[RT_INDEX[b]] : null);
+    this.cLegs = wLegs;
     this.atk = Math.max(0, 1 - s.attackAge / (s.attackKind === 'secondary' || s.attackKind === 'lance' ? 0.45 : 0.3));
     const punching = s.attackKind === 'punch', swinging = !!s.hammer && s.attackKind === 'primary';
     if (punching || swinging) this.atk = 0;
@@ -328,7 +397,7 @@ export class Animator {
     {
       let mv = speed > 0.6 && moving ? Math.atan2(lvx, lvz) : 0;
       if (Math.abs(mv) > 1.95) mv -= Math.sign(mv) * Math.PI;          // backpedal: legs face forward, walk backwards
-      const target = Math.max(-1.05, Math.min(1.05, mv)) * this.moveBlend;
+      const target = Math.max(-1.05, Math.min(1.05, mv)) * this.moveBlend * (1 - wLegs);   // 8-way clips turn the legs themselves
       const yawRate = (() => { let d = s.yaw - this.lastYaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return dt > 0 ? d / dt : 0; })();
       this.lastYaw = s.yaw;
       // when turning in place the legs lag behind the torso for a beat
@@ -358,22 +427,22 @@ export class Animator {
       const ph = ((this.phase + i * 0.5) % 1 + 1) % 1;
       let tgt: THREE.Vector3;
       if (!s.grounded || this.airBlend > 0.5) {
-        this.plant[i] = null;
+        this.pplant[i] = null;
         tgt = restFoot.clone();
       } else if (moving) {
         const stance = ph < duty;
         if (stance) {
-          if (!this.plant[i]) {
+          if (!this.pplant[i]) {
             // touch-down: plant where the stride says this foot lands, then keep it there in the world
             const land = restFoot.clone().addScaledVector(md, travel * (0.5 - ph / duty));
-            this.plant[i] = toWorld(land); this.plant[i]!.y = s.pos.y + this.footY * s.scale;
-            this.onStep?.(i, heavy);
+            this.pplant[i] = toWorld(land); this.pplant[i]!.y = s.pos.y + this.footY * s.scale;
+            if (this.cLegs < 0.5) this.onStep?.(i, heavy);
           }
-          tgt = toModel(this.plant[i]!);
+          tgt = toModel(this.pplant[i]!);
         } else {
           // swing: from lift-off toward the predicted landing spot, with a lift arc
           const u = (ph - duty) / (1 - duty);
-          if (this.plant[i]) { this.swingFrom[i] = toModel(this.plant[i]!); this.plant[i] = null; }
+          if (this.pplant[i]) { this.swingFrom[i] = toModel(this.pplant[i]!); this.pplant[i] = null; }
           const from = this.swingFrom[i] ?? restFoot.clone().addScaledVector(md, -travel / 2);
           const land = restFoot.clone().addScaledVector(md, travel / 2);
           const k = u * u * (3 - 2 * u);
@@ -385,14 +454,14 @@ export class Animator {
         this.lastStance[i] = stance;
       } else {
         // standing: feet stay put in the world; re-step if the body turned or drifted too far from them
-        if (!this.plant[i]) { this.plant[i] = toWorld(restFoot); this.plant[i]!.y = s.pos.y + this.footY * s.scale; }
-        let m = toModel(this.plant[i]!);
+        if (!this.pplant[i]) { this.pplant[i] = toWorld(restFoot); this.pplant[i]!.y = s.pos.y + this.footY * s.scale; }
+        let m = toModel(this.pplant[i]!);
         if (m.distanceTo(restFoot) > this.legLen * 0.32 && this.restepT[i] <= 0 && this.restepT[1 - i] <= 0) { this.restepT[i] = 0.22; this.swingFrom[i] = m.clone(); }
         if (this.restepT[i] > 0) {
           this.restepT[i] -= dt;
           const u = 1 - Math.max(0, this.restepT[i]) / 0.22;
           m = this.swingFrom[i]!.clone().lerp(restFoot, u); m.y = this.footY + Math.sin(u * Math.PI) * lift * 0.5;
-          if (this.restepT[i] <= 0) { this.plant[i] = toWorld(restFoot); this.plant[i]!.y = s.pos.y + this.footY * s.scale; this.onStep?.(i, heavy); }
+          if (this.restepT[i] <= 0) { this.pplant[i] = toWorld(restFoot); this.pplant[i]!.y = s.pos.y + this.footY * s.scale; if (this.cLegs < 0.5) this.onStep?.(i, heavy); }
         }
         tgt = m;
       }
@@ -415,9 +484,34 @@ export class Animator {
       // never reach further than the leg allows (keeps IK stable on hard stops)
       const off = tgt.clone().sub(restFoot); off.y = 0;
       const maxOff = this.legLen * 0.75;
-      if (off.length() > maxOff) { tgt.sub(off).add(off.setLength(maxOff)); this.plant[i] = null; }
+      if (off.length() > maxOff) { tgt.sub(off).add(off.setLength(maxOff)); this.pplant[i] = null; }
       this.foot[i].copy(tgt);
     }
+    // clip feet: the clip's foot positions (scaled to this rig's legs) locked in the world while in contact
+    if (L && wLegs > 0.001) {
+      for (let i = 0; i < 2; i++) {
+        // the clip's foot relative to its own hip joint, hung from this rig's hip joint (moved by the clip's hips): feet
+        // land where the clip puts them whatever the source rest pose (straight T / A pose or not) and stance width
+        const fb: RtBone = i === 0 ? 'foot_L' : 'foot_R', tb: RtBone = i === 0 ? 'thigh_L' : 'thigh_R';
+        const P = L.pose.p, dh = L.pose.d[RT_INDEX.hips];
+        const ct = P[RT_INDEX[fb]].clone().sub(P[RT_INDEX[tb]]).add(dh).multiplyScalar(this.legLen).add(R[tb].p);
+        ct.y += this.footY - (R[tb].p.y - this.legLen);    // a straight standing leg in the clip = this rig's rest ankle height
+        let tgt = ct;
+        if (L.pose.contact[i] > 0.5 && L.loco > 0.5 && moving && s.grounded) {
+          if (!this.cplant[i]) { this.cplant[i] = toWorld(ct); if (wLegs > 0.5) this.onStep?.(i, heavy); }
+          const lk = toModel(this.cplant[i]!); lk.y = ct.y;
+          if (lk.distanceTo(ct) > this.legLen * 0.25) { this.cplant[i] = null; this.cerr[i].copy(lk).sub(ct); }
+          else { tgt = lk; this.cerr[i].copy(lk).sub(ct); }
+        } else {
+          // released: ease out the lock error instead of popping to the clip
+          this.cplant[i] = null;
+          this.cerr[i].multiplyScalar(Math.exp(-dt * 18));
+          tgt = ct.clone().add(this.cerr[i]);
+        }
+        this.foot[i].lerp(tgt, wLegs);
+      }
+    } else { this.cplant[0] = this.cplant[1] = null; }
+    for (let i = 0; i < 2; i++) this.plant[i] = wLegs > 0.5 ? this.cplant[i] : this.pplant[i];
     // body bob: lowest at mid-stance (twice per cycle)
     const bobPh = this.phase * 2 * Math.PI * 2;
     this.bob = (Math.cos(bobPh) * 0.5 - 0.5) * this.legLen * (heavy ? 0.06 : 0.035) * this.moveBlend;
@@ -432,6 +526,7 @@ export class Animator {
     hipsOff.z += Math.max(0, this.punchExt) * this.punchW * 0.05 * this.legLen;
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
     if (s.angel && s.flying) hipsOff.y += Math.sin(s.time * 1.8) * 0.025 * this.legLen * (1 - Math.min(1, speed / (this.legLen * 6)));
+    if (L && wLegs > 0) hipsOff.lerp(L.pose.d[RT_INDEX.hips].clone().multiplyScalar(this.legLen), wLegs);
     // lean into velocity with a damped spring (overshoots when you stop or turn) + roll into turns
     const leanTarget = new THREE.Vector2(
       Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.14) + this.turnRoll,
@@ -452,6 +547,10 @@ export class Animator {
     // ---------------- hips (face the movement direction)
     const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.22).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift + stepRoll));
     if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
+    // clip torso: the clip's deltas with the gameplay additives on top (aim pitch, flinch, recoil)
+    const withAim = (q: THREE.Quaternion | null, pitch: number) => q ? q.clone().premultiply(rot(X, pitch)) : null;
+    const blendD = (D: THREE.Quaternion, q: THREE.Quaternion | null, w: number) => { if (q && w > 0) D.slerp(q, w); return D; };
+    blendD(Dh, cq('hips'), wLegs);
     this.applyDelta('hips', Dh);
     const hb = this.bones.hips!;
     hb.position.copy(this.hipsRestLocal).add(_v.copy(hipsOff).applyMatrix3(this.hipsParentInv));
@@ -460,42 +559,54 @@ export class Animator {
     const breath = Math.sin(s.time * 1.6) * 0.015;
     const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
     const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0) + (charging ? 0.38 : 0))).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
+    blendD(Ds, withAim(cq('spine'), aimP * 0.2 - this.flinch * 0.6), wTorso);
     if (this.bones.spine) this.applyDelta('spine', Ds);
     const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6 + (charging ? -0.35 : 0)));
+    blendD(Dc, withAim(cq('chest'), aimP * 0.5 - this.flinch - this.recoil * 0.9), wTorso);
     this.applyDelta('chest', Dc);
     const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
+    blendD(Dn, withAim(cq('neck'), aimP * 0.7 - this.flinch), wTorso);
     if (this.bones.neck) this.applyDelta('neck', Dn);
     // the head keeps the eyes on the aim and glances around when idle
     const look = Math.sin(s.time * 0.37) * 0.12 * (1 - this.moveBlend) * (1 - Math.min(1, this.atk * 3));
     const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02));
+    blendD(Dhd, withAim(cq('head'), aimP + this.recoil * 0.3 - this.flinch), wTorso);
     this.applyDelta('head', Dhd);
     // ---------------- legs (IK)
     const hipsPos = R.hips.p.clone().add(hipsOff);
     for (let i = 0; i < 2; i++) {
-      const L = i === 0 ? 'L' : 'R';
-      const th = R[`thigh_${L}` as BoneName], sh = R[`shin_${L}` as BoneName];
+      const L_ = i === 0 ? 'L' : 'R';
+      const th = R[`thigh_${L_}` as BoneName], sh = R[`shin_${L_}` as BoneName];
       const hipJ = th.p.clone().sub(R.hips.p).applyQuaternion(Dh).add(hipsPos);
       const ft = this.foot[i].clone(); ft.y = Math.max(ft.y, this.footY * 0.6);
       const pole = new THREE.Vector3(0, 0, 1).applyQuaternion(Dh);
+      if (L && wLegs > 0) {
+        // the clip's knee direction (off the hip-ankle line) steers the IK bend: deep crouches, rolls, kneeling deaths
+        const P = L.pose.p, a = P[RT_INDEX[`thigh_${L_}` as RtBone]], k = P[RT_INDEX[`shin_${L_}` as RtBone]], f = P[RT_INDEX[`foot_${L_}` as RtBone]];
+        const af = f.clone().sub(a).normalize(), kd = k.clone().sub(a); kd.addScaledVector(af, -kd.dot(af));
+        if (kd.lengthSq() > 1e-6) pole.lerp(kd.normalize(), wLegs).normalize();
+      }
       const [ud, ld] = this.ik(hipJ, ft, this.thigh, this.shin, pole);
-      const Dt = this.aimBone(`thigh_${L}` as BoneName, ud);
+      const Dt = this.aimBone(`thigh_${L_}` as BoneName, ud);
       void sh;
-      this.aimBone(`shin_${L}` as BoneName, ld);
+      this.aimBone(`shin_${L_}` as BoneName, ld);
       void Dt;
       // feet stay level with the ground, toes pitch a little during swing
       const toe = (this.foot[i].y - this.footY) / Math.max(1e-3, this.legLen) * -1.2;
-      this.applyDelta(`foot_${L}` as BoneName, rot(X, toe).premultiply(rot(Y, hipSway * 0.3)));
+      this.applyDelta(`foot_${L_}` as BoneName, blendD(rot(X, toe).premultiply(rot(Y, hipSway * 0.3)), cq(`foot_${L_}` as RtBone), wLegs));
     }
     // ---------------- arms
     const armSwing = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.25 : 0.4) * this.moveBlend * Math.min(1, speed / 5 + 0.3);
     const aimDir = new THREE.Vector3(0, Math.sin(s.pitch), Math.cos(s.pitch)).normalize();
+    const armAct = L ? L.armsAction * cw : 0;
     for (let i = 0; i < 2; i++) {
-      const L = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
-      const ua = `upperarm_${L}` as BoneName, fa = `forearm_${L}` as BoneName;
+      const S = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
+      const ua = `upperarm_${S}` as BoneName, fa = `forearm_${S}` as BoneName;
       if (!this.bones[ua] || !this.bones[fa]) continue;
-      if (this.bones[`shoulder_${L}` as BoneName]) this.applyDelta(`shoulder_${L}` as BoneName, Dc);
+      const cu = L && L.pose.w[RT_INDEX[ua as RtBone]] && L.pose.w[RT_INDEX[fa as RtBone]] ? poseDir(L.pose, ua as RtBone, fa as RtBone) : null;
+      const cl = L && L.pose.w[RT_INDEX[fa as RtBone]] && L.pose.w[RT_INDEX[`hand_${S}` as RtBone]] ? poseDir(L.pose, fa as RtBone, `hand_${S}` as RtBone) : null;
       const shoulder = R[ua].p.clone().sub(R.chest.p).applyQuaternion(Dc).add(R.chest.p).add(hipsOff);
-      const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[`hand_${L}` as BoneName] ?? R[fa]).p) || l1;
+      const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[`hand_${S}` as BoneName] ?? R[fa]).p) || l1;
       // relaxed pose: rest direction pulled 25% toward straight down, swung with the gait
       const restD = R[ua].dir.clone().applyQuaternion(Dc);
       const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), s.angel ? 0.1 : flyer && s.flying ? 0.05 : 0.3).normalize();
@@ -512,11 +623,11 @@ export class Animator {
       let over: { hand: THREE.Vector3; w: number } | null = null;
       const leftFree = s.move === 'shatter' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
       if (hs && (i === 1 || !leftFree)) {
-        const L_ = this.height;
+        const HH = this.height;
         const Sh = R.upperarm_L && R.upperarm_R ? R.upperarm_L.p.clone().add(R.upperarm_R.p).multiplyScalar(0.5).add(hipsOff) : R.chest.p.clone().add(hipsOff);
         const dirH = new THREE.Vector3(Math.sin(hs.th), 0, Math.cos(hs.th));
         const H = new THREE.Vector3(Math.sin(hs.th) * Math.cos(hs.ph), Math.sin(hs.ph), Math.cos(hs.th) * Math.cos(hs.ph));
-        const G = Sh.clone().add(new THREE.Vector3(0, hs.gy * L_, 0)).addScaledVector(dirH, hs.d * this.armLen);
+        const G = Sh.clone().add(new THREE.Vector3(0, hs.gy * HH, 0)).addScaledVector(dirH, hs.d * this.armLen);
         const hand = i === 1 ? G : G.clone().addScaledVector(H, 0.12 * this.hammerLen);
         // the off hand lets go at the extremes (grip behind its shoulder or out of reach): a two-handed grip there
         // tears an auto-rigged shoulder; it rejoins the haft as the hammer comes round
@@ -529,13 +640,17 @@ export class Animator {
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
       } else if (i === 0 && charging) {
         over = { hand: shoulder.clone().add(new THREE.Vector3(-0.15, 0.05, 0.75).multiplyScalar(l1 + l2)), w: 1 };
-      } else if (i === 0 && this.punchW > 0.01) {
+      } else if (i === 0 && this.punchW > 0.01 && armAct < 0.3) {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
       }
       const lead = i === 1 ? 1 : 0.35;
-      const act = Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
+      const act = (1 - armAct) * Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
+      // clip arms: a one-shot (combo hit, punch, cast) owns them; idle / locomotion arms give way to the weapon guard
+      const wArm = over ? 0 : armAct + (1 - armAct) * (L ? L.armsLoco * cw : 0) * (1 - readyW * 0.8) * (1 - Math.min(1, act));
+      const put = (n: BoneName, dir: THREE.Vector3, c: THREE.Vector3 | null) => this.aimBone(n, c && wArm > 0 ? dir.clone().lerp(c, wArm).normalize() : dir);
+      if (this.bones[`shoulder_${S}` as BoneName]) this.applyDelta(`shoulder_${S}` as BoneName, blendD(Dc.clone(), cq(`shoulder_${S}` as RtBone), wArm));
       if (over) {
         const [u, l] = this.ik(shoulder, over.hand, l1, l2, new THREE.Vector3(side * 0.5, -1, -0.4));
         this.aimBone(ua, relaxed.clone().lerp(u, over.w).normalize());
@@ -548,12 +663,12 @@ export class Animator {
         const [u, l] = this.ik(shoulder, hand, l1, l2, new THREE.Vector3(side * 0.4, -1, -0.6));
         const w = Math.min(1, act);
         const uD = relaxed.clone().lerp(u, w).normalize();
-        const Du = this.aimBone(ua, uD);
+        const Du = put(ua, uD, cu);
         const lD = relaxed.clone().lerp(l, w).normalize();
-        this.aimBone(fa, lD);
+        put(fa, lD, cl);
         void Du;
       } else {
-        const Du = this.aimBone(ua, relaxed);
+        const Du = put(ua, relaxed, cu);
         // slight natural elbow bend
         // forearms bend up toward the centre line (holding the weapon / focus) in the ready stance
         const fore = new THREE.Vector3(-side * 0.35, -0.12, 1).applyQuaternion(Dc).normalize();
@@ -562,11 +677,16 @@ export class Animator {
         const lD = s.angel
           ? R[fa].dir.clone().applyQuaternion(Du).lerp(fore, 0.04 + 0.08 * this.moveBlend).normalize()
           : relaxed.clone().lerp(fore, 0.18 + 0.15 * this.moveBlend + this.readyW * 0.55).normalize();
-        this.aimBone(fa, lD);
+        put(fa, lD, cl);
         void Du;
       }
-      const hn = `hand_${L}` as BoneName;
-      if (this.bones[hn]) this.setModelQ(hn, (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q));
+      const hn = `hand_${S}` as BoneName;
+      if (this.bones[hn]) {
+        const Qh = (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q);
+        const ch = cq(hn as RtBone);
+        if (ch && wArm > 0) Qh.slerp(ch.clone().multiply(R[hn].q), wArm);
+        this.setModelQ(hn, Qh);
+      }
     }
     // ---------------- held hammer: pommel just below the right hand, haft along the swing path, head across it
     if (this.prop) {

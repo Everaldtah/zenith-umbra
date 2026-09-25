@@ -19,9 +19,11 @@ import type { Mode, GameEvent } from '../game/World';
 import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
+import { FirstPersonArms } from '../render/FirstPerson';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
 import { loadManifest } from '../render/Assets';
+import { animLibrary } from '../render/ClipLibrary';
 import { sfx } from '../audio/Sfx';
 import { Input, KEYS } from './Input';
 import { Hud } from './Hud';
@@ -45,6 +47,9 @@ export class Game {
   mapScene: MapScene | null = null;
   fx: Fx | null = null;
   views = new Map<number, CharacterView>();
+  /** first-person arms (viewmodel), drawn in their own pass over the world */
+  fp: FirstPersonArms | null = null;
+  private fpAim = { yaw: 0, pitch: 0 };
   lab: AiLab | null = null;
   opts: StartOpts | null = null;
   running = false;
@@ -121,7 +126,8 @@ export class Game {
 
   async start(o: StartOpts) {
     this.stop();
-    await loadManifest();
+    // hero GLB manifest + the animation clip library (public/anim; missing = fully procedural) before any view exists
+    await Promise.all([loadManifest(), animLibrary()]);
     this.opts = o;
     const q = PRESETS[this.settings.preset];
     this.scene = new THREE.Scene();
@@ -175,6 +181,7 @@ export class Game {
     this.running = false;
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
+    this.fp?.dispose(); this.fp = null;
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
     this.match = null; this.mapScene = null; this.fx = null;
     this.hud.show(false);
@@ -252,12 +259,29 @@ export class Game {
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);
       if (a === me && this.settings.view === 'first') v.group.visible = false;
     }
+    // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
+    const wantFp = !!me && me.alive && this.settings.view === 'first' && !me.sv.zoom && !this.bossCam;
+    if (this.fp && (!me || this.fp.actor !== me || this.fp.defId !== me.def.id)) { this.fp.dispose(); this.fp = null; }
+    if (wantFp && !this.fp) this.fp = new FirstPersonArms(me!, equippedSkin(me!.def.id));
+    if (this.fp && wantFp) {
+      const fdt = dt * (this.paused ? 0 : this.timeScale);
+      let dy = this.camYaw - this.fpAim.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+      const rate = (d: number) => (fdt > 1e-4 ? d / fdt : 0);
+      this.fp.scene.environment = this.scene.environment;
+      this.fp.update({ dt: fdt, time: w.time, yawRate: rate(dy), pitchRate: rate(this.camPitch - this.fpAim.pitch), aspect: this.camera.aspect });
+    }
+    this.fpAim.yaw = this.camYaw; this.fpAim.pitch = this.camPitch;
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
     this.mapScene.update(w.time, w.point, viewer.team);
     this.updateCamera(dt, me);
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     // ---- render
     if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    if (this.fp && wantFp) {
+      // viewmodel pass: own depth so the arms never clip into walls
+      const r = this.renderer;
+      r.autoClear = false; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true;
+    }
     this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.showFps ? this.fpsAvg : 0, this.input.keys.has(KEYS.score), this.spectateLabel());
     if (this.lab && w.mode === 'aitest') {

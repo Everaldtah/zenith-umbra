@@ -9,6 +9,7 @@ import { CharacterView } from '../render/CharacterView';
 import { loadManifest, BASE } from '../render/Assets';
 import { skinsFor, equipSkin, equippedSkin } from '../data/skins';
 import { SWING_TIME } from '../render/Animator';
+import { animLib, animLibrary } from '../render/ClipLibrary';
 import { TITAN_SCALE } from '../game/World';
 import { sfx } from '../audio/Sfx';
 
@@ -50,7 +51,7 @@ export class HeroViewer {
       </div>
       <div class="vstage"><div class="vname"></div>
         <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
-        <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div></div>
+        <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div><div class="vhint vclip" style="bottom:auto;top:12px"></div></div>
       <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
     host.append(this.root);
     this.stage = this.root.querySelector('.vstage') as HTMLElement;
@@ -62,7 +63,7 @@ export class HeroViewer {
     this.stage.prepend(this.renderer.domElement);
     this.buildStudio();
     this.bind();
-    loadManifest().then(() => this.select(this.id));
+    Promise.all([loadManifest(), animLibrary()]).then(() => this.select(this.id));
     const loop = () => { this.raf = requestAnimationFrame(loop); this.frame(); };
     loop();
   }
@@ -209,6 +210,10 @@ export class HeroViewer {
     this.camera.position.set(cx, focus + Math.sin(this.tilt) * r, cz);
     this.camera.lookAt(0, focus, 0);
     this.renderer.render(this.scene, this.camera);
+    // which clip drives the body (Quaternius UAL / Mixamo library) - or procedural
+    const cl = v.anim.clip, txt = cl ? `clip: ${cl.clipName || (cl.loco > 0.5 ? 'locomotion blend' : 'idle')}` : animLib ? 'procedural (no clip for this state)' : '';
+    const el = this.stage.querySelector('.vclip') as HTMLElement;
+    if (el.textContent !== txt) el.textContent = txt;
   }
 
   /** posed bounds of the current model, re-measured when it swaps (mannequin -> GLB) and settled after the first frames */
