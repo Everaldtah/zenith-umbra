@@ -56,12 +56,12 @@ BGS = {
     "hangar": "gigantic mecha hangar interior, scaffolding, catwalks, welding sparks, work lights, industrial",
     "hangar_fire": "mecha hangar interior on fire, explosions, alarm lights, debris, smoke",
     "academy_sunset": "futuristic academy training field at sunset, archery targets, white domed buildings, orange sky",
-    "academy_night": "futuristic academy campus under attack at night, purple portals in the sky, explosions, fire",
+    "academy_night": "futuristic academy campus buildings and plaza at night, buildings on fire, smoke, purple rift portals in the night sky, ruined walls",
     "eclipse_city": "city skyline under a black solar eclipse, burning red corona, blood red sky, people silhouettes",
     "rift_sky": "violet sky cracked open like glass, a huge rift, purple lightning, floating rocks, wasteland",
     "cathedral": "ruined gothic cathedral interior, huge blood red moon through a broken rose window, candles",
     "void": "dark violet void dimension, floating puppet strings, faint glowing threads, mist",
-    "cockpit": "inside a giant robot cockpit, glowing orange screens, control sticks, golden light, entry plug",
+    "cockpit": "indoors, interior of a giant robot cockpit, pilot seat, control levers, glowing orange monitors all around, dim cramped cabin, no sky",
     "dawn_ruins": "sunrise over the ruins of a futuristic academy, golden light breaking through smoke, hill",
     "space_lab": "alien laboratory on a space station, violet lights, holographic robot blueprints, earth in the window",
     "orbit_colossus": "enormous robot under construction in orbit above the earth, construction drones, black sun",
@@ -82,7 +82,7 @@ import os, sys, json, time, traceback, urllib.request
 os.environ.setdefault("PJRT_DEVICE", "TPU")
 import torch, cv2, numpy as np
 from PIL import Image, ImageDraw, ImageFilter
-import torch_xla, torch_xla.runtime as xr
+import torch_xla
 from transformers import CLIPVisionModelWithProjection
 from diffusers import StableDiffusionXLControlNetPipeline, StableDiffusionXLImg2ImgPipeline, StableDiffusionXLPipeline, ControlNetModel, EulerAncestralDiscreteScheduler
 C = json.load(open("/tmp/tpu_cfg.json"))
@@ -91,11 +91,20 @@ def publish(phase, **extra):
         body = json.dumps({"topic": C["topic"], "message": json.dumps({"phase": phase, **extra})[:3800]}).encode()
         urllib.request.urlopen(urllib.request.Request("https://ntfy.sh", data=body, headers={"Content-Type": "application/json"}), timeout=15).read()
     except Exception: pass
-def run(index):
-    rank = -1
+def attach(path, name):   # a preview of the first drawings, so quality can be judged while the batch keeps painting
     try:
-        dev = torch_xla.device(); rank, world = xr.global_ordinal(), xr.world_size()
+        import io
+        im = Image.open(path).convert("RGB"); im.thumbnail((896, 896)); b = io.BytesIO(); im.save(b, "JPEG", quality=88)
+        urllib.request.urlopen(urllib.request.Request("https://ntfy.sh/" + C["topic"], data=b.getvalue(), method="PUT", headers={"Filename": name + ".jpg"}), timeout=60).read()
+    except Exception: pass
+def run():
+    rank = int(os.environ.get("RANK", "0")); world = int(os.environ.get("WORLD", "1"))
+    try:
+        dev = torch_xla.device()
+        if rank == 0: publish("device", dev=str(dev), n=len(torch_xla.devices()) if hasattr(torch_xla, "devices") else -1)
         bf = torch.bfloat16
+        # stagger the loads: host RAM can't hold 8 SDXL stacks at once - wait for the previous chip to hand its weights to HBM
+        while rank > 0 and not os.path.exists(f"/tmp/loaded_{rank - 1}"): time.sleep(3)
         enc = CLIPVisionModelWithProjection.from_pretrained("h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=bf)
         cn = ControlNetModel.from_pretrained("diffusers/controlnet-depth-sdxl-1.0", torch_dtype=bf, variant="fp16")
         pipe = StableDiffusionXLControlNetPipeline.from_pretrained("cagliostrolab/animagine-xl-3.1", controlnet=cn, image_encoder=enc, torch_dtype=bf)
@@ -103,16 +112,21 @@ def run(index):
         pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter-plus_sdxl_vit-h.safetensors")
         pipe.set_ip_adapter_scale(C["ip"])
         pipe.to(dev); pipe.set_progress_bar_config(disable=True)
+        import gc; gc.collect(); open(f"/tmp/loaded_{rank}", "w").close()
+        if rank == 0: publish("loaded", rank=rank)
         i2i = StableDiffusionXLImg2ImgPipeline(**{k: v for k, v in pipe.components.items() if k in ("vae", "text_encoder", "text_encoder_2", "tokenizer", "tokenizer_2", "unet", "scheduler", "image_encoder", "feature_extractor")})
         i2i.set_progress_bar_config(disable=True)
         S, D, neg = C["canvas"], C["dir"], C["neg"]
         mine = C["jobs"][rank::world]
-        CAS = cv2.CascadeClassifier(D + "/lbpcascade_animeface.xml")
+        cur_ip = [C["ip"]]
+        try: CAS = cv2.CascadeClassifier(D + "/lbpcascade_animeface.xml")   # OpenCV 5 moved cascades to contrib: pinned <5
+        except Exception as e: CAS = None; publish("warn", rank=rank, msg="no face detector: " + str(e)[:200])
         def find_face(img):   # the anime face on the drawing itself (never a blade or a wing tip): largest hit, padded 1.8x, square
-            gr = cv2.equalizeHist(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2GRAY))
-            f = CAS.detectMultiScale(gr, scaleFactor=1.05, minNeighbors=4, minSize=(48, 48))
+            if CAS is None: return None
+            gr = cv2.equalizeHist(cv2.cvtColor(np.asarray(img.resize((img.width * 2, img.height * 2), Image.LANCZOS)), cv2.COLOR_RGB2GRAY))
+            f = CAS.detectMultiScale(gr, scaleFactor=1.05, minNeighbors=4, minSize=(40, 40))
             if not len(f): return None
-            x, y, w, h = max(f, key=lambda r: r[2] * r[3])
+            x, y, w, h = [v / 2 for v in max(f, key=lambda r: r[2] * r[3])]
             s = int(max(w, h) * 1.8); cx, cy = x + w / 2, y + h / 2 - h * 0.1
             x0, y0 = int(max(0, min(S - s, cx - s / 2))), int(max(0, min(S - s, cy - s / 2)))
             return [x0, y0, x0 + s, y0 + s]
@@ -120,9 +134,12 @@ def run(index):
             return i2i(prompt=prompt, negative_prompt=neg, image=img.resize((1024, 1024), Image.LANCZOS), ip_adapter_image=ref, strength=strength,
                        guidance_scale=6.5, num_inference_steps=30, generator=g).images[0]
         for i, j in enumerate(mine):
+          try:
             t = time.time(); out = C["out"] + "/" + j["name"]
             if os.path.exists(out + ".png"): continue
             ctrl, ref = Image.open(D + "/" + j["ctrl"]).convert("RGB"), Image.open(D + "/" + j["ref"]).convert("RGB")
+            ip = j.get("ip", C["ip"])
+            if ip != cur_ip[0]: pipe.set_ip_adapter_scale(ip); cur_ip[0] = ip   # humans 0.35 / mechs 0.3: two graphs at most
             g = torch.Generator("cpu").manual_seed(j["seed"])
             img = pipe(prompt=j["prompt"], negative_prompt=neg, image=ctrl, ip_adapter_image=ref, controlnet_conditioning_scale=0.8,
                        guidance_scale=6.5, num_inference_steps=28, width=S, height=S, generator=g).images[0]
@@ -137,7 +154,12 @@ def run(index):
                 talk = redraw(img, j["prompt"] + ", open mouth, talking", ref, g, 0.3).resize((S, S), Image.LANCZOS)
                 talk.crop((x0, y0, x0 + w, y0 + h)).save(out.replace("_face", "_facetalk") + ".png")
             img.crop((x0, y0, x0 + w, y0 + h)).save(out + ".png")
+            if j.get("preview"):
+                attach(out + ".png", j["name"])
+                if j["talk"]: attach(out.replace("_face", "_facetalk") + ".png", j["name"] + "_talk")
             if rank == 0 and (i < 3 or i % 5 == 0): publish("art", rank=rank, i=i, of=len(mine), secs=round(time.time() - t, 1))
+          except Exception:
+            publish("job-error", rank=rank, job=j["name"], trace=traceback.format_exc()[-800:])
         publish("art-done", rank=rank, n=len(mine))
         if C["bgs"]:
             t2i = StableDiffusionXLPipeline(**{k: v for k, v in pipe.components.items() if k in ("vae", "text_encoder", "text_encoder_2", "tokenizer", "tokenizer_2", "unet", "scheduler")})
@@ -150,8 +172,9 @@ def run(index):
             publish("bg-done", rank=rank)
     except Exception:
         publish("error", rank=rank, trace=traceback.format_exc()[-1500:])
+        if rank >= 0: open(f"/tmp/loaded_{rank}", "w").close()
 if __name__ == "__main__":
-    torch_xla.launch(run, args=())
+    run()
 """
 
 if os.environ.get("BACKEND") == "tpu":
@@ -160,7 +183,7 @@ if os.environ.get("BACKEND") == "tpu":
         if r.returncode:
             subprocess.run(f"{sys.executable} -m pip install -q torch==2.6.0 'torch_xla[tpu]==2.6.0' -f https://storage.googleapis.com/libtpu-releases/index.html "
                            "-f https://storage.googleapis.com/libtpu-wheels/index.html", shell=True)
-        subprocess.run(f"{sys.executable} -m pip install -q -U diffusers transformers accelerate huggingface_hub opencv-python-headless", shell=True, capture_output=True, text=True)
+        subprocess.run(f"{sys.executable} -m pip install -q -U diffusers transformers accelerate huggingface_hub 'opencv-python-headless<5'", shell=True, capture_output=True, text=True)
         chk = subprocess.run(f"{sys.executable} -c 'import torch, torch_xla, diffusers; print(torch.__version__, torch_xla.__version__, diffusers.__version__)'", shell=True, capture_output=True, text=True)
         publish("runtime", ok=chk.returncode == 0, versions=chk.stdout.strip(), err=chk.stderr[-600:])
         from huggingface_hub import snapshot_download
@@ -173,74 +196,78 @@ if os.environ.get("BACKEND") == "tpu":
         J = json.load(open(cfgs[0]))
         NAMES = [x for x in os.environ.get("NAMES", "").split(",") if x]
         jobs = [j for j in J["jobs"] if (not ONLY or j["name"].split("_")[0] in ONLY) and (not NAMES or j["name"] in NAMES)] if "A" in PART else []
+        # PRIORITY drawings go first - one per chip, since jobs are dealt out rank::world - and are sent back as previews
+        PRI = [x for x in os.environ.get("PRIORITY", "").split(",") if x]
+        for j in jobs: j["preview"] = j["name"] in PRI
+        jobs.sort(key=lambda j: (PRI.index(j["name"]) if j["name"] in PRI else len(PRI)))
         bgs = [{"out": f"{BGD}/{n}.png", "seed": 500 + zlib.crc32(n.encode()) % 997,
                 "prompt": f"{BGS[n]}, scenery, no humans, background art, anime background painting, {STYLE}"} for n in BGS if not os.environ.get("BGN") or n in os.environ["BGN"].split(",")] if "B" in PART else []
         json.dump({"topic": TOPIC, "neg": J["neg"], "canvas": J["canvas"], "dir": D, "out": ART, "ip": float(os.environ.get("IP", "0.5")), "jobs": jobs, "bgs": bgs},
                   open("/tmp/tpu_cfg.json", "w"))
         publish("inputs", n=len(jobs), bgs=len(bgs))
         open("/tmp/tpu_worker.py", "w").write(TPU_WORKER)
-        r = subprocess.run([sys.executable, "/tmp/tpu_worker.py"], capture_output=True, text=True)
-        publish("done", art=len(os.listdir(ART)), bg=len(os.listdir(BGD)), minutes=round((time.time() - t0) / 60, 1), tail=(r.stdout + r.stderr)[-1500:] if r.returncode else "")
+        mem = subprocess.run("free -g | head -2; nproc", shell=True, capture_output=True, text=True).stdout
+        publish("host", mem=mem)
+        publish("tpuenv", env={k: v for k, v in os.environ.items() if "TPU" in k or "PJRT" in k or "XLA" in k})
+
+        def launch(world, iso):
+            ps = []
+            for i in range(world):
+                e = dict(os.environ, RANK=str(i), WORLD=str(world), PJRT_DEVICE="TPU")
+                if iso:   # Cloud TPU "multiple processes on one VM": each process owns one chip as its own 1x1x1 slice
+                    e.update(TPU_VISIBLE_CHIPS=str(i), TPU_CHIPS_PER_PROCESS_BOUNDS="1,1,1", TPU_PROCESS_BOUNDS="1,1,1",
+                             TPU_MESH_CONTROLLER_ADDRESS=f"localhost:{8476 + i}", TPU_MESH_CONTROLLER_PORT=str(8476 + i), TPU_PROCESS_PORT=str(8576 + i))
+                    e.pop("TPU_PROCESS_ADDRESSES", None)
+                ps.append(subprocess.Popen([sys.executable, "-u", "/tmp/tpu_worker.py"], env=e, stdout=open(f"/kaggle/working/worker{i}.log", "w"), stderr=subprocess.STDOUT))
+            while any(p.poll() is None for p in ps):   # watchdog: a chip that dies hard must not stall the staggered loads
+                for i, p in enumerate(ps):
+                    if p.poll() is not None: open(f"/tmp/loaded_{i}", "a").close()
+                time.sleep(10)
+            return [p.returncode for p in ps]
+
+        for f in glob.glob("/tmp/loaded_*"): os.remove(f)
+        rcs = launch(8, True)
+        logs = "".join(open(f"/kaggle/working/worker{i}.log", errors="replace").read() for i in range(8))
+        if not os.listdir(ART) and "initialization failed" in logs.lower() or (not os.listdir(ART) and all(rcs)):
+            publish("fallback", rcs=rcs, why=logs[logs.find("Traceback"):][:1200] if "Traceback" in logs else logs[-1200:])
+            for f in glob.glob("/tmp/loaded_*"): os.remove(f)
+            rcs = launch(1, False)
+            logs = open("/kaggle/working/worker0.log", errors="replace").read()
+
+        class r: returncode = max(rcs)
+        log = logs
+        i = log.find("Traceback")
+        first = log[max(0, i - 300):i + 2500] if i >= 0 else log[-2500:]
+        dm = subprocess.run("dmesg 2>/dev/null | grep -i -E 'killed|oom' | tail -3", shell=True, capture_output=True, text=True).stdout
+        publish("done", art=len(os.listdir(ART)), bg=len(os.listdir(BGD)), minutes=round((time.time() - t0) / 60, 1), rc=r.returncode, oom=dm, first=first if r.returncode else "")
     except Exception:
         publish("error", trace=traceback.format_exc()[-1500:])
     sys.exit(0)
 
-subprocess.run(f"{sys.executable} -m pip install -q -U diffusers transformers accelerate opencv-python-headless", shell=True)
-import torch, numpy as np, cv2
-from PIL import Image
-from diffusers import StableDiffusionXLControlNetImg2ImgPipeline, StableDiffusionXLPipeline, ControlNetModel, AutoencoderKL, EulerAncestralDiscreteScheduler
-
-src = sorted(p for p in glob.glob("/kaggle/input/**/*.png", recursive=True) if "zu-poses2d" in p or "/in2d/" in p)
-jobs = [p for p in src if not p.endswith("_m.png") and (not ONLY or os.path.basename(p).split("_")[0] in ONLY)]
+# ================================================================ CUDA backend (Kaggle T4 x2) - recipe v2 via paintcore.py (in the dataset)
+subprocess.run(f"{sys.executable} -m pip install -q -U diffusers==0.40.0 'transformers<5' accelerate 'opencv-python-headless<5'", shell=True)
+cfgs = glob.glob("/kaggle/input/**/jobs.json", recursive=True)
+D = os.path.dirname(cfgs[0]); sys.path.insert(0, D)
+import paintcore
+J = json.load(open(cfgs[0]))
+jobs = paintcore.body_jobs(J["jobs"])
+PRI = [x for x in os.environ.get("PRIORITY", "").split(",") if x]
+jobs.sort(key=lambda j: (PRI.index(j["name"]) if j["name"] in PRI else len(PRI)))
 publish("inputs", n=len(jobs))
-LOCK = threading.Lock()
 done = [0]
 
 
-def load(dev):
-    with LOCK:
-        vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
-        cn = ControlNetModel.from_pretrained("xinsir/controlnet-canny-sdxl-1.0", torch_dtype=torch.float16)
-        pipe = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained("cagliostrolab/animagine-xl-3.1", controlnet=cn, vae=vae, torch_dtype=torch.float16)
-        pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
-        pipe.to(f"cuda:{dev}")
-    return pipe
-
-
-def worker(dev, items, bgs):
+def worker(dev, items):
+    def on_done(name, img):
+        done[0] += 1
+        if done[0] <= 2 or done[0] % 10 == 0: publish("art", done=done[0], total=len(jobs), minutes=round((time.time() - t0) / 60, 1))
     try:
-        pipe = load(dev)
-        for p in items:
-            name = os.path.basename(p)[:-4]
-            cid, pose = name.split("_", 1)
-            im = Image.open(p).convert("RGB")
-            edges = cv2.Canny(np.asarray(im), 60, 160)
-            ctrl = Image.fromarray(np.stack([edges] * 3, -1))
-            face = pose.startswith("face")
-            prompt = f"{CHAR.get(cid, cid)}, {'portrait, close-up, face focus' if face else 'full body'}, simple grey background, {STYLE}"
-            g = torch.Generator(f"cuda:{dev}").manual_seed(zlib.crc32(cid.encode()) % 100000)
-            out = pipe(prompt=prompt, negative_prompt=NEG, image=im, control_image=ctrl, strength=0.62 if not face else 0.55,
-                       controlnet_conditioning_scale=0.7, guidance_scale=7.0, num_inference_steps=30, width=im.width, height=im.height, generator=g).images[0]
-            out.save(f"{ART}/{name}.png")
-            done[0] += 1
-            if done[0] % 10 == 0: publish("art", done=done[0], total=len(jobs))
-        if "B" in PART:
-            t2i = StableDiffusionXLPipeline(**{k: v for k, v in pipe.components.items() if k in ("vae", "text_encoder", "text_encoder_2", "tokenizer", "tokenizer_2", "unet", "scheduler")})
-            t2i.to(f"cuda:{dev}")
-            for name in bgs:
-                for k in range(2):
-                    g = torch.Generator(f"cuda:{dev}").manual_seed(500 + k * 71 + zlib.crc32(name.encode()) % 997)
-                    img = t2i(prompt=f"{BGS[name]}, scenery, no humans, background art, anime background painting, {STYLE}", negative_prompt=NEG + ", people, character",
-                              width=1536, height=864, num_inference_steps=30, guidance_scale=7.0, generator=g).images[0]
-                    img.save(f"{BGD}/{name}_{k}.png")
-                publish("bg", name=name, dev=dev)
+        paintcore.run(items, D, J["neg"], out_dir=ART, device=f"cuda:{dev}", on_done=on_done)
     except Exception:
         publish("error", dev=dev, trace=traceback.format_exc()[-1500:])
 
 
-items = jobs if "A" in PART else []
-names = list(BGS) if "B" in PART else []
-th = [threading.Thread(target=worker, args=(g, items[g::2], names[g::2])) for g in range(2)]
+th = [threading.Thread(target=worker, args=(g, jobs[g::2])) for g in range(2)]
 for x in th: x.start()
 for x in th: x.join()
-publish("done", art=len(os.listdir(ART)), bg=len(os.listdir(BGD)), minutes=round((time.time() - t0) / 60, 1))
+publish("done", art=len(os.listdir(ART)), minutes=round((time.time() - t0) / 60, 1))

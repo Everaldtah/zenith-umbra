@@ -7,7 +7,7 @@ Extra characters with no model of their own are drawn over a stand-in's pose (Yu
 import os, json, zlib, glob
 import numpy as np
 from PIL import Image
-from paint2d import IN, REF, CHAR, STYLE, NEG, FACE, MECH
+from paint2d import IN, REF, CHAR, NEG, FACE, MECH, prompt_for
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'work', 'tpu_in'); os.makedirs(OUT, exist_ok=True)
@@ -49,11 +49,11 @@ def main():
         mk = np.zeros((S, S), bool); mk[y0:y0 + h, x0:x0 + w] = np.asarray(m.resize((w, h))) > 128
         face = pose.startswith('face')
         human = cid not in MECH
-        prompt = f"{CHAR[cid]}, {'portrait, close-up, face focus, ' + FACE if face else 'full body, standing'}, simple white background, {STYLE}"
+        prompt = prompt_for(cid, f"{'portrait, face focus, ' + FACE if face else 'full body, standing, simple white background'}")
         jobs.append({'name': name, 'ctrl': f'{name}_d.png', 'ref': f'ref_{ref}.png', 'crop': [x0, y0, w, h],
                      'seed': zlib.crc32(cid.encode()) % 100000, 'prompt': prompt,
                      'facebox': head_box(mk) if human and not face else None,
-                     'faceprompt': f"{CHAR[cid]}, portrait, face focus, {FACE}, {STYLE}",
+                     'faceprompt': prompt_for(cid, f"portrait, face focus, {FACE}"),
                      'talk': human and pose == 'face'})
         refs.add(ref)
         if i % 20 == 0: print(i, len(work), name, flush=True)

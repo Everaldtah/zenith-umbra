@@ -93,7 +93,7 @@ export class Plate {
   /** cam: pan x/y in px, zoom (1 = fit), per-layer parallax factors */
   set(base: string, cam: { x: number; y: number; zoom: number; rot?: number }, o: { layers?: boolean; tint?: string; bright?: number } = {}) {
     const urls = o.layers ? [`${base}_far.webp`, `${base}.webp`, `${base}_near.webp`] : [`${base}.webp`];
-    const par = [0.35, 1, 1.6];
+    const par = [0.72, 1, 1.18];   // modest spread: bigger offsets would expose the inpainted strips behind nearer layers
     this.meshes.forEach((m, i) => {
       const url = urls.length === 3 ? urls[i] : i === 1 ? urls[0] : '';
       const t = url ? T(url) : null;
