@@ -38,6 +38,8 @@ WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secon
 5. `build_assets.py` / `publish_2d.py` produce the web tier (1K textures, Draco, WebP) and the desktop tier (2K textures).
 
 ## Animation library
+Handoff notes, including measured data, open work and pitfalls: [`ANIMATION_NOTES.md`](ANIMATION_NOTES.md).
+
 The clips aren't in the repo. Download them yourself (itch.io / Adobe login), pack them, and the game picks them up:
 1. Get **UAL1** and **UAL2** from quaternius.itch.io/universal-animation-library(-2) (glTF). Optionally add **Mixamo** clips as *FBX Binary, Without Skin, 30 fps, In Place* in one folder.
 2. `blender -b -P assetgen/blender/anim_pack.py -- --ual1 UAL1.glb --ual2 UAL2.glb --mixamo mixamo_fbx/ --out public/anim` removes the meshes, writes `UAL1.glb` / `UAL2.glb` / `mixamo.glb` and adds them to `public/anim/manifest.json`. Use `--only "Idle|Jog|..."` to trim the set.
