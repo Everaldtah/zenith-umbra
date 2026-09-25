@@ -2,6 +2,7 @@
 import './site.css';
 import { HEROES, HERO, type HeroDef } from '../data/heroes';
 import { PLAY_MAPS } from '../data/maps';
+import { FILM_CHAPTERS } from './film';
 import { sfx } from '../audio/Sfx';
 
 const B = import.meta.env.BASE_URL;
@@ -30,7 +31,7 @@ function heroCard(h: HeroDef) {
 
 document.getElementById('site')!.innerHTML = `
 <header class="nav"><a class="brand" href="#top"><b>ZENITH</b><i>//</i><em>UMBRA</em></a>
-  <nav><a href="#heroes">Heroes</a><a href="#rivals">Rivals</a><a href="#maps">Maps</a><a href="#campaign">Campaign</a><a href="#download" class="cta">Download</a></nav></header>
+  <nav><a href="#film">Watch</a><a href="#heroes">Heroes</a><a href="#rivals">Rivals</a><a href="#maps">Maps</a><a href="#campaign">Campaign</a><a href="#download" class="cta">Download</a></nav></header>
 <section id="top" class="animatic">
   <div class="stage"><div class="layer a"></div><div class="layer b"></div><div class="caption"><h2></h2><p></p></div><div class="bars"></div></div>
   <div class="controls"><button class="play">▶ PLAY THE ANIMATIC</button><span class="prog"><i></i></span></div>
@@ -40,6 +41,18 @@ document.getElementById('site')!.innerHTML = `
   <p>An original anime hero shooter. Five heroes of the Zenith Vanguard against five villains of the Umbra Syndicate - every one of them with a rival on the other side and an ability built to counter them.</p>
   <div class="btnrow">${mobile ? '<p class="warn">ZENITH//UMBRA is a PC game - visit on a computer with a keyboard and mouse to play.</p>' : `<a class="btn primary" href="#download">DOWNLOAD FOR WINDOWS</a><a class="btn" href="${B}play.html">PLAY IN BROWSER (PC)</a>`}</div>
   <ul class="feat"><li><b>10</b>original heroes</li><li><b>5</b>story maps + training grounds</li><li><b>1</b>giant mecha tank per side, piloted</li><li><b>2</b>flying healers</li><li><b>5v5</b>vs AI, AI test lab, spectator</li><li><b>Co-op</b>online third-person campaign (up to 4)</li><li><b>50</b>skins in the 3D Hero Viewer</li><li><b>120 Hz</b>physics in the Windows app</li></ul>
+</section>
+<section id="film" class="film"><h2>THE OATH AT DAWN</h2>
+  <p class="lead">A five-minute anime short: how the Eclipse broke the world, how every hero and villain got their scars, and the night five strangers became the Zenith Vanguard.</p>
+  <div class="player"><video controls preload="metadata" playsinline poster="${B}film/oath_poster.webp">
+    <source src="${B}film/oath_at_dawn.mp4" type="video/mp4">
+    <track kind="subtitles" srclang="en" label="English" src="${B}film/oath_at_dawn.vtt" default></video></div>
+  <div class="chapters">${FILM_CHAPTERS.map(([t, n]) => `<button data-t="${t}"><b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</b>${n}</button>`).join('')}</div>
+  <a class="engine" href="${B}film.html">
+    <img loading="lazy" src="${B}film/engine_poster.webp" alt="The Oath at Dawn - Engine Cut">
+    <div><small>ALSO PLAYING</small><h3>THE OATH AT DAWN - ENGINE CUT</h3>
+      <p>The same story, staged shot by shot inside the game engine: the real rigged heroes and villains, the real maps, every ability effect and sound, with anime ink-and-cel shading, name cards and speed lines. It follows the screenplay beat for beat, including all five rival duels. It plays in real time in your browser.</p>
+      <span class="btn primary">▶ WATCH THE ENGINE CUT</span></div></a>
 </section>
 <section id="heroes"><h2>THE ROSTER</h2>
   <h3 class="zenith">ZENITH VANGUARD <small>heroes</small></h3><div class="hgrid">${zen.map(heroCard).join('')}</div>
@@ -126,3 +139,20 @@ btn.onclick = () => {
   play(true);
 };
 play(false);   // silent autoplay; the button restarts it with the score
+
+// ---- the film: chapter buttons seek; playing it silences the animatic's score
+const film = document.querySelector('#film video') as HTMLVideoElement;
+document.querySelectorAll<HTMLButtonElement>('#film .chapters button').forEach(b => b.onclick = () => { film.currentTime = +b.dataset.t!; film.play(); });
+film.addEventListener('play', () => { sfx.music(null); });
+film.addEventListener('timeupdate', () => {
+  let cur = 0;
+  FILM_CHAPTERS.forEach(([t], i) => { if (film.currentTime >= t) cur = i; });
+  document.querySelectorAll('#film .chapters button').forEach((b, i) => b.classList.toggle('on', i === cur && !film.paused));
+});
+
+// the AI-animated cut premieres once its render is uploaded; until then the player shows a notice
+fetch(`${B}film/oath_at_dawn.mp4`, { method: 'HEAD' }).then(r => { if (!r.ok || !(r.headers.get('content-type') ?? '').includes('video')) throw 0; }).catch(() => {
+  const pl = document.querySelector('#film .player') as HTMLElement, ch = document.querySelector('#film .chapters') as HTMLElement;
+  pl.innerHTML = `<img src="${B}film/oath_poster.webp" alt=""><div class="soon"><b>AI-ANIMATED CUT</b><span>Rendering now - premieres here shortly. Watch the Engine Cut below.</span></div>`;
+  ch.style.display = 'none';
+});

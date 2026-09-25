@@ -5,3 +5,6 @@ dist
 node_modules
 .git
 *.log
+cinematic
+tests/e2e/shots
+*.log

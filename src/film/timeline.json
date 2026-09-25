@@ -1,0 +1,1179 @@
+{
+"total": 325.61,
+"beats": [
+{
+"beat": 0,
+"at": 0.0,
+"secs": 5,
+"lines": [
+{
+"file": "film/vo/00_0.mp3",
+"at": 0.35,
+"secs": 3.35,
+"who": "n",
+"text": "Before the Eclipse, the sky had a voice."
+}
+],
+"title": null
+},
+{
+"beat": 1,
+"at": 5.0,
+"secs": 9,
+"lines": [
+{
+"file": "film/vo/01_0.mp3",
+"at": 5.35,
+"secs": 6.7,
+"who": "n",
+"text": "Above the clouds of Amatsu, the Star Choir sang the heavens into balance, and the stars listened."
+}
+],
+"title": null
+},
+{
+"beat": 2,
+"at": 14.0,
+"secs": 6.68,
+"lines": [
+{
+"file": "film/vo/02_0.mp3",
+"at": 14.35,
+"secs": 5.88,
+"who": "n",
+"text": "Her teacher, the Choir's prima voice, promised the girl that their song would never end."
+}
+],
+"title": null
+},
+{
+"beat": 3,
+"at": 20.68,
+"secs": 12.03,
+"lines": [
+{
+"file": "film/vo/03_0.mp3",
+"at": 21.03,
+"secs": 6.6,
+"who": "n",
+"text": "On the highest island, the monk Kaien had kept the gate of the Sky Shrine alone for nine years,"
+},
+{
+"file": "film/vo/03_1.mp3",
+"at": 27.88,
+"secs": 4.38,
+"who": "n",
+"text": "guarding a sacred tree that held the seals of the world."
+}
+],
+"title": null
+},
+{
+"beat": 4,
+"at": 32.71,
+"secs": 8.92,
+"lines": [
+{
+"file": "film/vo/04_0.mp3",
+"at": 33.06,
+"secs": 8.12,
+"who": "n",
+"text": "The shrine's orphan, Kagemaru, was raised beside him by the same master, and passed over for the guardian's seal."
+}
+],
+"title": null
+},
+{
+"beat": 5,
+"at": 41.63,
+"secs": 14.35,
+"lines": [
+{
+"file": "film/vo/05_0.mp3",
+"at": 41.98,
+"secs": 8.0,
+"who": "n",
+"text": "Far below, in the neon rain of Neo-Kurogane, Raijin was the undefeated champion of the underground duels."
+},
+{
+"file": "film/vo/05_1.mp3",
+"at": 50.23,
+"secs": 5.3,
+"who": "n",
+"text": "His mother's katana had been struck by lightning on the night of her funeral."
+}
+],
+"title": null
+},
+{
+"beat": 6,
+"at": 55.98,
+"secs": 13,
+"lines": [
+{
+"file": "film/vo/06_0.mp3",
+"at": 56.33,
+"secs": 7.28,
+"who": "n",
+"text": "In Hangar Zero, a mechanic's son named Haruto Daimon swept the floor beneath two unfinished giants."
+},
+{
+"file": "film/vo/06_1.mp3",
+"at": 63.86,
+"secs": 4.05,
+"who": "vorn",
+"text": "Never hold back, Haruto. Not in the cockpit. Not in life."
+}
+],
+"title": null
+},
+{
+"beat": 7,
+"at": 68.98,
+"secs": 10.38,
+"lines": [
+{
+"file": "film/vo/07_0.mp3",
+"at": 69.33,
+"secs": 5.83,
+"who": "n",
+"text": "And at Zenith Academy, Yuzu could split a falling leaf at three hundred metres."
+},
+{
+"file": "film/vo/07_1.mp3",
+"at": 75.41,
+"secs": 3.5,
+"who": "yuzu",
+"text": "I'll always be the better shot, little brother. Always."
+}
+],
+"title": null
+},
+{
+"beat": 8,
+"at": 79.36,
+"secs": 9,
+"lines": [
+{
+"file": "film/vo/08_0.mp3",
+"at": 79.71,
+"secs": 4.15,
+"who": "n",
+"text": "Then, on the longest day of the year, the sun went black."
+}
+],
+"title": null
+},
+{
+"beat": 9,
+"at": 88.36,
+"secs": 6.7,
+"lines": [
+{
+"file": "film/vo/09_0.mp3",
+"at": 88.71,
+"secs": 5.9,
+"who": "n",
+"text": "The Eclipse tore the world open. And everyone with a crack in their heart heard it calling."
+}
+],
+"title": null
+},
+{
+"beat": 10,
+"at": 95.06,
+"secs": 11.12,
+"lines": [
+{
+"file": "film/vo/10_0.mp3",
+"at": 95.41,
+"secs": 6.42,
+"who": "n",
+"text": "The Choir's prima voice knelt beneath a crimson moon, and traded her light for eternal youth."
+},
+{
+"file": "film/vo/10_1.mp3",
+"at": 102.08,
+"secs": 3.65,
+"who": "nocturne",
+"text": "Forgive me, little star. Some songs must end."
+}
+],
+"title": null
+},
+{
+"beat": 11,
+"at": 106.18,
+"secs": 12,
+"lines": [
+{
+"file": "film/vo/11_0.mp3",
+"at": 106.53,
+"secs": 2.17,
+"who": "kagemaru",
+"text": "Seals mean nothing. I'll prove it."
+},
+{
+"file": "film/vo/11_1.mp3",
+"at": 108.95,
+"secs": 3.45,
+"who": "n",
+"text": "Kagemaru set the sacred tree ablaze."
+}
+],
+"title": null
+},
+{
+"beat": 12,
+"at": 118.18,
+"secs": 12.53,
+"lines": [
+{
+"file": "film/vo/12_0.mp3",
+"at": 118.53,
+"secs": 8.75,
+"who": "n",
+"text": "With the seals gone, the foundation stone of Neo-Kurogane cracked, and the oni Enra walked out of a thousand years of darkness,"
+},
+{
+"file": "film/vo/12_1.mp3",
+"at": 127.53,
+"secs": 2.73,
+"who": "enra",
+"text": "Where is the blade that cut me?"
+}
+],
+"title": null
+},
+{
+"beat": 13,
+"at": 130.71,
+"secs": 11.08,
+"lines": [
+{
+"file": "film/vo/13_0.mp3",
+"at": 131.06,
+"secs": 6.45,
+"who": "n",
+"text": "He burned the district in a single night, searching for the one blade that had ever wounded him."
+},
+{
+"file": "film/vo/13_1.mp3",
+"at": 137.76,
+"secs": 3.58,
+"who": "n",
+"text": "He found it in a boy's hands, at a funeral."
+}
+],
+"title": null
+},
+{
+"beat": 14,
+"at": 141.79,
+"secs": 12.6,
+"lines": [
+{
+"file": "film/vo/14_0.mp3",
+"at": 142.14,
+"secs": 7.85,
+"who": "n",
+"text": "In Hangar Zero, the man Haruto trusted most climbed into the twin frame. Warlord Vorn stole Gorgoth,"
+},
+{
+"file": "film/vo/14_1.mp3",
+"at": 150.24,
+"secs": 3.7,
+"who": "n",
+"text": "and tore Tenkai-Oh's fist off on his way out."
+}
+],
+"title": null
+},
+{
+"beat": 15,
+"at": 154.39,
+"secs": 9.52,
+"lines": [
+{
+"file": "film/vo/15_0.mp3",
+"at": 154.74,
+"secs": 5.3,
+"who": "n",
+"text": "And in the rift, a porcelain-masked collector was waiting for lost students."
+},
+{
+"file": "film/vo/15_1.mp3",
+"at": 160.29,
+"secs": 3.17,
+"who": "hex",
+"text": "Such a pretty scarf. You'll make a perfect doll."
+}
+],
+"title": null
+},
+{
+"beat": 16,
+"at": 163.91,
+"secs": 5,
+"lines": [
+{
+"file": "film/vo/16_0.mp3",
+"at": 164.26,
+"secs": 3.52,
+"who": "n",
+"text": "Together they became the Umbra Syndicate."
+}
+],
+"title": null
+},
+{
+"beat": 17,
+"at": 168.91,
+"secs": 5.65,
+"lines": [
+{
+"file": "film/vo/17_0.mp3",
+"at": 169.26,
+"secs": 4.85,
+"who": "n",
+"text": "In one night, five strangers lost everything the Eclipse could take."
+}
+],
+"title": null
+},
+{
+"beat": 18,
+"at": 174.56,
+"secs": 9.55,
+"lines": [
+{
+"file": "film/vo/18_0.mp3",
+"at": 174.91,
+"secs": 6.1,
+"who": "n",
+"text": "Haruto climbed into a frame with one fist, and a reactor no one had ever woken."
+},
+{
+"file": "film/vo/18_1.mp3",
+"at": 181.26,
+"secs": 2.4,
+"who": "haruto",
+"text": "Come on, Tenkai-Oh. Wake up!"
+}
+],
+"title": null
+},
+{
+"beat": 19,
+"at": 184.11,
+"secs": 8.2,
+"lines": [
+{
+"file": "film/vo/19_0.mp3",
+"at": 184.46,
+"secs": 7.4,
+"who": "n",
+"text": "Mirei stitched new wings from the constellations her teacher had taught her, and flew after the song she had lost."
+}
+],
+"title": null
+},
+{
+"beat": 20,
+"at": 192.31,
+"secs": 7.88,
+"lines": [
+{
+"file": "film/vo/20_0.mp3",
+"at": 192.66,
+"secs": 7.08,
+"who": "n",
+"text": "Kaien left the mountain for the first time in nine years, with ten thousand talismans, and one name."
+}
+],
+"title": null
+},
+{
+"beat": 21,
+"at": 200.19,
+"secs": 6.27,
+"lines": [
+{
+"file": "film/vo/21_0.mp3",
+"at": 200.54,
+"secs": 5.47,
+"who": "n",
+"text": "Raijin raised his mother's katana to the storm. Lightning struck it twice."
+}
+],
+"title": null
+},
+{
+"beat": 22,
+"at": 206.46,
+"secs": 7.8,
+"lines": [
+{
+"file": "film/vo/22_0.mp3",
+"at": 206.81,
+"secs": 7.0,
+"who": "n",
+"text": "And Yuzu kept drawing her bow until the string cut her fingers, waiting for a target worth the shot."
+}
+],
+"title": null
+},
+{
+"beat": 23,
+"at": 214.26,
+"secs": 8.27,
+"lines": [
+{
+"file": "film/vo/23_0.mp3",
+"at": 214.61,
+"secs": 7.47,
+"who": "n",
+"text": "They did not find each other. The Eclipse found them, all at once, the night the Syndicate came for Zenith Academy."
+}
+],
+"title": null
+},
+{
+"beat": 24,
+"at": 222.53,
+"secs": 16,
+"lines": [
+{
+"file": "film/vo/24_0.mp3",
+"at": 222.88,
+"secs": 4.03,
+"who": "n",
+"text": "One by one, five strangers stepped into the fire."
+}
+],
+"title": null
+},
+{
+"beat": 25,
+"at": 238.53,
+"secs": 10,
+"lines": [
+{
+"file": "film/vo/25_0.mp3",
+"at": 238.88,
+"secs": 2.1,
+"who": "vorn",
+"text": "You still hold back, boy."
+},
+{
+"file": "film/vo/25_1.mp3",
+"at": 241.23,
+"secs": 1.7,
+"who": "haruto",
+"text": "Not anymore!"
+}
+],
+"title": null
+},
+{
+"beat": 26,
+"at": 248.53,
+"secs": 7,
+"lines": [
+{
+"file": "film/vo/26_0.mp3",
+"at": 248.88,
+"secs": 2.8,
+"who": "nocturne",
+"text": "Still singing my lullaby, little star?"
+},
+{
+"file": "film/vo/26_1.mp3",
+"at": 251.93,
+"secs": 2.17,
+"who": "mirei",
+"text": "No. I'm singing mine."
+}
+],
+"title": null
+},
+{
+"beat": 27,
+"at": 255.53,
+"secs": 7,
+"lines": [
+{
+"file": "film/vo/27_0.mp3",
+"at": 255.88,
+"secs": 2.15,
+"who": "kagemaru",
+"text": "You can't catch a shadow, brother."
+},
+{
+"file": "film/vo/27_1.mp3",
+"at": 258.28,
+"secs": 3.17,
+"who": "kaien",
+"text": "I don't need to catch it. Only to seal it."
+}
+],
+"title": null
+},
+{
+"beat": 28,
+"at": 262.53,
+"secs": 7,
+"lines": [
+{
+"file": "film/vo/28_0.mp3",
+"at": 262.88,
+"secs": 2.12,
+"who": "enra",
+"text": "That blade is mine!"
+},
+{
+"file": "film/vo/28_1.mp3",
+"at": 265.25,
+"secs": 1.65,
+"who": "raijin",
+"text": "Then come and take it."
+}
+],
+"title": null
+},
+{
+"beat": 29,
+"at": 269.53,
+"secs": 7,
+"lines": [
+{
+"file": "film/vo/29_0.mp3",
+"at": 269.88,
+"secs": 2.92,
+"who": "hex",
+"text": "Come, little archer. Your brother is waiting."
+},
+{
+"file": "film/vo/29_1.mp3",
+"at": 273.05,
+"secs": 1.48,
+"who": "yuzu",
+"text": "Let him go."
+}
+],
+"title": null
+},
+{
+"beat": 30,
+"at": 276.53,
+"secs": 12,
+"lines": [
+{
+"file": "film/vo/30_0.mp3",
+"at": 276.88,
+"secs": 8.05,
+"who": "n",
+"text": "A wall of dawnlight. A song of stars. A storm of seals. A blade of lightning. An arrow that does not miss."
+}
+],
+"title": null
+},
+{
+"beat": 31,
+"at": 288.53,
+"secs": 9,
+"lines": [
+{
+"file": "film/vo/31_0.mp3",
+"at": 288.88,
+"secs": 4.92,
+"who": "n",
+"text": "When the sun rose, it rose on five strangers standing in the ruins."
+}
+],
+"title": null
+},
+{
+"beat": 32,
+"at": 297.53,
+"secs": 6.16,
+"lines": [
+{
+"file": "film/vo/32_0.mp3",
+"at": 297.88,
+"secs": 2.23,
+"who": "kaien",
+"text": "Then we stand together."
+},
+{
+"file": "film/vo/32_1.mp3",
+"at": 300.36,
+"secs": 2.88,
+"who": "haruto",
+"text": "Never again. Not one more city."
+}
+],
+"title": null
+},
+{
+"beat": 33,
+"at": 303.69,
+"secs": 5.92,
+"lines": [
+{
+"file": "film/vo/33_0.mp3",
+"at": 304.04,
+"secs": 5.12,
+"who": "n",
+"text": "That morning, they swore an oath. They called themselves the Zenith Vanguard."
+}
+],
+"title": null
+},
+{
+"beat": 34,
+"at": 309.61,
+"secs": 10,
+"lines": [
+{
+"file": "film/vo/34_0.mp3",
+"at": 309.96,
+"secs": 5.0,
+"who": "n",
+"text": "But far above the world, beyond the black sun, someone was watching."
+},
+{
+"file": "film/vo/34_1.mp3",
+"at": 315.21,
+"secs": 3.33,
+"who": "qelvaris",
+"text": "Five little oath-keepers. How delightful."
+}
+],
+"title": null
+},
+{
+"beat": 35,
+"at": 319.61,
+"secs": 6,
+"lines": [],
+"title": "ZENITH//UMBRA"
+}
+],
+"shots": [
+{
+"id": "s01",
+"beat": 0,
+"at": 0.0,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s02",
+"beat": 1,
+"at": 5.0,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s03",
+"beat": 1,
+"at": 10.0,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s04",
+"beat": 2,
+"at": 14.0,
+"secs": 6.68,
+"authored": 4
+},
+{
+"id": "s05",
+"beat": 3,
+"at": 20.68,
+"secs": 6.01,
+"authored": 4
+},
+{
+"id": "s06",
+"beat": 3,
+"at": 26.7,
+"secs": 6.01,
+"authored": 4
+},
+{
+"id": "s07",
+"beat": 4,
+"at": 32.71,
+"secs": 8.92,
+"authored": 4
+},
+{
+"id": "s08",
+"beat": 5,
+"at": 41.63,
+"secs": 4.78,
+"authored": 4
+},
+{
+"id": "s09",
+"beat": 5,
+"at": 46.41,
+"secs": 4.78,
+"authored": 4
+},
+{
+"id": "s10",
+"beat": 5,
+"at": 51.2,
+"secs": 4.78,
+"authored": 4
+},
+{
+"id": "s11",
+"beat": 6,
+"at": 55.98,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s12",
+"beat": 6,
+"at": 60.98,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s13",
+"beat": 6,
+"at": 64.98,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s14",
+"beat": 7,
+"at": 68.98,
+"secs": 5.93,
+"authored": 4
+},
+{
+"id": "s15",
+"beat": 7,
+"at": 74.91,
+"secs": 4.45,
+"authored": 3
+},
+{
+"id": "s16",
+"beat": 8,
+"at": 79.36,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s17",
+"beat": 8,
+"at": 84.36,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s18",
+"beat": 9,
+"at": 88.36,
+"secs": 6.7,
+"authored": 4
+},
+{
+"id": "s19",
+"beat": 10,
+"at": 95.06,
+"secs": 6.18,
+"authored": 5
+},
+{
+"id": "s20",
+"beat": 10,
+"at": 101.24,
+"secs": 4.94,
+"authored": 4
+},
+{
+"id": "s21",
+"beat": 11,
+"at": 106.18,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s22",
+"beat": 11,
+"at": 110.18,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s23",
+"beat": 11,
+"at": 114.18,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s24",
+"beat": 12,
+"at": 118.18,
+"secs": 5.57,
+"authored": 4
+},
+{
+"id": "s25",
+"beat": 12,
+"at": 123.75,
+"secs": 6.96,
+"authored": 5
+},
+{
+"id": "s26",
+"beat": 13,
+"at": 130.71,
+"secs": 11.08,
+"authored": 5
+},
+{
+"id": "s27",
+"beat": 14,
+"at": 141.79,
+"secs": 4.2,
+"authored": 4
+},
+{
+"id": "s28",
+"beat": 14,
+"at": 145.99,
+"secs": 4.2,
+"authored": 4
+},
+{
+"id": "s29",
+"beat": 14,
+"at": 150.19,
+"secs": 4.2,
+"authored": 4
+},
+{
+"id": "s30",
+"beat": 15,
+"at": 154.39,
+"secs": 4.76,
+"authored": 4
+},
+{
+"id": "s31",
+"beat": 15,
+"at": 159.15,
+"secs": 4.76,
+"authored": 4
+},
+{
+"id": "s32",
+"beat": 16,
+"at": 163.91,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s33",
+"beat": 17,
+"at": 168.91,
+"secs": 5.65,
+"authored": 5
+},
+{
+"id": "s34",
+"beat": 18,
+"at": 174.56,
+"secs": 4.77,
+"authored": 4
+},
+{
+"id": "s35",
+"beat": 18,
+"at": 179.34,
+"secs": 4.77,
+"authored": 4
+},
+{
+"id": "s36",
+"beat": 19,
+"at": 184.11,
+"secs": 4.1,
+"authored": 4
+},
+{
+"id": "s37",
+"beat": 19,
+"at": 188.21,
+"secs": 4.1,
+"authored": 4
+},
+{
+"id": "s38",
+"beat": 20,
+"at": 192.31,
+"secs": 7.88,
+"authored": 4
+},
+{
+"id": "s39",
+"beat": 21,
+"at": 200.19,
+"secs": 6.27,
+"authored": 4
+},
+{
+"id": "s40",
+"beat": 22,
+"at": 206.46,
+"secs": 7.8,
+"authored": 4
+},
+{
+"id": "s41",
+"beat": 23,
+"at": 214.26,
+"secs": 4.13,
+"authored": 4
+},
+{
+"id": "s42",
+"beat": 23,
+"at": 218.4,
+"secs": 4.13,
+"authored": 4
+},
+{
+"id": "s43",
+"beat": 24,
+"at": 222.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s44",
+"beat": 24,
+"at": 226.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s45",
+"beat": 24,
+"at": 229.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s46",
+"beat": 24,
+"at": 232.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s47",
+"beat": 24,
+"at": 235.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s48",
+"beat": 25,
+"at": 238.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s49",
+"beat": 25,
+"at": 241.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s50",
+"beat": 25,
+"at": 244.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s51",
+"beat": 26,
+"at": 248.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s52",
+"beat": 26,
+"at": 251.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s53",
+"beat": 27,
+"at": 255.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s54",
+"beat": 27,
+"at": 258.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s55",
+"beat": 28,
+"at": 262.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s56",
+"beat": 28,
+"at": 265.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s57",
+"beat": 29,
+"at": 269.53,
+"secs": 3.0,
+"authored": 3
+},
+{
+"id": "s58",
+"beat": 29,
+"at": 272.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s59",
+"beat": 30,
+"at": 276.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s60",
+"beat": 30,
+"at": 280.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s61",
+"beat": 30,
+"at": 284.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s62",
+"beat": 31,
+"at": 288.53,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s63",
+"beat": 31,
+"at": 293.53,
+"secs": 4.0,
+"authored": 4
+},
+{
+"id": "s64",
+"beat": 32,
+"at": 297.53,
+"secs": 6.16,
+"authored": 4
+},
+{
+"id": "s65",
+"beat": 33,
+"at": 303.69,
+"secs": 5.92,
+"authored": 5
+},
+{
+"id": "s66",
+"beat": 34,
+"at": 309.61,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s67",
+"beat": 34,
+"at": 314.61,
+"secs": 5.0,
+"authored": 5
+},
+{
+"id": "s68",
+"beat": 35,
+"at": 319.61,
+"secs": 6.0,
+"authored": 6
+}
+],
+"cues": [
+{
+"cue": "calm",
+"start": 0.0,
+"end": 79.36,
+"secs": 79.36
+},
+{
+"cue": "dread",
+"start": 79.36,
+"end": 168.91,
+"secs": 89.55
+},
+{
+"cue": "rise",
+"start": 168.91,
+"end": 214.26,
+"secs": 45.35
+},
+{
+"cue": "battle",
+"start": 214.26,
+"end": 288.53,
+"secs": 74.27
+},
+{
+"cue": "dawn",
+"start": 288.53,
+"end": 309.61,
+"secs": 21.08
+},
+{
+"cue": "omen",
+"start": 309.61,
+"end": 325.61,
+"secs": 16.0
+}
+]
+}

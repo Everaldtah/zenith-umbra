@@ -17,3 +17,5 @@ tests/lab-report.json
 
 .vercel
 tests/prof/
+.venv311/
+cinematic/work/
