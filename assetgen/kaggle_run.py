@@ -23,6 +23,7 @@ def main():
     ap.add_argument("--datasets", nargs="*", default=[])
     ap.add_argument("--no-wait", action="store_true")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--tpu", action="store_true", help="run on a TPU v5e-8 (separate quota from the GPUs)")
     a = ap.parse_args()
     name = a.stage + a.tag
     topic = f"zu-{name}-{secrets.token_hex(4)}"
@@ -33,7 +34,7 @@ def main():
     body = (HERE / "assets.py").read_text(encoding="utf-8") + "\n\n" + (HERE / a.stage / f"{a.stage}.py").read_text(encoding="utf-8")
     (build / "main.py").write_text(head + body, encoding="utf-8")
     meta = {"id": f"{USER}/zu-assetgen-{name}", "title": f"zu-assetgen-{name}", "code_file": "main.py", "language": "python",
-            "kernel_type": "script", "is_private": True, "enable_gpu": True, "enable_internet": True, "machine_shape": "NvidiaTeslaT4",
+            "kernel_type": "script", "is_private": True, "enable_gpu": not a.tpu, "enable_tpu": a.tpu, "enable_internet": True, **({} if a.tpu else {"machine_shape": "NvidiaTeslaT4"}),
             "dataset_sources": a.datasets, "competition_sources": [], "kernel_sources": a.sources}
     (build / "kernel-metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     r = kaggle("kernels", "push", "-p", str(build))

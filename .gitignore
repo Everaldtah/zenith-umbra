@@ -24,3 +24,5 @@ tests/e2e/anim-report.json
 tests/e2e/fixtures/anim/UAL_test.glb
 tests/e2e/fixtures/anim/mixamo_test.glb
 tests/e2e/fixtures/anim/manifest.json
+.venvgpu/
+__pycache__/
