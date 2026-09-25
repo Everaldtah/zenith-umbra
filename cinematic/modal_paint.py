@@ -24,8 +24,9 @@ def download():
 
 image = (modal.Image.debian_slim(python_version="3.11")
          .apt_install("libgl1", "libglib2.0-0")
-         .pip_install("torch==2.6.0", "diffusers==0.40.0", "transformers<5", "accelerate", "safetensors", "opencv-python-headless<5",
-                      "pillow", "huggingface_hub", "sentencepiece")
+         .pip_install("torch==2.6.0", "diffusers==0.40.0", "transformers==5.17.0", "tokenizers==0.23.2", "accelerate==1.15.0",
+                      "huggingface_hub==1.33.0", "safetensors==0.8.0", "opencv-python-headless<5",
+                      "pillow", "sentencepiece==0.2.2")
          .run_function(download)
          .add_local_dir(IN, "/in")
          .add_local_python_source("paintcore"))
@@ -44,16 +45,18 @@ class Painter:
 
     @modal.method()
     def paint(self, j):
-        img = self.pc.paint(self.pipe, self.i2i, j, "/in", self.neg, self.cas)
+        face = j["name"].split("_", 1)[1].startswith("face")
+        img = self.pc.portrait(self.pipe, j, "/in", self.neg) if face else self.pc.paint(self.pipe, self.i2i, j, "/in", self.neg, self.cas)
         b = io.BytesIO(); img.save(b, "PNG")
         return j["name"], b.getvalue()
 
 
 @app.local_entrypoint()
-def main(limit: int = 0, names: str = ""):
+def main(limit: int = 0, names: str = "", portraits: bool = False):
     import paintcore
     os.makedirs(OUT, exist_ok=True)
-    jobs = paintcore.body_jobs(json.load(open(os.path.join(IN, "jobs.json")))["jobs"])
+    J = json.load(open(os.path.join(IN, "jobs.json")))["jobs"]
+    jobs = paintcore.face_jobs(J) if portraits else paintcore.body_jobs(J)
     drawn = lambda n: any(os.path.exists(os.path.join(d, n + ".png")) for d in [OUT, *DONE_ELSEWHERE])
     jobs = [j for j in jobs if not drawn(j["name"]) and (not names or j["name"] in names.split(","))]
     if limit: jobs = jobs[:limit]

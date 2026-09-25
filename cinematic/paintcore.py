@@ -66,6 +66,24 @@ def paint(pipe, i2i, j, D, neg, cas, steps=28):
     return img
 
 
+def portrait(pipe, j, D, neg, steps=28):
+    """close-up: an anime portrait from the key art (IP-Adapter), no depth trace of the low-detail 3D head"""
+    import torch
+    from PIL import Image
+    pose = j["name"].split("_", 1)[1]
+    ref = Image.open(os.path.join(D, j["ref"])).convert("RGB")
+    pipe.set_ip_adapter_scale(j.get("ip", 0.35) + 0.1)
+    view = "looking at viewer, facing viewer" if pose == "facefront" else "three-quarter view"
+    prompt = j["faceprompt"].replace("portrait, face focus", f"portrait, upper body, face focus, {view}") + ", simple background"
+    g = torch.Generator("cpu").manual_seed(j["seed"] + (1 if pose == "facefront" else 0))
+    return pipe(prompt=prompt, negative_prompt=neg, image=Image.new("RGB", (1024, 1024)), controlnet_conditioning_scale=0.0, ip_adapter_image=ref,
+                guidance_scale=6.5, num_inference_steps=steps, width=1024, height=1024, generator=g).images[0]
+
+
+def face_jobs(jobs):
+    return [j for j in jobs if j["name"].split("_", 1)[1].startswith("face")]
+
+
 def body_jobs(jobs):
     """close-ups are painted separately as key-art portraits; GPU / TPU batches only draw the figures"""
     return [j for j in jobs if not j["name"].split("_", 1)[1].startswith("face")]

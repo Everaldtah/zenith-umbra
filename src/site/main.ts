@@ -48,11 +48,11 @@ document.getElementById('site')!.innerHTML = `
     <source src="${B}film/oath_at_dawn.mp4" type="video/mp4">
     <track kind="subtitles" srclang="en" label="English" src="${B}film/oath_at_dawn.vtt" default></video></div>
   <div class="chapters">${FILM_CHAPTERS.map(([t, n]) => `<button data-t="${t}"><b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</b>${n}</button>`).join('')}</div>
-  <div class="engine soon2d">
-    <img loading="lazy" src="${B}film/oath_poster.webp" alt="The Oath at Dawn - 2D anime cut">
-    <div><small>IN PRODUCTION</small><h3>THE OATH AT DAWN - 2D ANIME CUT</h3>
-      <p>A hand-drawn-style 2D version of the same story: every character redrawn from the game models as 90s cel animation in the spirit of Evangelion and Gurren Lagann, animated on 2s with painted, living backgrounds, impact frames and sakuga fights.</p>
-      <span class="btn">COMING SOON</span></div></div>
+  <a class="engine" href="${B}film.html">
+    <img loading="lazy" src="${B}film2d/poster.webp" alt="The Oath at Dawn - 2D anime cut">
+    <div><small>NEW - 2D ANIME CUT</small><h3>THE OATH AT DAWN - 2D ANIME CUT</h3>
+      <p>The same story redrawn as 90s cel animation in the spirit of Evangelion and Gurren Lagann: every hero and villain painted from the game models, key-art close-ups with lip-flap, painted multiplane backgrounds, physics particles, impact frames and Eva-style title cards - composited live in your browser.</p>
+      <span class="btn primary">WATCH THE 2D CUT</span> <span class="btn" onclick="event.preventDefault();location.href='${B}engine.html'">ENGINE CUT</span></div></a>
 </section>
 <section id="heroes"><h2>THE ROSTER</h2>
   <h3 class="zenith">ZENITH VANGUARD <small>heroes</small></h3><div class="hgrid">${zen.map(heroCard).join('')}</div>

@@ -158,7 +158,7 @@ export class Stage2D {
     this.fxMesh.position.set(W / 2, H / 2, 50); this.scene.add(this.fxMesh);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.45, 0.6, 0.82); this.composer.addPass(this.bloom);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.22, 0.5, 0.9)   // cel art: bloom only the real highlights, never white armour; this.composer.addPass(this.bloom);
     this.post = new ShaderPass(FilmShader); this.composer.addPass(this.post);
     this.composer.addPass(new OutputPass());
     this.resize(); addEventListener('resize', () => this.resize());

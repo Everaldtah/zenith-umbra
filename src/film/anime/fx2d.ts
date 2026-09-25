@@ -151,10 +151,11 @@ export function strings(ctx: Ctx, from: Pt, tos: Pt[], t: number, col = '#c77dff
 export function evaCard(ctx: Ctx, lines: [string, number][], k: number) {
   ctx.save(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = alpha('#ffffff', clamp(k * 8)); ctx.textBaseline = 'alphabetic';
-  let y = H * 0.36;
-  for (const [txt, size] of lines) {
+  let y = H * 0.24;
+  for (const [txt, size] of lines) {   // baseline advances by each line's own cap height, so big lines never ride up into small ones
+    y += size * 0.86;
     ctx.save(); ctx.font = `900 ${size}px "Times New Roman", "Noto Serif", serif`; ctx.translate(W * 0.12, y); ctx.scale(0.78, 1); ctx.fillText(txt, 0, 0); ctx.restore();
-    y += size * 1.05;
+    y += size * 0.18;
   }
   ctx.restore();
 }

@@ -1,6 +1,7 @@
 // "The Oath at Dawn" - 2D anime cut. One entry per screenplay shot (ids = cinematic/script.py). Everything is 2D:
 // painted plates, drawn character keys from the game models (played on 2s), physics particles, hand-built anime FX.
-import type { Stage2D } from './stage2d';
+import { T, type Stage2D } from './stage2d';
+import MOUTHS from './mouths.json';
 import type { Particles, Kind } from './particles';
 import * as F from './fx2d';
 import { ease, easeOut, easeInOut, seg, clamp, lerp, glow, alpha } from '../paint/core';
@@ -31,15 +32,35 @@ function scr(x: number, y: number): [number, number] { return [W / 2 + (x - W / 
 /** draw character key `pose` of `id`, feet at world (x, y), height h */
 function ch(c: C, id: string, pose: string, x: number, y: number, h: number, o: Parameters<Stage2D['sprites'][0]['set']>[4] = {}) {
   const s = c.st.sprites[spriteN++]; if (!s) return;
-  const [sx, sy] = scr(x, y);
-  s.set(`${c.base}${ART}${id}_${pose}.webp`, sx, sy, h * cam.zoom, { z: spriteN, ...o });
+  const [sx, sy] = scr(x, y), url = `${c.base}${ART}${id}_${pose}.webp`;
+  s.set(url, sx, sy, h * cam.zoom, { z: spriteN, ...o });
+  if (pose === 'face' && c.talk === id && (o.opacity ?? 1) > 0) lipFlap(c, id, url, sx, sy, h * cam.zoom, !!o.flip);
+}
+/** limited-animation lip flap: the flat anime open-mouth shape over the drawing's own closed mouth, open/closed on 3s */
+function lipFlap(c: C, id: string, url: string, sx: number, sy: number, h: number, flip: boolean) {
+  const m = (MOUTHS as Record<string, number[]>)[id], t = T(url); if (!m || !t) return;
+  const phase = Math.floor(c.t * 8) % 3; if (phase === 0) return;          // closed: the drawing's own mouth line
+  const img = t.image as { width: number; height: number }, w = h * img.width / img.height;
+  const mx = sx + (m[0] - 0.5) * w * (flip ? -1 : 1), my = sy - (1 - m[1]) * h, mw = m[2] * w * (phase === 2 ? 1 : 0.8), mh = mw * (phase === 2 ? 0.62 : 0.4);
+  const g = fx(c); g.save();
+  g.fillStyle = '#5a1822'; g.strokeStyle = '#1a0a10'; g.lineWidth = Math.max(1.5, mw * 0.08);
+  g.beginPath(); g.moveTo(mx - mw / 2, my); g.quadraticCurveTo(mx, my - mh * 0.35, mx + mw / 2, my); g.quadraticCurveTo(mx, my + mh * 1.1, mx - mw / 2, my); g.closePath();
+  g.fill(); g.stroke();
+  g.fillStyle = '#d8606e'; g.beginPath(); g.ellipse(mx, my + mh * 0.55, mw * 0.24, mh * 0.2, 0, 0, Math.PI * 2); g.fill();   // tongue
+  g.restore();
+}
+/** held key + stride: anime runs / walks / flights hold one drawing and sell the motion with bob, lean and squash on 2s */
+function stride(c: C, kind: 'run' | 'walk' | 'fly') {
+  const q = Math.floor(c.t * 12) / 12, rate = kind === 'run' ? 3.2 : kind === 'walk' ? 1.8 : 0.9;
+  const b = Math.abs(Math.sin(q * Math.PI * rate));
+  return { pose: kind === 'fly' ? 'fly0' : `${kind}1`, dy: -b * (kind === 'run' ? 22 : kind === 'walk' ? 10 : 16), rot: kind === 'run' ? -0.05 : 0, squash: kind === 'fly' ? 0 : (1 - b) * 0.03 };
 }
 /** a cycle on 2s: frame index of an n-frame cycle at 12 drawings per second */
 const on2 = (t: number, n: number, fps = 12) => Math.floor(t * fps) % n;
 /** held key drawings: [time, pose] - the drawing holds until the next key (limited animation) */
 function keysAt(t: number, keys: [number, string][]) { let p = keys[0][1]; for (const [k, v] of keys) if (t >= k) p = v; return p; }
 /** lip-flap: while `id` is speaking, alternate the face with its open-mouth key on 3s */
-const face = (c: C, id: string) => (c.talk === id && Math.floor(c.t * 8) % 2 ? 'facetalk' : 'face');
+const face = (_c: C, _id: string) => 'face';   // lip flap is drawn over the portrait by ch()
 const fx = (c: C) => c.st.fx;
 function snd(id: string, v = 1) { sfx.play(id, undefined, v); }
 function impact(c: C, kind: 1 | 2 | 3 = 1, s = 0.6) { post.impact = kind; shake = Math.max(shake, s); impHold = 0.1; impKind = kind; }
@@ -137,8 +158,8 @@ export const SHOTS: Record<string, Shot> = {
   s22: { update: c => { bg(c, 'sacred_tree_fire', 0, lerp(-40, 80, c.k), lerp(1.05, 1.2, ease(c.k)), { layers: true }); field(c, 'ember', 90); field(c, 'talisman', 5, { size: 9 }); c.P.wind = -40; },
     at: [[0.2, () => snd('flamestart')], [1.5, () => snd('flame', 0.8)], [3, () => snd('boom', 0.5)]] },
   s23: { update: c => { bg(c, 'sacred_tree_fire', -160, 60, 1.25, { layers: true, bright: 0.9 }); field(c, 'ember', 50);
-      ch(c, 'kaien', keysAt(c.t, [[0, 'run0'], [0.1, 'run1'], [2.2, 'cast0']]), lerp(500, 900, seg(c.k, 0, 0.6)), 1010, 640, { rim: '#ff7a2a' });
-      if (c.t < 2.2) { const r = on2(c.t, 6); c.st.sprites[spriteN - 1].set(`${c.base}${ART}kaien_run${r}.webp`, ...scr(lerp(500, 900, seg(c.k, 0, 0.6)), 1010), 640, { rim: '#ff7a2a' }); } },
+      { const st = stride(c, 'run'), run = c.t < 2.2;
+        ch(c, 'kaien', run ? st.pose : 'cast0', lerp(500, 900, seg(c.k, 0, 0.6)), 1010 + (run ? st.dy : 0), 640, { rim: '#ff7a2a', rot: run ? st.rot : 0, squash: run ? st.squash : 0 }); } },
     at: [[2.4, c => { snd('talisman'); c.P.emit('talisman', 24, 960, 600, { speed: 500, size: 11 }); }]] },
   s24: { update: c => { bg(c, 'seal_cavern', 0, 0, lerp(1.1, 1.3, ease(c.k)), { layers: true, bright: 0.8 + seg(c.k, 0.35, 0.7) * 0.8 });
       if (c.k > 0.35) { F.evaCross(fx(c), 960, 700, seg(c.k, 0.35, 1), '#ff4a3a', 0.8); field(c, 'debris', 30, { col: '#3a2a2a' }); } },
@@ -192,10 +213,10 @@ export const SHOTS: Record<string, Shot> = {
       ch(c, 'mirei', keysAt(c.t, [[0, 'cast0'], [1.4, 'cast1']]), 960, 1000, 700, { rim: '#6cc4ff', wind: 0.2 }); if (c.t > 1.4) F.spiral(fx(c), 960, 560, 360, c.t, '#6cc4ff', 0.2); },
     enter: c => c.ui.card('MIREI', 'The Starweaver', '#8fd3ff'), at: [[0.6, () => snd('constellation')]] },
   s37: { update: c => { bg(c, 'amatsu_dawn', 0, lerp(-200, 200, ease(c.k)), 1.15, { layers: true, bright: 0.85 });
-      ch(c, 'mirei', `fly${on2(c.t, 2, 4)}`, 960, lerp(1200, 500, ease(c.k)), 600, { rim: '#bfe8ff', wind: -0.6 }); field(c, 'feather', 8, { col: '#f4f6ff' }); F.speedLines(fx(c), -Math.PI / 2, c.t, { a: 0.3, n: 40 }); },
+      { const st = stride(c, 'fly'); ch(c, 'mirei', st.pose, 960, lerp(1200, 500, ease(c.k)) + st.dy, 600, { rim: '#bfe8ff', wind: -0.6 }); } field(c, 'feather', 8, { col: '#f4f6ff' }); F.speedLines(fx(c), -Math.PI / 2, c.t, { a: 0.3, n: 40 }); },
     at: [[0.2, () => snd('sunhop')]] },
   s38: { update: c => { bg(c, 'shrine_steps', lerp(0, 160, c.k), lerp(-60, 60, c.k), 1.12, { layers: true }); field(c, 'talisman', 14, { size: 10 }); c.P.wind = 30;
-      ch(c, 'kaien', `walk${on2(c.t, 6)}`, 960, 1010, 640, { wind: 0.3 }); },
+      { const st = stride(c, 'walk'); ch(c, 'kaien', st.pose, 960, 1010 + st.dy, 640, { wind: 0.3, squash: st.squash }); } },
     at: [[0.3, () => snd('talisman', 0.6)]] },
   s39: { update: c => { bg(c, 'kurogane_skyline', 0, 60, 1.15, { layers: true, bright: 0.7 }); field(c, 'rain', 420);
       ch(c, 'raijin', keysAt(c.t, [[0, 'cast0'], [1.2, 'cast1']]), 960, 1020, 700, { rim: '#8ad8ff' });
@@ -235,10 +256,10 @@ export const SHOTS: Record<string, Shot> = {
     at: [[0.2, () => snd('bowdraw')], [2.1, () => snd('bow')]] },
   // duel 1: Tenkai-Oh vs Gorgoth
   s48: { update: c => { bg(c, 'academy_night', lerp(-200, 200, c.k), 0, 1.15, { layers: true, tint: '#ff9a9a' });
-      ch(c, 'gorgoth', `run${on2(c.t, 6)}`, 960, 1060, 900, { flip: true }); F.speedLines(fx(c), 0, c.t, { col: '#ff2244', a: 0.5 }); F.drill(fx(c), 700, 640, Math.PI, 260, 50, c.t); field(c, 'dust', 20, { col: '#6a5a6a' }); },
+      { const st = stride(c, 'run'); ch(c, 'gorgoth', st.pose, 960, 1060 + st.dy, 900, { flip: true, rot: -st.rot, squash: st.squash }); } F.speedLines(fx(c), 0, c.t, { col: '#ff2244', a: 0.5 }); F.drill(fx(c), 700, 640, Math.PI, 260, 50, c.t); field(c, 'dust', 20, { col: '#6a5a6a' }); },
     at: [[0.1, () => snd('charge')]] },
   s49: { update: c => { bg(c, 'academy_night', lerp(200, -200, c.k), 0, 1.15, { layers: true, tint: '#ffe0a0' });
-      ch(c, 'tenkai', `run${on2(c.t, 6)}`, 960, 1060, 900); F.speedLines(fx(c), Math.PI, c.t, { col: '#ffd76a', a: 0.5 }); field(c, 'ember', 30, { col: '#ffd76a' }); },
+      { const st = stride(c, 'run'); ch(c, 'tenkai', st.pose, 960, 1060 + st.dy, 900, { rot: st.rot, squash: st.squash }); } F.speedLines(fx(c), Math.PI, c.t, { col: '#ffd76a', a: 0.5 }); field(c, 'ember', 30, { col: '#ffd76a' }); },
     at: [[0.1, () => { snd('charge'); snd('mechjump'); }]] },
   s50: { update: c => { const hit = c.t > 0.95;
       bg(c, 'academy_night', 0, 0, hit ? 1.3 : lerp(1.1, 1.25, c.k), { layers: true, tint: '#fff0d0' });

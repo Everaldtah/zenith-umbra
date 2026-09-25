@@ -245,7 +245,7 @@ if os.environ.get("BACKEND") == "tpu":
     sys.exit(0)
 
 # ================================================================ CUDA backend (Kaggle T4 x2) - recipe v2 via paintcore.py (in the dataset)
-subprocess.run(f"{sys.executable} -m pip install -q -U diffusers==0.40.0 'transformers<5' accelerate 'opencv-python-headless<5'", shell=True)
+subprocess.run(f"{sys.executable} -m pip install -q -U diffusers==0.40.0 transformers==5.17.0 tokenizers==0.23.2 accelerate==1.15.0 huggingface_hub==1.33.0 'opencv-python-headless<5'", shell=True)
 cfgs = glob.glob("/kaggle/input/**/jobs.json", recursive=True)
 D = os.path.dirname(cfgs[0]); sys.path.insert(0, D)
 import paintcore
