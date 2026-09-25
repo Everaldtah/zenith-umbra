@@ -14,29 +14,61 @@ import { animLib } from './ClipLibrary';
 
 type V = [number, number, number];     // view space metres: right, up, forward (from the eye)
 type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun';
-interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; }   // push: eye forward past a high collar / coat (m)
+// push: eye forward past a bulky collar / coat (m); clip: cut viewmodel geometry closer than this to the camera (m) -
+// a high collar that would otherwise wrap the view (hands are always further out)
+interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; }
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
-  raijin: { grip: 'katana', R: [0.2, -0.25, 0.32], L: [0.08, -0.28, 0.3], recoil: 0, push: 0.12 },
+  raijin: { grip: 'katana', R: [0.18, -0.12, 0.36], L: [0.06, -0.15, 0.34], recoil: 0, clip: 0.14 },
   yuzu: { grip: 'bow', R: [0.0, -0.13, 0.4], L: [-0.06, -0.13, 0.52], recoil: 0 },
-  kaien: { grip: 'caster', R: [0.15, -0.19, 0.36], L: [-0.14, -0.21, 0.33], recoil: 0.03 },
-  mirei: { grip: 'caster', R: [0.14, -0.18, 0.38], L: [-0.15, -0.2, 0.34], recoil: 0.02 },
-  nocturne: { grip: 'caster', R: [0.15, -0.17, 0.37], L: [-0.15, -0.21, 0.33], recoil: 0.02 },
-  hex: { grip: 'caster', R: [0.13, -0.18, 0.38], L: [-0.13, -0.18, 0.38], recoil: 0.025 },
-  kagemaru: { grip: 'kunai', R: [0.17, -0.2, 0.32], L: [-0.17, -0.25, 0.3], recoil: 0 },
-  enra: { grip: 'fists', R: [0.16, -0.21, 0.34], L: [-0.16, -0.21, 0.34], recoil: 0, push: 0.05 },
-  haruto: { grip: 'pistol', R: [0.13, -0.16, 0.4], L: [0.06, -0.19, 0.34], recoil: 0.05 },
-  tenkai: { grip: 'hammer', R: [0.24, -0.34, 0.34], L: [0.14, -0.4, 0.42], recoil: 0 },
-  gorgoth: { grip: 'shotgun', R: [0.2, -0.26, 0.3], L: [0.05, -0.25, 0.62], recoil: 0.09 },
+  kaien: { grip: 'caster', R: [0.15, -0.15, 0.37], L: [-0.14, -0.16, 0.34], recoil: 0.03 },
+  mirei: { grip: 'caster', R: [0.14, -0.14, 0.38], L: [-0.15, -0.15, 0.35], recoil: 0.02 },
+  nocturne: { grip: 'caster', R: [0.15, -0.14, 0.37], L: [-0.15, -0.16, 0.34], recoil: 0.02 },
+  hex: { grip: 'caster', R: [0.13, -0.14, 0.38], L: [-0.13, -0.14, 0.38], recoil: 0.025 },
+  kagemaru: { grip: 'kunai', R: [0.17, -0.15, 0.34], L: [-0.17, -0.18, 0.32], recoil: 0 },
+  enra: { grip: 'fists', R: [0.16, -0.15, 0.36], L: [-0.16, -0.15, 0.36], recoil: 0, push: 0.05 },
+  haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
+  tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
+  gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
 };
-const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.2, 0.32], L: [0.03, -0.18, 0.5], recoil: 0.04 };
+const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
 const FP_CLIPS = ['fp_idle', 'fp_fire', 'fp_alt', 'fp_melee', 'fp_reload', 'fp_ability1', 'fp_ability2', 'fp_ult', 'fp_hit', 'fp_land'] as const;
 const smooth = (u: number) => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
 const bump = (u: number) => (u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI));
 const lerp = (a: V, b: V, k: number): V => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const add = (a: V, b: V, k = 1): V => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+
+/**
+ * Where the arms rig sits relative to the camera: auto-rigged arms vary a lot in length, so instead of bending the grip
+ * to the rig, the rig moves (in model space, applied to the eye) until both rest hand targets are within reach - the
+ * hands land where the style wants them on screen and the shoulders stay off-screen. fp_arms.py places its camera the
+ * same way, so Blender-authored clips keep this framing.
+ */
+export function viewmodelOffset(an: { rest: Partial<Record<string, { p: THREE.Vector3 }>> }, eye: THREE.Vector3, style: Style, scaleFit: number) {
+  const k = 1 / Math.max(1e-6, scaleFit);
+  const o = new THREE.Vector3();
+  const arms = ([['L', style.L], ['R', style.R]] as const).flatMap(([S, v]) => {
+    const ua = an.rest[`upperarm_${S}`], fa = an.rest[`forearm_${S}`], hd = an.rest[`hand_${S}`];
+    if (!v || !ua || !fa || !hd) return [];
+    const reach = (ua.p.distanceTo(fa.p) + fa.p.distanceTo(hd.p)) * 0.92;
+    return [{ t: new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(eye), s: ua.p, reach }];
+  });
+  // the shoulders must stay behind the camera - by the style's push too, so a high collar stays behind it (the rig slides
+  // up / down / sideways freely, but only so far forward)
+  const maxZ = Math.min(...arms.map(a => eye.z - a.s.z)) - (0.03 + (style.push ?? 0)) * k;
+  const pull = (a: typeof arms[number], f: number) => {
+    const d = a.t.clone().sub(o).sub(a.s), ex = d.length() - a.reach;
+    if (ex > 0) o.addScaledVector(d.normalize(), ex * f);
+    o.z = Math.min(o.z, maxZ);
+  };
+  for (let it = 0; it < 40; it++) for (const a of arms) pull(a, 0.6);
+  // when both grips can't be reached (a cross-body two-handed grip on very short arms), the main hand wins
+  const main = arms[arms.length - 1];
+  if (main) pull(main, 1);
+  return o.clampLength(0, Math.max(0.5 * k, 2 * Math.max(0, ...arms.map(a => a.reach))));
+}
 
 export interface FpInput { dt: number; time: number; yawRate: number; pitchRate: number; aspect: number; }
 
@@ -80,7 +112,11 @@ export class FirstPersonArms {
       const R = an.rest;
       const H = an.height;
       this.eye.copy(R.head!.p).add(new THREE.Vector3(0, H * 0.06, H * 0.05 + (this.style.push ?? 0) / Math.max(1e-6, this.view.scaleFit)));
+      this.eye.sub(viewmodelOffset(an, this.eye, this.style, this.view.scaleFit));
     }
+    // near cut in camera space (the camera sits at the origin looking down +Z): drops a collar wrapped around the eye
+    const plane = this.style.clip ? [new THREE.Plane(new THREE.Vector3(0, 0, 1), -this.style.clip)] : null;
+    for (const m of this.view.mats) { m.clippingPlanes = plane; m.needsUpdate = true; }
     this.bindClips();
   }
 
@@ -229,17 +265,9 @@ export class FirstPersonArms {
     if (hit < 0.25) { const k = bump(hit / 0.25) * 0.02; R = add(R, [0, k, -k]); if (L) L = add(L, [0, k, -k]); }
     // view space (right, up, forward) -> model space (+X = the character's left)
     const k = 1 / Math.max(1e-6, this.view.scaleFit);
-    // the style table assumes a ~0.5m reach; auto-rigged arms vary a lot, so hand offsets from each shoulder are
-    // scaled by the rig's real reach (a short-armed rig keeps its hands in reach instead of tearing the mesh)
-    const toM = (v: V, side: 'L' | 'R') => {
-      const t = new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(this.eye);
-      const ua = an.rest[`upperarm_${side}`], fa = an.rest[`forearm_${side}`], hd = an.rest[`hand_${side}`];
-      if (!ua || !fa || !hd) return t;
-      const reach = (ua.p.distanceTo(fa.p) + fa.p.distanceTo(hd.p)) * this.view.scaleFit;
-      const f = Math.min(1.25, Math.max(0.35, reach / 0.5));
-      return t.sub(ua.p).multiplyScalar(f).add(ua.p);
-    };
-    const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L, 'L') : null, toM(R, 'R')];
+    // hand targets are camera-relative; the rig sits wherever puts the grip in reach (viewmodelOffset)
+    const toM = (v: V) => new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(this.eye);
+    const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L) : null, toM(R)];
     const prop = S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
     an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop });
     this.source = `proc:${src}`;

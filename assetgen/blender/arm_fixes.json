@@ -1,0 +1,4 @@
+{
+  "_doc": "Front-view arm joints (x, z in the rigged model: faces -Y, +X = its left) for heroes whose auto-rigged arms were misplaced. Used by fix_arms.py --hero <id>. Order: shoulder, elbow, wrist, hand tip.",
+  "raijin": { "right": "-0.23,1.22 -0.335,1.02 -0.34,0.86 -0.33,0.75", "left": "0.22,1.22 0.29,0.99 0.27,0.84 0.26,0.74" }
+}

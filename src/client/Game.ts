@@ -280,7 +280,7 @@ export class Game {
     if (this.fp && wantFp) {
       // viewmodel pass: own depth so the arms never clip into walls
       const r = this.renderer;
-      r.autoClear = false; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true;
+      r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false;
     }
     this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.showFps ? this.fpsAvg : 0, this.input.keys.has(KEYS.score), this.spectateLabel());

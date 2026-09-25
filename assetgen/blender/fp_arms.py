@@ -32,21 +32,23 @@ CLIPS = ["fp_idle", "fp_fire", "fp_alt", "fp_melee", "fp_reload", "fp_ability1",
 # personality: view-space hand rest positions in metres from the eye (right, up, forward) - mirrors FP_STYLE in
 # src/render/FirstPerson.ts so authored clips start from exactly the procedural framing
 STYLE = {
-    "raijin": ("katana", (0.2, -0.25, 0.32), (0.08, -0.28, 0.3), 0.0),
+    "raijin": ("katana", (0.18, -0.12, 0.36), (0.06, -0.15, 0.34), 0.0),
     "yuzu": ("bow", (0.0, -0.13, 0.4), (-0.06, -0.13, 0.52), 0.0),
-    "kaien": ("caster", (0.15, -0.19, 0.36), (-0.14, -0.21, 0.33), 0.03),
-    "mirei": ("caster", (0.14, -0.18, 0.38), (-0.15, -0.2, 0.34), 0.02),
-    "nocturne": ("caster", (0.15, -0.17, 0.37), (-0.15, -0.21, 0.33), 0.02),
-    "hex": ("caster", (0.13, -0.18, 0.38), (-0.13, -0.18, 0.38), 0.025),
-    "kagemaru": ("kunai", (0.17, -0.2, 0.32), (-0.17, -0.25, 0.3), 0.0),
-    "enra": ("fists", (0.16, -0.21, 0.34), (-0.16, -0.21, 0.34), 0.0),
-    "haruto": ("pistol", (0.13, -0.16, 0.4), (0.06, -0.19, 0.34), 0.05),
-    "tenkai": ("hammer", (0.24, -0.34, 0.34), (0.14, -0.4, 0.42), 0.0),
-    "gorgoth": ("shotgun", (0.2, -0.26, 0.3), (0.05, -0.25, 0.62), 0.09),
+    "kaien": ("caster", (0.15, -0.15, 0.37), (-0.14, -0.16, 0.34), 0.03),
+    "mirei": ("caster", (0.14, -0.14, 0.38), (-0.15, -0.15, 0.35), 0.02),
+    "nocturne": ("caster", (0.15, -0.14, 0.37), (-0.15, -0.16, 0.34), 0.02),
+    "hex": ("caster", (0.13, -0.14, 0.38), (-0.13, -0.14, 0.38), 0.025),
+    "kagemaru": ("kunai", (0.17, -0.15, 0.34), (-0.17, -0.18, 0.32), 0.0),
+    "enra": ("fists", (0.16, -0.15, 0.36), (-0.16, -0.15, 0.36), 0.0),
+    "haruto": ("pistol", (0.13, -0.12, 0.4), (0.06, -0.15, 0.36), 0.05),
+    "tenkai": ("hammer", (0.24, -0.26, 0.38), (0.14, -0.3, 0.46), 0.0),
+    "gorgoth": ("shotgun", (0.2, -0.19, 0.34), (0.05, -0.19, 0.62), 0.09),
 }
 # eye pushed forward past a high collar / bulky coat (metres), as FP_STYLE.push in FirstPerson.ts
-PUSH = {"raijin": 0.12, "enra": 0.05}
-GRIP, REST_R, REST_L, RECOIL = STYLE.get(a.hero, ("rifle", (0.16, -0.2, 0.32), (0.03, -0.18, 0.5), 0.04))
+PUSH = {"enra": 0.05}
+# near clip (m): cut geometry closer than this to the camera - a high collar wrapped around the eye (FP_STYLE.clip)
+CLIP = {"raijin": 0.14}
+GRIP, REST_R, REST_L, RECOIL = STYLE.get(a.hero, ("rifle", (0.16, -0.15, 0.34), (0.03, -0.14, 0.5), 0.04))
 
 
 def v3(v, d=(0, 0, 0), k=1.0):
@@ -116,17 +118,29 @@ def setup():
     bpy.ops.import_scene.gltf(filepath=os.path.abspath(a.model))
     arm = hero_armature()
     eye, RIGHT, UP, FWD = eye_frame(arm)
-    # the personality table assumes a ~0.5m reach: offsets from each shoulder scale with the rig's real reach (as in the game)
-    def reach_k(side):
-        b = arm.data.bones
-        r = (b[f"upperarm_{side}"].head_local - b[f"forearm_{side}"].head_local).length + (b[f"forearm_{side}"].head_local - b[f"hand_{side}"].head_local).length
-        return min(1.25, max(0.35, r * arm.matrix_world.to_scale().x / 0.5))
-    K_REACH = {s: reach_k(s) for s in ("L", "R")}
-    SH = {s: arm.matrix_world @ arm.data.bones[f"upperarm_{s}"].head_local for s in ("L", "R")}
+    # the viewmodel offset (viewmodelOffset in FirstPerson.ts): the camera + grip move together until both rest hand
+    # targets are within reach of the shoulders, so the hands land where the style puts them on screen
+    b = arm.data.bones
+    SH = {s: arm.matrix_world @ b[f"upperarm_{s}"].head_local for s in ("L", "R")}
+    REACH = {s: ((b[f"upperarm_{s}"].head_local - b[f"forearm_{s}"].head_local).length + (b[f"forearm_{s}"].head_local - b[f"hand_{s}"].head_local).length) * arm.matrix_world.to_scale().x * 0.92 for s in ("L", "R")}
     view0 = lambda p: eye + RIGHT * p[0] + UP * p[1] + FWD * p[2]
-    view = lambda p, side="R": SH[side] + (view0(p) - SH[side]) * K_REACH[side]
+    o = Vector((0, 0, 0))
+    # shoulders stay behind the camera: the rig may slide up / down / sideways, but only so far forward (-Y)
+    minY = max(eye.y - SH[s_].y for s_ in ("L", "R")) + 0.03 + PUSH.get(a.hero, 0.0)   # and past a high collar
+    def pull(s_, rest_, f):
+        nonlocal o
+        d = view0(rest_) - o - SH[s_]; ex = d.length - REACH[s_]
+        if ex > 0: o = o + d.normalized() * ex * f
+        o.y = max(o.y, minY)
+    for _ in range(40):
+        for s_, rest_ in (("L", REST_L), ("R", REST_R)): pull(s_, rest_, 0.6)
+    pull("R", REST_R, 1.0)                                         # the main hand wins when both can't be reached
+    cap = max(0.5, 2 * max(REACH.values()))
+    if o.length > cap: o = o.normalized() * cap
+    eye = eye - o
+    view = lambda p, side="R": view0(p) - o
     # camera = the in-game eye
-    cam_data = bpy.data.cameras.new("fp_eye"); cam_data.angle_y = math.radians(58); cam_data.clip_start = 0.02
+    cam_data = bpy.data.cameras.new("fp_eye"); cam_data.angle_y = math.radians(58); cam_data.clip_start = CLIP.get(a.hero, 0.02)
     cam = bpy.data.objects.new("fp_eye", cam_data); sc.collection.objects.link(cam)
     cam.location = eye; cam.rotation_euler = (math.radians(90), 0, math.radians(180))
     sc.camera = cam
@@ -139,7 +153,7 @@ def setup():
     for side, s in (("L", 1), ("R", -1)):
         rest = REST_L if side == "L" else REST_R
         b = cd.edit_bones.new(f"hand_{side}"); b.head = view(rest, side); b.tail = b.head + FWD * 0.06
-        p = cd.edit_bones.new(f"elbow_{side}"); p.head = SH[side] + (Vector((s * 0.35, 0, -0.45)) + FWD * -0.1) * K_REACH[side]; p.tail = p.head + UP * 0.05
+        p = cd.edit_bones.new(f"elbow_{side}"); p.head = SH[side] + (Vector((s * 0.35, 0, -0.45)) + FWD * -0.1) * min(1.0, REACH[side] / 0.46); p.tail = p.head + UP * 0.05
     bpy.ops.object.mode_set(mode="OBJECT")
     # IK on the hero's forearms (2-bone chain), hands copy the target rotation
     for side in ("L", "R"):

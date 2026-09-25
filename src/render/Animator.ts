@@ -318,6 +318,7 @@ export class Animator {
     this.modelQ.clear();
     for (const n of ['hips', 'spine', 'chest', 'neck', 'head', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R', 'wing_L', 'wing_R'] as BoneName[]) if (this.bones[n]) this.applyDelta(n, new THREE.Quaternion());
     this.bones.hips!.position.copy(this.hipsRestLocal);
+    // the head (and its hair) out of the camera; not the neck - high collars are weighted to it and would smear
     for (const n of ['head'] as BoneName[]) this.bones[n]?.scale.setScalar(1e-3);
     for (let i = 0; i < 2; i++) {
       const S = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
