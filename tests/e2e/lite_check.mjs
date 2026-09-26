@@ -1,4 +1,4 @@
-// node tests/e2e/lite_check.mjs [port] [query] - the web edition: original arenas + legacy rules, procedural animation only
+// node tests/e2e/lite_check.mjs [port | https://site] [query] - the web edition: original arenas + legacy rules, procedural animation only
 // (no clip-library / first-person GLB downloads), no desktop-only heroes or maps, no page errors
 import puppeteer from 'puppeteer-core';
 const port = process.argv[2] ?? '5199';
@@ -12,7 +12,7 @@ const errs = [], glbs = [];
 p.on('pageerror', e => errs.push(e.stack || e.message));
 p.on('request', r => { const u = r.url(); if (/\.glb/.test(u)) glbs.push(u.replace(/^.*\/(public\/)?/, '')); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
-await p.goto(`http://localhost:${port}/play.html${query}`, { waitUntil: 'domcontentloaded' }); await wait(2000);
+await p.goto(`${port.startsWith("http") ? port : `http://localhost:${port}`}/play.html${query}`, { waitUntil: 'domcontentloaded' }); await wait(2000);
 const menu = await p.evaluate(() => [...document.querySelectorAll('.title button, .title a')].map(e => e.textContent.trim().replace(/\s+/g, ' ')));
 p.evaluate(() => { const M = window.__zu.menu; M.queue = null; M.mode = 'skirmish'; M.map = 'amatsu'; M.hero = 'mirei'; M.launch(); });
 for (let i = 0; i < 60 && !(await p.evaluate(() => window.__zu.game?.match?.world?.map.id === 'amatsu' && window.__zu.game.running)); i++) await wait(500);
