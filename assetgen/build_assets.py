@@ -21,12 +21,13 @@ HEROES = {
     'kaien': (1.8, ['--tris', '45000']), 'raijin': (1.8, ['--tris', '45000']), 'yuzu': (1.62, ['--tris', '45000']), 'hex': (1.95, ['--tris', '45000']),
     'kagemaru': (1.78, ['--tris', '45000']), 'enra': (2.05, ['--tris', '45000']),
     'haruto': (1.75, ['--tris', '45000']), 'vorn': (1.85, []),
+    'gantetsu': (2.4, ['--tris', '50000']),
     'bot_dummy': (1.9, ['--tris', '12000']), 'bot_sentry': (1.7, ['--mech', '--tris', '12000']),
     # campaign
     'qelvaris': (2.3, []), 'minion_lancer': (2.0, ['--tris', '12000']), 'minion_sentinel': (2.2, ['--mech', '--tris', '12000']),
     'boss_ironmaw': (14, ['--mech', '--tris', '40000']), 'boss_leviathan': (16, ['--mech', '--tris', '40000']), 'boss_reaper': (16, ['--mech', '--tris', '40000']), 'boss_genesis': (18, ['--mech', '--tris', '40000']),
 }
-HERO_IDS = {'tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto'}
+HERO_IDS = {'tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto', 'gantetsu'}
 STATIC = {'bot_drone': 1.0, 'minion_swarmer': 1.2, 'minion_bomber': 1.4, 'boss_phoenix': 15}
 
 

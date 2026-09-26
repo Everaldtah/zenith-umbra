@@ -2,6 +2,32 @@
 
 For the next person or agent working on ZENITH//UMBRA animation. It covers the current state, the data behind the decisions, how to verify changes, and what's still open. Branch: `claude/jolly-volta-8xyujb` (commits `2faf268`, `13bc623`).
 
+## 0a. Session 3 (2026-09-26): the Overwatch 2 performance layer, Mirei's flight, Gantetsu
+
+Sources: GDC talks (Gibson "Animation Bootcamp", Boehm first-person, Davis "procedural hit reactions"), Blizzard's OW2
+Animation Station, smear-frame writeups. Everything below is **desktop edition only**: `setPerformanceLayer(false)`
+(the web build) restores the original animator exactly. `tests/unit/modes.test.ts` checks for no tilt and no squash.
+- **Personas** (`PERSONA` in `Animator.ts`) give each hero weight, bounce, lean, stance width, chest and hip carriage,
+  sway, aim-spring stiffness and damping, aim lag and squash. The idle pose is the character read (Gibson).
+- **Springs everywhere** (`spring()` with substeps): aim lag and lean, whole-body tilt (`tilt.pitch/roll`, applied by
+  `CharacterView` about a pivot at 0.55 x height), directional hit reactions where the body leads and the head follows,
+  and knockback float poses.
+- **Squash and stretch** on jump, land and dash (`sqY`, `sqXZ`). **Smear**: the vertex shader stretches the mesh
+  along its velocity above 12 m/s, capped at 0.28 m (`zuSmear`, off in first person).
+- **Upright weapon-forward runs**: the torso pitch correction took the deep crouched run from 27.7 to 20.6 degrees.
+- **Mirei** (a Mercy-style kit, original): F = swoop to the ally you look at (30 m), with wings on springs.
+  Space mid-swoop = slingshot (keeps momentum), Ctrl = superjump. Otherwise a slow angelic descent. The bots swoop
+  only with a purpose (threatened, or a hurt ally out of beam range).
+- **Gantetsu** (tank, 2.4 m, `public/models/gantetsu.glb` made on Modal: Qwen-Image-Edit concept, then TRELLIS.2,
+  then a UniRig skin). He carries two `buildChaingun` props on the forearms (`placeGuns`). In first person the guns
+  converge on a point 14 m past the reticle (`updateFirstPerson({ gunAim })`). Following the IK-bent forearms, they
+  pointed at the sky.
+
+Pitfalls from this session:
+- A `ShaderMaterial` with `fog: true` needs the local to be named `mvPosition`, or `<fog_vertex>` fails to compile.
+- Push maps have no point meshes, so `MapScene.update` must skip them.
+- Bright daylight maps bloom white walls at threshold 0.82, so `Game.start` raises it for them.
+
 ## 0. Session 2 (2026-09-25, evening): what changed
 
 **Clip library is live** (`public/anim`): Quaternius UAL1 + UAL2 *Standard* (the free tier: 43 clips each) and 38 Mixamo

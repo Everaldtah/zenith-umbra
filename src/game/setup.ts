@@ -1,5 +1,6 @@
 // Match construction shared by the game client, the AI test lab and headless tests.
-import { HEROES } from '../data/heroes';
+import { rosterFor, type HeroDef } from '../data/heroes';
+import { FULL } from '../edition';
 import { Nav } from '../ai/Nav';
 import { Bot } from '../ai/Bot';
 import { World, type Mode } from './World';
@@ -38,14 +39,34 @@ export function createMatch(mapId: string, mode: Mode, playerHero: string | null
     }
     return { world, nav, player, bots };
   }
-  for (const h of HEROES) {
+  // the AI lab / headless sims alternate the two-tank team's pick map by map (deterministic, both get exercised)
+  const seed = [...mapId].reduce((s, c) => s + c.charCodeAt(0), 0) % 2;
+  for (const h of lineup(playerHero, mode === 'aitest' ? () => seed * 0.99 : Math.random)) {
     const a = world.addHero(h.id);
-    if (h.id === playerHero && (mode === 'skirmish' || mode === 'stadium')) { a.isPlayer = true; player = a; continue; }
+    if (h.id === playerHero && ['skirmish', 'stadium', 'quickplay', 'competitive', 'practice'].includes(mode)) { a.isPlayer = true; player = a; continue; }
     const b = new Bot(world, a, nav, skill);
     a.controller = b; bots.push(b);
   }
   if (mode === 'stadium') world.stadium = new Stadium(world);
   return { world, nav, player, bots };
+}
+
+/**
+ * Role queue, the 5v5 way: each side fields one tank, two supports and two damage heroes. A team with more heroes in a
+ * role than slots (the Umbra Syndicate has two tanks: Gorgoth and Gantetsu) sends a random one - always the player's pick.
+ */
+export function lineup(playerHero: string | null, rnd: () => number = Math.random, full = FULL): HeroDef[] {
+  const SLOTS: Record<string, number> = { tank: 1, support: 2, dps: 2 };
+  const out: HeroDef[] = [];
+  const HEROES = rosterFor(full);
+  for (const team of ['zenith', 'umbra'] as const) for (const role of Object.keys(SLOTS)) {
+    const pool = HEROES.filter(h => h.team === team && h.role === role);
+    const mine = pool.filter(h => h.id === playerHero), rest = pool.filter(h => h.id !== playerHero);
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    out.push(...[...mine, ...rest].slice(0, SLOTS[role]));
+  }
+  // keep the roster order (spawn slots, scoreboard) stable
+  return HEROES.filter(h => out.includes(h));
 }
 
 /** Scripted routine for the gallery / animation test: idle, walk, run, strafe, backpedal, jump, fly, attack, cast, hit. */

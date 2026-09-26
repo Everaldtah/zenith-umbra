@@ -1,6 +1,8 @@
 // Front-end screens: title, mode select, hero select (with rival/counter info), map select, settings, pause, results.
-import { HEROES, HERO, TEAM_NAME, isAbility, type HeroDef } from '../data/heroes';
-import { PLAY_MAPS, MAP } from '../data/maps';
+import { HERO, TEAM_NAME, isAbility, rosterFor, type HeroDef } from '../data/heroes';
+import { mapsFor, mapFor } from '../data/maps';
+import { FULL, DOWNLOAD_URL } from '../edition';
+import { loadCareer, saveCareer, rankOf, applyCompetitive, applyQuickPlay, skillFor, lobbyRating, ROLE_OF, TIER_COLOR, PLACEMENTS, type RankRole, type RankChange } from '../game/ranks';
 import { BASE } from '../render/Assets';
 import { sfx } from '../audio/Sfx';
 import type { Game } from './Game';
@@ -12,12 +14,34 @@ import { Coop } from '../net/Coop';
 import { HeroViewer } from './HeroViewer';
 
 const h = (html: string) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild as HTMLElement; };
+const HEROES = rosterFor(FULL);
+const PLAY_MAPS = mapsFor(FULL);
+const MAP = { get: (id: string) => mapFor(id, FULL) };
+type Queue = 'quickplay' | 'competitive' | 'practice';
+type RolePick = RankRole | 'flex';
+const QUEUE_NAME: Record<Queue, string> = { quickplay: 'QUICK PLAY', competitive: 'COMPETITIVE', practice: 'AI QUICK MATCH' };
+const ROLE_NAME: Record<RolePick, string> = { tank: 'TANK', damage: 'DAMAGE', support: 'SUPPORT', flex: 'FLEX' };
+const ROLE_HERO: Record<RankRole, string> = { tank: 'tank', damage: 'dps', support: 'support' };
+const DIFFS: [string, number, string][] = [['RECRUIT', 0.4, 'Relaxed bots: slower aim, slower reactions.'], ['VETERAN', 0.62, 'A fair fight.'], ['ELITE', 0.8, 'Sharp aim, quick ability use.'], ['LEGEND', 0.95, 'Top-tier bots that punish every mistake.']];
+/** a rank emblem: a faceted gem in the tier colour with the division numeral */
+export function emblem(rating: number, games: number, size = 64) {
+  const r = rankOf(rating, games);
+  const col = r.placed ? r.color : '#7a8199';
+  return `<div class="emblem" style="--c:${col};--s:${size}px"><i></i><b>${r.placed ? r.division : '?'}</b></div>`;
+}
 
 export class Menu {
   root = h('<div class="menu"></div>');
-  mode: Mode = 'skirmish';
+  mode: Mode = FULL ? 'quickplay' : 'skirmish';
   hero = 'raijin';
   map = PLAY_MAPS[0].id;
+  queue: Queue | null = null;
+  role: RolePick = 'flex';
+  diff = 0.62;
+  mapChoice = 'random';
+  /** the lobby this match was made against (its rating) */
+  opp = 1800;
+  lastChange: RankChange | null = null;
 
   constructor(public host: HTMLElement, public game: Game) {
     host.append(this.root);
@@ -34,6 +58,48 @@ export class Menu {
   close() { this.root.style.display = 'none'; this.root.innerHTML = ''; }
 
   title() {
+    if (!FULL) return this.liteTitle();
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && !matchMedia('(pointer:fine)').matches);
+    const c = loadCareer();
+    const best = (['tank', 'damage', 'support'] as RankRole[]).map(r => c.roles[r]).sort((a, b) => b.rating * (b.games >= PLACEMENTS ? 1 : 0) - a.rating * (a.games >= PLACEMENTS ? 1 : 0))[0];
+    this.show(`<div class="title">
+      <div class="bg" style="background-image:url(${BASE}img/map_hanabi.webp)"></div>
+      <div class="logo"><span class="z">ZENITH</span><i>//</i><span class="u">UMBRA</span></div>
+      <p class="tag">Eleven heroes. Two oaths. One eclipse.</p>
+      ${mobile ? '<p class="warn">ZENITH//UMBRA needs a PC with a keyboard and mouse.</p>' : ''}
+      <div class="btns two">
+        <button data-q="quickplay" class="primary">QUICK PLAY</button>
+        <button data-q="competitive">COMPETITIVE <small>${rankOf(best.rating, best.games).label}</small></button>
+        <button data-q="practice">AI QUICK MATCH</button>
+        <button data-m="stadium">STADIUM</button>
+        <button data-m="campaign">CAMPAIGN · STARFALL</button>
+        <button data-m="training">TRAINING GROUNDS</button>
+        <button data-m="career">CAREER &amp; RANKS</button>
+        <button data-m="heroes">HERO VIEWER &amp; SKINS</button>
+        <button data-m="spectate">WATCH AI VS AI</button>
+        <button data-m="aitest">AI TEST LAB</button>
+        <button data-m="settings">SETTINGS</button>
+        ${IS_DESKTOP ? '<button data-m="quit">QUIT</button>' : `<a class="btnlink" href="${BASE}index.html">ABOUT THE GAME</a>`}
+      </div>
+      <div class="ver">Full edition${IS_DESKTOP ? ' · Desktop · GPU accelerated' : ' · dev'} · quality ${this.game.settings.preset.toUpperCase()}</div>
+    </div>`);
+    this.root.querySelectorAll<HTMLButtonElement>('[data-q]').forEach(b => b.onclick = () => this.queueSelect(b.dataset.q as Queue));
+    this.root.querySelectorAll<HTMLButtonElement>('[data-m]').forEach(b => b.onclick = () => {
+      const m = b.dataset.m!;
+      if (m === 'settings') return this.settings(() => this.title());
+      if (m === 'heroes') return this.viewer();
+      if (m === 'quit') return window.close();
+      if (m === 'campaign') return this.campaign();
+      if (m === 'career') return this.career();
+      this.queue = null;
+      this.mode = m as Mode;
+      if (m === 'spectate' || m === 'aitest') return this.mapSelect();
+      this.heroSelect(false);
+    });
+  }
+
+  /** the web edition: a light demo, and the way to the full game */
+  liteTitle() {
     const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && !matchMedia('(pointer:fine)').matches);
     this.show(`<div class="title">
       <div class="bg" style="background-image:url(${BASE}img/map_amatsu.webp)"></div>
@@ -41,28 +107,110 @@ export class Menu {
       <p class="tag">Ten heroes. Two oaths. One eclipse.</p>
       ${mobile ? '<p class="warn">ZENITH//UMBRA needs a PC with a keyboard and mouse.</p>' : ''}
       <div class="btns">
-        <button data-m="campaign" class="primary">CAMPAIGN · STARFALL</button>
-        <button data-m="play">PLAY VS AI</button>
+        <button data-m="skirmish" class="primary">PLAY VS AI <small>web demo</small></button>
         <button data-m="training">TRAINING GROUNDS</button>
-        <button data-m="spectate">WATCH AI VS AI</button>
-        <button data-m="aitest">AI TEST LAB</button>
-        <button data-m="heroes">HERO VIEWER &amp; SKINS</button>
+        <button data-m="heroes">HERO VIEWER</button>
         <button data-m="settings">SETTINGS</button>
-        ${IS_DESKTOP ? '<button data-m="quit">QUIT</button>' : `<a class="btnlink" href="${BASE}index.html">ABOUT THE GAME</a>`}
+        <a class="btnlink" href="${BASE}index.html">ABOUT THE GAME</a>
       </div>
-      <div class="ver">${IS_DESKTOP ? 'Desktop build · GPU accelerated' : 'Web build'} · quality ${this.game.settings.preset.toUpperCase()}</div>
+      <div class="full">
+        <h3>THE FULL GAME IS ON WINDOWS</h3>
+        <ul><li><b>Quick Play &amp; Competitive</b> with role ranks, placements and rank modifiers</li><li><b>AI Quick Match</b> with your AI squad on best-of-3 Control and <b>Mikoshi Rush</b></li>
+          <li><b>New maps</b> - Hanabi Harbor, Cloudstep Terraces, Kagura Avenue - and rebuilt arenas with interiors and health packs</li>
+          <li><b>Gantetsu</b>, the Iron Yokozuna - and <b>Mirei's</b> guardian-angel flight and swoop</li><li>The Overwatch-style animation layer, the Tab stats screen, Stadium and the Starfall campaign</li></ul>
+        <a class="btnlink dl" href="${DOWNLOAD_URL}">⬇ DOWNLOAD FOR WINDOWS</a>
+      </div>
+      <div class="ver">Web demo · quality ${this.game.settings.preset.toUpperCase()}</div>
     </div>`);
     this.root.querySelectorAll<HTMLButtonElement>('[data-m]').forEach(b => b.onclick = () => {
       const m = b.dataset.m!;
       if (m === 'settings') return this.settings(() => this.title());
       if (m === 'heroes') return this.viewer();
-      if (m === 'quit') return window.close();
-      if (m === 'campaign') return this.campaign();
-      if (m === 'play') return this.modeSelect();
+      this.queue = null;
       this.mode = m as Mode;
-      if (m === 'spectate' || m === 'aitest') return this.mapSelect();
       this.heroSelect(false);
     });
+  }
+
+  // ================================================================ queues (desktop edition)
+  /** Quick Play / Competitive: pick a role (role queue, one tank + two damage + two support per team); AI Quick Match:
+   *  difficulty and map */
+  queueSelect(q: Queue) {
+    this.queue = q; this.mode = q;
+    const c = loadCareer();
+    if (q === 'practice') {
+      this.show(`<div class="modes queue">
+        <h2>AI QUICK MATCH <small>You and four AI teammates against an AI team - best-of-3 Control or Mikoshi Rush, no rank on the line</small></h2>
+        <h3>DIFFICULTY</h3><div class="diffs">${DIFFS.map(([n, v, d]) => `<div class="card ${Math.abs(v - this.diff) < 0.01 ? 'sel' : ''}" data-d="${v}"><b>${n}</b><p>${d}</p></div>`).join('')}</div>
+        <h3>MAP</h3><div class="mgrid mapsq"><div class="mc ${this.mapChoice === 'random' ? 'sel' : ''}" data-id="random"><div class="rnd">?</div><b>Random map</b><p>Any arena, any mode.</p></div>${PLAY_MAPS.map(m => `<div class="mc ${m.id === this.mapChoice ? 'sel' : ''}" data-id="${m.id}"><img src="${BASE}img/map_${m.id}.webp" onerror="this.style.visibility='hidden'"><b>${m.name}</b><p>${m.objective === 'push' ? 'MIKOSHI RUSH' : 'CONTROL'}</p></div>`).join('')}</div>
+        <div class="bar"><button class="back">BACK</button><button class="primary go">CHOOSE HERO</button></div></div>`);
+      this.root.querySelectorAll<HTMLElement>('[data-d]').forEach(e => e.onclick = () => { this.diff = +e.dataset.d!; this.queueSelect(q); });
+      this.root.querySelectorAll<HTMLElement>('.mc').forEach(e => e.onclick = () => { this.mapChoice = e.dataset.id!; this.queueSelect(q); });
+      (this.root.querySelector('.back') as HTMLElement).onclick = () => this.title();
+      (this.root.querySelector('.go') as HTMLElement).onclick = () => { this.role = 'flex'; this.heroSelect(false); };
+      return;
+    }
+    const roles: RolePick[] = q === 'competitive' ? ['tank', 'damage', 'support'] : ['tank', 'damage', 'support', 'flex'];
+    const blurb: Record<RolePick, string> = { tank: 'Hold the space, lead the fight.', damage: 'Find the kills, open the fight.', support: 'Keep the team alive, turn the fight.', flex: 'Any hero, any role.' };
+    this.show(`<div class="modes queue">
+      <h2>${QUEUE_NAME[q]} <small>${q === 'competitive' ? `Ranked, role queue - one rank per role. ${PLACEMENTS} placement matches reveal it; every match after that moves it.` : 'Unranked, role queue or flex - a lobby matched to your skill, a random map and mode.'}</small></h2>
+      <div class="roles">${roles.map(r => {
+        const rr = r !== 'flex' ? c.roles[r] : null;
+        return `<div class="role card" data-r="${r}"><i class="ri ${r}"></i><b>${ROLE_NAME[r]}</b><p>${blurb[r]}</p>
+          ${q === 'competitive' && rr ? `${emblem(rr.rating, rr.games, 72)}<span class="rl">${rankOf(rr.rating, rr.games).label}</span><span class="rec">${rr.wins}W - ${rr.losses}L</span>` : ''}</div>`;
+      }).join('')}</div>
+      <div class="bar"><button class="back">BACK</button></div></div>`);
+    this.root.querySelectorAll<HTMLElement>('[data-r]').forEach(e => e.onclick = () => { this.role = e.dataset.r as RolePick; this.heroSelect(false); });
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => this.title();
+  }
+
+  /** matchmaking (the lobby is AI, matched to your rating): search, then MATCH FOUND with the map and mode */
+  findMatch() {
+    const q = this.queue!, c = loadCareer();
+    const rr = q === 'competitive' ? c.roles[this.role as RankRole] : null;
+    const mmr = rr ? rr.mmr : c.qp.mmr;
+    this.opp = lobbyRating(mmr);
+    if (q !== 'practice' || this.mapChoice === 'random') this.map = PLAY_MAPS[Math.floor(Math.random() * PLAY_MAPS.length)].id;
+    else this.map = this.mapChoice;
+    const m = MAP.get(this.map);
+    this.show(`<div class="loading find"><div class="bg" style="background-image:url(${BASE}img/map_${this.map}.webp);opacity:.25"></div>
+      <h2>${QUEUE_NAME[q]} · ${ROLE_NAME[this.role]}</h2><p class="st">SEARCHING FOR A MATCH <b class="tm">0:00</b></p><p class="tips">Matching lobby near ${rr ? rankOf(mmr, PLACEMENTS).label : 'your skill'}</p>
+      <div class="bar"><button class="back">CANCEL</button></div></div>`);
+    let t = 0; const need = 1.6 + Math.random() * 2.2;
+    const tm = this.root.querySelector('.tm') as HTMLElement;
+    let cancelled = false;
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => { cancelled = true; this.queueSelect(q); };
+    const tick = () => {
+      if (cancelled) return;
+      t += 0.25; tm.textContent = `0:${String(Math.floor(t)).padStart(2, '0')}`;
+      if (t < need) { setTimeout(tick, 250); return; }
+      sfx.play('announce');
+      this.show(`<div class="loading find found"><div class="bg" style="background-image:url(${BASE}img/map_${this.map}.webp)"></div>
+        <p class="mf">MATCH FOUND</p><h2>${m.name}</h2><p class="obj">${m.objective === 'push' ? 'MIKOSHI RUSH · push the festival float through the enemy gate' : 'CONTROL · best of 3 rounds on the capture point'}</p>
+        <p>${m.story}</p><p class="tips">Lobby rating ≈ ${rankOf(this.opp, PLACEMENTS).label} · WASD move · SPACE jump · LMB / RMB fire · SHIFT / E abilities · Q ultimate · F swoop (Mirei) · TAB stats</p></div>`);
+      setTimeout(() => this.launch(), 2200);
+    };
+    setTimeout(tick, 250);
+  }
+
+  /** career: a rank per role, Quick Play record, recent matches */
+  career() {
+    const c = loadCareer();
+    const card = (r: RankRole) => {
+      const rr = c.roles[r], rk = rankOf(rr.rating, rr.games);
+      return `<div class="card rank"><i class="ri ${r}"></i><b>${ROLE_NAME[r]}</b>${emblem(rr.rating, rr.games, 88)}
+        <span class="rl" style="color:${rk.placed ? rk.color : '#aab'}">${rk.label}</span>
+        ${rk.placed ? `<div class="pbar"><i style="width:${rk.pct}%;background:${rk.color}"></i></div><small>${rk.pct}% to ${rk.division > 1 ? `${rk.name} ${rk.division - 1}` : 'the next tier'}</small>` : `<small>${PLACEMENTS - rr.games} placement matches left</small>`}
+        <span class="rec">${rr.wins}W - ${rr.losses}L${rr.games ? ` · ${Math.round(rr.wins / rr.games * 100)}%` : ''}</span></div>`;
+    };
+    this.show(`<div class="modes career">
+      <h2>CAREER &amp; RANKS <small>Season ${c.season} · ranks per role (Bronze to Champion, divisions 5 to 1) · Quick Play ${c.qp.wins}W - ${c.qp.games - c.qp.wins}L</small></h2>
+      <div class="roles">${card('tank')}${card('damage')}${card('support')}</div>
+      <h3>RECENT MATCHES</h3>
+      <table class="hist"><tr><th>Mode</th><th>Map</th><th>Hero</th><th>Result</th><th>Score</th><th>Rank change</th></tr>
+        ${[...c.history].reverse().slice(0, 12).map(m => `<tr class="${m.won ? 'w' : 'l'}"><td>${m.mode === 'competitive' ? `COMP · ${ROLE_NAME[m.role ?? 'damage']}` : 'QUICK PLAY'}</td><td>${MAP.get(m.map)?.name ?? m.map}</td><td>${HERO[m.hero]?.name ?? m.hero}</td><td>${m.won ? 'VICTORY' : 'DEFEAT'}</td><td>${m.score}</td><td>${m.delta !== undefined ? `${m.delta >= 0 ? '+' : ''}${m.delta}% <small>${(m.mods ?? []).join(' · ')}</small>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6">No matches yet - queue up.</td></tr>'}</table>
+      <div class="bar"><button class="back">BACK</button></div></div>`);
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => this.title();
   }
 
   /** PLAY VS AI: the two ways to play, as in Overwatch 2 - NORMAL (first person) and STADIUM (third person, rounds + Armory) */
@@ -112,15 +260,18 @@ export class Menu {
   }
 
   heroSelect(swap = false, browse = false) {
-    const team = (t: string) => HEROES.filter(x => x.team === t).map(x => this.heroCard(x)).join('');
+    const roleOk = (x: HeroDef) => !this.queue || this.role === 'flex' || x.role === ROLE_HERO[this.role as RankRole];
+    const team = (t: string) => HEROES.filter(x => x.team === t && roleOk(x)).map(x => this.heroCard(x)).join('');
+    if (!roleOk(HERO[this.hero])) this.hero = HEROES.find(roleOk)!.id;
     this.show(`<div class="select">
       <div class="grid"><h3 class="zenith">ZENITH VANGUARD <small>heroes</small></h3><div class="row">${team('zenith')}</div>
       <h3 class="umbra">UMBRA SYNDICATE <small>villains</small></h3><div class="row">${team('umbra')}</div></div>
       <div class="detail"></div>
       <div class="bar">
-        ${!swap && !browse && this.mode !== 'training' ? `<label>MAP <select class="mapsel">${PLAY_MAPS.map(m => `<option value="${m.id}" ${m.id === this.map ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
+        ${this.queue ? `<span class="qtag">${QUEUE_NAME[this.queue]} · ${ROLE_NAME[this.role]}${this.queue === 'practice' ? ` · ${DIFFS.find(d => Math.abs(d[1] - this.diff) < 0.01)?.[0] ?? ''}` : ''}</span>` : ''}
+        ${!swap && !browse && this.mode !== 'training' && !this.queue ? `<label>MAP <select class="mapsel">${PLAY_MAPS.map(m => `<option value="${m.id}" ${m.id === this.map ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
         <label>AI <select class="diff"><option value="0.35">Cadet</option><option value="0.65">Vanguard</option><option value="0.9">Eclipse</option></select></label>` : ''}
-        <button class="back">BACK</button>${browse ? '' : `<button class="primary go">${swap ? 'SWITCH' : this.mode === 'training' ? 'ENTER TRAINING' : this.mode === 'stadium' ? 'ENTER STADIUM' : 'START MATCH'}</button>`}
+        <button class="back">BACK</button>${browse ? '' : `<button class="primary go">${swap ? 'SWITCH' : this.queue && this.queue !== 'practice' ? 'FIND MATCH' : this.mode === 'training' ? 'ENTER TRAINING' : this.mode === 'stadium' ? 'ENTER STADIUM' : 'START MATCH'}</button>`}
       </div></div>`);
     const detail = this.root.querySelector('.detail')!;
     const pick = (id: string) => {
@@ -132,10 +283,11 @@ export class Menu {
     this.root.querySelectorAll<HTMLElement>('.hc').forEach(c => c.onclick = () => pick(c.dataset.h!));
     const diff = this.root.querySelector<HTMLSelectElement>('.diff');
     if (diff) diff.value = String([0.35, 0.65, 0.9].reduce((b, v) => Math.abs(v - this.game.settings.difficulty) < Math.abs(b - this.game.settings.difficulty) ? v : b, 0.65));
-    (this.root.querySelector('.back') as HTMLElement).onclick = () => { if (swap) { this.close(); this.game.setPaused(false); } else if (this.mode === 'skirmish' || this.mode === 'stadium') this.modeSelect(); else this.title(); };
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => { if (swap) { this.close(); this.game.setPaused(false); } else if (this.queue) this.queueSelect(this.queue); else this.title(); };
     const go = this.root.querySelector<HTMLElement>('.go');
     if (go) go.onclick = () => {
       if (swap) { this.game.swapHero(this.hero); this.close(); this.game.setPaused(false); return; }
+      if (this.queue) return this.findMatch();
       const ms = this.root.querySelector<HTMLSelectElement>('.mapsel');
       if (ms) this.map = ms.value;
       if (diff) { this.game.settings.difficulty = +diff.value; saveSettings(this.game.settings); }
@@ -156,10 +308,12 @@ export class Menu {
   async launch() {
     if (this.mode === 'campaign') return this.playLevel(LEVEL[this.map] ? this.map : LEVELS[0].id, [{ hero: this.hero, netId: 'local' }]);
     const map = this.mode === 'training' ? 'training' : this.map;
-    const m = MAP[map];
+    const m = MAP.get(map);
     this.show(`<div class="loading"><div class="bg" style="background-image:url(${BASE}img/map_${map}.webp)"></div><h2>${m.name}</h2><p>${m.story}</p><div class="spin"></div>
-      <p class="tips">WASD move · SPACE jump / fly · LMB fire · RMB secondary · C melee · SHIFT / E abilities · Q ultimate · R reload · CTRL descend · V first/third person · TAB scoreboard</p></div>`);
-    await this.game.start({ mode: this.mode, map, hero: this.mode === 'spectate' || this.mode === 'aitest' ? null : this.hero });
+      <p class="tips">WASD move · SPACE jump / fly · LMB fire · RMB secondary · C melee · F swoop (Mirei) · SHIFT / E abilities · Q ultimate · R reload · CTRL descend · V first/third person · TAB scoreboard</p></div>`);
+    // bots play at the lobby's rating (Quick Play / Competitive) or the chosen difficulty (AI Quick Match)
+    const skill = this.queue === 'practice' ? this.diff : this.queue ? skillFor(this.opp) : undefined;
+    await this.game.start({ mode: this.mode, map, hero: this.mode === 'spectate' || this.mode === 'aitest' ? null : this.hero, skill });
     setTimeout(() => this.close(), 600);
   }
 
@@ -274,8 +428,9 @@ export class Menu {
   }
 
   results() {
-    const w = this.game.match?.world;
-    const S = w?.stadium, me = this.game.match?.player;
+    const w = this.game.match?.world, me = this.game.match?.player;
+    if (FULL && w && me && this.queue) return this.queueResults();
+    const S = w?.stadium;
     // Stadium: the round score and what you built
     const stadium = S ? `<p class="sres">STADIUM · ${S.wins.zenith} - ${S.wins.umbra} in rounds${me ? ` · ${me.items.length} items, ${me.powers.length} powers` : ''}</p>` : '';
     this.show(`<div class="pause results"><h2 class="${w?.winner}">${w?.winner === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} WINS</h2>${stadium}
@@ -283,6 +438,52 @@ export class Menu {
     (this.root.querySelector('.again') as HTMLElement).onclick = () => this.launch();
     (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };   // keeps Normal / Stadium
     (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.game.stop(); this.title(); };
+  }
+
+  /** Quick Play / Competitive / AI Quick Match end screen: result, score, your numbers, and (Competitive) the rank change */
+  private queueResults() {
+    const w = this.game.match!.world, me = this.game.match!.player!, q = this.queue!;
+    const us = me.team, them = us === 'zenith' ? 'umbra' : 'zenith', won = w.winner === us;
+    const score = w.rules === 'push' ? `${Math.round(w.push.best[us])}m - ${Math.round(w.push.best[them])}m` : `${w.control.wins[us]} - ${w.control.wins[them]}`;
+    const close = w.rules === 'push' ? w.time > w.timeLimit || Math.abs(w.push.best.zenith - w.push.best.umbra) < 10 : w.control.round >= 3 || w.control.overtime;
+    const c = loadCareer();
+    let rankHtml = '';
+    if (q === 'competitive' && this.role !== 'flex') {
+      const r = this.role as RankRole;
+      const ch = applyCompetitive(c.roles[r], won, this.opp, close);
+      this.lastChange = ch;
+      c.roles[r] = ch.after;
+      c.best[r] = Math.max(c.best[r] ?? 0, ch.after.rating);
+      const b = rankOf(ch.before.rating, ch.before.games), a = rankOf(ch.after.rating, ch.after.games);
+      const pctDelta = ch.delta;
+      c.history.push({ at: Date.now(), mode: 'competitive', role: r, map: w.map.id, hero: me.baseDef.id, won, delta: pctDelta, mods: ch.mods, score });
+      rankHtml = `<div class="rankup ${ch.promoted ? 'up' : ch.demoted ? 'down' : ''}">
+        <div class="from">${emblem(ch.before.rating, ch.before.games, 64)}<span>${b.label}</span></div>
+        <div class="mid"><div class="pbar big"><i class="old" style="width:${a.placed ? (ch.promoted ? 0 : Math.min(a.pct, b.pct)) : 0}%"></i><i class="new ${pctDelta >= 0 ? 'gain' : 'loss'}" style="left:${a.placed ? Math.min(a.pct, ch.promoted ? 0 : b.pct) : 0}%;width:${a.placed ? Math.abs(ch.promoted || ch.demoted ? a.pct : a.pct - b.pct) : 0}%"></i></div>
+          <b class="dl ${pctDelta >= 0 ? 'gain' : 'loss'}">${ch.placedNow ? 'RANK REVEALED' : a.placed ? `${pctDelta >= 0 ? '+' : ''}${pctDelta}%` : `PLACEMENT ${ch.after.games}/${PLACEMENTS}`}</b>
+          <div class="mods">${ch.mods.map(m => `<span>${m}</span>`).join('')}</div>
+          ${ch.promoted ? `<p class="bn">PROMOTED TO ${a.label.toUpperCase()}</p>` : ch.demoted ? `<p class="bn">DEMOTED TO ${a.label.toUpperCase()}</p>` : ''}</div>
+        <div class="to">${emblem(ch.after.rating, ch.after.games, 80)}<span style="color:${a.placed ? TIER_COLOR[a.tier] : '#aab'}">${a.label}</span></div></div>`;
+    } else if (q === 'quickplay') {
+      applyQuickPlay(c, won, this.opp);
+      c.history.push({ at: Date.now(), mode: 'quickplay', map: w.map.id, hero: me.baseDef.id, won, score });
+      rankHtml = `<p class="qp">Quick Play record ${c.qp.wins}W - ${c.qp.games - c.qp.wins}L</p>`;
+    }
+    if (q !== 'practice') saveCareer(c);
+    const acc = me.shots ? Math.round(me.hits / me.shots * 100) : 0;
+    this.show(`<div class="pause results queue-res"><h2 class="${won ? 'win' : 'loss'}">${won ? 'VICTORY' : 'DEFEAT'}</h2>
+      <p class="sres">${QUEUE_NAME[q]} · ${w.map.name} · ${w.rules === 'push' ? 'MIKOSHI RUSH' : 'CONTROL'} · ${score}</p>
+      <div class="mystats"><div><b>${me.kills + me.assists}</b><small>ELIMINATIONS</small></div><div><b>${me.deaths}</b><small>DEATHS</small></div><div><b>${Math.round(me.dmgDone).toLocaleString('en-US')}</b><small>DAMAGE</small></div>
+        <div><b>${Math.round(me.healDone).toLocaleString('en-US')}</b><small>HEALING</small></div><div><b>${Math.round(me.mitigated).toLocaleString('en-US')}</b><small>MITIGATED</small></div><div><b>${acc}%</b><small>ACCURACY</small></div></div>
+      ${rankHtml}
+      <div class="btns"><button class="primary again">${q === 'practice' ? 'PLAY AGAIN' : 'QUEUE AGAIN'}</button><button class="hero">CHANGE HERO</button><button class="quit">MAIN MENU</button></div></div>`);
+    (this.root.querySelector('.again') as HTMLElement).onclick = () => { this.game.stop(); if (q === 'practice') this.launchPractice(); else this.findMatch(); };
+    (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };
+    (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.game.stop(); this.title(); };
+  }
+  private launchPractice() {
+    if (this.mapChoice === 'random') this.map = PLAY_MAPS[Math.floor(Math.random() * PLAY_MAPS.length)].id;
+    this.launch();
   }
 
   settings(back: () => void) {

@@ -1,4 +1,4 @@
-// ZENITH//UMBRA roster: 5 Zenith Vanguard heroes vs 5 Umbra Syndicate villains.
+// ZENITH//UMBRA roster: 5 Zenith Vanguard heroes vs 6 Umbra Syndicate villains.
 // Every hero has a rival on the other team, and each of them owns an ability that counters the other.
 
 export type TeamId = 'zenith' | 'umbra';
@@ -62,6 +62,8 @@ export interface HeroDef {
   pilot?: { id: string; name: string; bio: string };   // tanks are piloted mecha: the pilot ejects when the frame falls
   jets?: number;         // seconds of boosted flight (mech foot thrusters), hold SPACE in the air
   gunProp?: boolean;     // carries a procedural sidearm (the pilot out of the mech)
+  dualGuns?: boolean;    // a rotary chaingun in each fist: LMB fires the left, RMB the right, both spin up and reload together
+  full?: boolean;        // desktop edition only
 }
 
 const isAbility = (x: WeaponDef | AbilityDef): x is AbilityDef => (x as AbilityDef).id !== undefined;
@@ -92,7 +94,7 @@ export const HEROES: HeroDef[] = [
     ability1: { id: 'constellation', name: 'Constellation Link', key: 'SHIFT', cooldown: 12, desc: 'Link allies within 15m for 5s: 25 HP/s and immunity to silence, grounding and roots.', counter: "Linked allies shrug off Nocturne's Silence Aria." },
     ability2: { id: 'wish', name: 'Wish Barrier', key: 'E', cooldown: 10, desc: 'Wrap the ally you aim at (or yourself) in a 300 HP star shield for 4s.' },
     ult: { id: 'nova', name: 'Nova Requiem', key: 'Q', cooldown: 0, charge: 2000, desc: 'A healing supernova: allies within 25m heal 350 over 2.5s and deal +30% damage for 4s.' },
-    passive: { name: 'Starwing Flight', desc: 'Hold SPACE to fly on crystal star-wings. Out of flight energy, keep holding SPACE to glide down slowly. Energy regenerates on the ground.' },
+    passive: { name: 'Starwing Flight', desc: 'Hold SPACE to fly on crystal star-wings; out of flight energy, keep holding SPACE to float down slowly. F: Starwing Swoop - streak to the ally under your crosshair (30m, 2s cooldown); mid-swoop, SPACE slingshots you onward and CTRL launches you straight up. Energy regenerates on the ground.' },
     lore: 'The last apprentice of the Amatsu Star Choir, Mirei stitched her wings from the constellations the night the Eclipse swallowed her teacher\'s voice. She sings to keep the Vanguard alive - and to drown out a song she once loved.',
     inspiration: 'Angelic combat medics of team hero shooters, with a starlit idol-singer soul.',
     voice: [520, 0.2],
@@ -204,9 +206,24 @@ export const HEROES: HeroDef[] = [
     inspiration: 'Demon-slaying shonen and oni folklore berserkers.',
     voice: [95, 0.9],
   },
+  {
+    id: 'gantetsu', name: 'Gantetsu', title: 'The Iron Yokozuna', team: 'umbra', role: 'tank', frame: 'human', rival: 'tenkai',
+    hp: 425, armor: 225, speed: 5.2, height: 2.4, radius: 0.62, color: '#34d1bf', glow: '#ff8a3d',
+    primary: { kind: 'hitscan', name: 'Hinoko Incendiary Chaingun', damage: 4.5, rate: 16, range: 32, spread: 0.032, ammo: 250, reload: 1.7, sfx: 'chaingun', fx: 'flame' },
+    secondary: { kind: 'hitscan', name: 'Hanabi Volatile Chaingun', damage: 4.5, rate: 16, range: 32, spread: 0.032, ammo: 250, reload: 1.7, sfx: 'chaingun2', fx: 'flame' },
+    ability1: { id: 'tachiai', name: 'Tachiai Rush', key: 'SHIFT', cooldown: 8, desc: 'Charge forward for up to 2.5s, unstoppable and still firing (steer with the mouse). Enemies you plough into are shoved aside for 30 damage and set alight. Press SPACE to leap into a Shiko Stomp: 60 damage and every enemy within 5m is launched into the air.', counter: "Unstoppable: Dawn Charge can't pin him, and ploughing into the Solar Bulwark cracks it for 300." },
+    ability2: { id: 'taiko', name: 'Taiko Heartbeat', key: 'E', cooldown: 14, desc: 'Pound the festival rhythm on your chest for 4s: you take 25% less damage, and you and every ally within 12m heal for 30% of the damage you deal (Gantetsu 40%).' },
+    ult: { id: 'dohyo', name: 'Grand Dohyo', key: 'Q', cooldown: 0, charge: 2200, desc: 'Stamp a sacred sumo ring 10m wide around you for 6s: enemies caught inside cannot leave, enemy fire cannot cross the rope wall, and your chainguns never need reloading.' },
+    passive: { name: 'Roar of the Crowd', desc: 'Critical hits - headshots, or Hanabi rounds into burning enemies - grant temporary health (up to 150) that fades 2s after your last crit. Hinoko rounds set enemies alight after sustained fire.' },
+    lore: 'Gantetsu was the youngest grand champion the festival rings of Neo-Kurogane ever crowned - until he threw a title bout rather than let the Syndicate fix it, and was banished from every dohyo in the city. Now he fights in the Syndicate\'s underground arenas for the only thing they cannot take from him: the roar of the crowd. He still bows before every fight. He still laughs through every one.',
+    inspiration: 'Festival sumo champions, taiko drummers and big-hearted brawler rivals of shonen tournament arcs.',
+    voice: [85, 0.85], dualGuns: true, full: true,
+  },
 ];
 
 export const HERO: Record<string, HeroDef> = Object.fromEntries(HEROES.map(h => [h.id, h]));
+/** the roster an edition offers (the web build keeps the original ten) */
+export const rosterFor = (full: boolean) => HEROES.filter(h => full || !h.full);
 
 // ---- pilots on foot: when Tenkai-Oh's frame is destroyed, Haruto ejects and keeps fighting (a mech-pilot tank in the
 // hero-shooter tradition) until his Call Mech gauge fills and the frame drops back from the sky

@@ -3,11 +3,16 @@
 //  - legs: 2-bone IK toward foot targets driven by a distance-based gait phase, so planted feet never slide
 //  - spine/neck/head: FK lean + aim pitch; arms: swing, or IK toward the aim line when attacking / casting
 //  - flyers: body lean into velocity, dangling legs, flapping wing bones; mechs: slow heavy stride with stomp events
+// On top sits the hero-shooter performance layer (after Blizzard's Overwatch animation talks - Gibson GDC16, Boehm GDC17,
+// Davis GDC17): a per-hero PERSONA (stance, weight, carriage, contrapposto, spring-aim tightness), squash & stretch on
+// jumps and landings, overshoot-and-settle springs everywhere, the body leading and the head following through on hits,
+// a knockback tumble, and Mirei's angelic flight as a state machine (swoop, flare, superjump, descent, hover).
 import * as THREE from 'three';
 
 import { BONES, RT_INDEX, type BoneName, type RtBone } from './Rig';
 import { ClipLayer, poseDir, type LayerOut } from './ClipLayer';
 import type { ClipLibrary } from './ClipLibrary';
+import { FULL } from '../edition';
 export { BONES };
 /** spring chains: [segment1, segment2, tip marker, parent, stiffness, damping, max angle (rad)] */
 const CHAINS: [BoneName, BoneName, BoneName, BoneName, number, number, number][] = [
@@ -41,6 +46,15 @@ export interface AnimState {
   reloadDur?: number;       // the weapon's full reload time (the reload clip is time-scaled into it)
   scale: number;            // world metres per model unit
   pos: THREE.Vector3;       // actor world position (feet)
+  hero?: string;            // persona lookup
+  hitDir?: [number, number];   // model-space direction TO the last attacker (x = the character's left, z = front)
+  knocked?: boolean;        // shoved / pulled / launched: a floaty tumble with the body leading away from the push
+  swoop?: number;           // Mirei: progress 0..1 of a Starwing Swoop in flight (-1 = none)
+  swoopFlare?: number;      // seconds since a swoop arrived (the braking flare), 9 = long ago
+  superjump?: boolean;      // launched straight up out of a swoop
+  slingshot?: boolean;      // flung onward out of a swoop
+  dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
+  rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
 }
 
 interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
@@ -48,6 +62,58 @@ interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion(), _q5 = new THREE.Quaternion();
 const WRIST_MAX = 0.7;       // radians of wrist bend a clip may add on top of the forearm (~40 deg)
+
+/**
+ * How a hero carries themselves (Gibson: the idle pose alone should say class, speed and personality; Boehm: spring aims
+ * are tuned per hero - a gunslinger leads tight, a floating monk flows and snaps, a heavy swings loose).
+ *  weight  0 light .. 1 heavy: staccato stomping gait, footfall punctuation, bigger landing squash, smaller takeoff stretch
+ *  bounce  extra vertical bob in the run          lean    forward lean into the run
+ *  stance  knee bend / weight low at idle          width   stance width (1 = the clip's own)
+ *  chest   chest carriage: + proud and open, - hunched / aggressive
+ *  hip     contrapposto: weight on one leg, hip cocked, shoulders countering (swaps every few seconds)
+ *  sway    idle weight-shift amplitude             aimK / aimD   stiffness / damping of the upper body's aim lag spring
+ *  lag     how far the upper body trails a fast turn (the eyes stay on target)   squash  squash & stretch amount
+ */
+interface Persona { weight: number; bounce: number; lean: number; stance: number; width: number; chest: number; hip: number; sway: number; aimK: number; aimD: number; lag: number; squash: number; }
+const PERSONA: Record<string, Persona> = {
+  // fast duellist: knees always bent, tight snappy aim, a springy run
+  raijin: { weight: 0.2, bounce: 0.6, lean: 0.9, stance: 0.8, width: 1.12, chest: -0.04, hip: 0.15, sway: 0.5, aimK: 240, aimD: 21, lag: 0.5, squash: 1.0 },
+  // archer: upright and composed, steady draw
+  yuzu: { weight: 0.25, bounce: 0.45, lean: 0.55, stance: 0.35, width: 1.02, chest: 0.08, hip: 0.5, sway: 0.4, aimK: 200, aimD: 19, lag: 0.6, squash: 0.85 },
+  // warding monk: wide rooted stance, smooth flowing aim that settles
+  kaien: { weight: 0.3, bounce: 0.2, lean: 0.3, stance: 0.45, width: 1.18, chest: 0.06, hip: 0.1, sway: 0.3, aimK: 120, aimD: 13, lag: 0.9, squash: 0.5 },
+  // angelic medic: light on her feet, feet close, graceful contrapposto, floaty aim
+  mirei: { weight: 0.08, bounce: 0.35, lean: 0.35, stance: 0.12, width: 0.8, chest: 0.12, hip: 0.95, sway: 0.7, aimK: 105, aimD: 11, lag: 1.0, squash: 0.75 },
+  // diva: poised, chest high, cocked hip
+  nocturne: { weight: 0.12, bounce: 0.25, lean: 0.3, stance: 0.06, width: 0.85, chest: 0.14, hip: 1.0, sway: 0.6, aimK: 115, aimD: 12, lag: 0.9, squash: 0.6 },
+  // puppeteer: tall, hunched, an eerie loose drift
+  hex: { weight: 0.3, bounce: 0.15, lean: 0.2, stance: 0.15, width: 0.92, chest: -0.14, hip: 0.3, sway: 0.85, aimK: 85, aimD: 9, lag: 1.1, squash: 0.4 },
+  // shinobi: crouched low, very tight aim
+  kagemaru: { weight: 0.15, bounce: 0.3, lean: 1.0, stance: 1.0, width: 1.22, chest: -0.12, hip: 0.0, sway: 0.3, aimK: 300, aimD: 24, lag: 0.4, squash: 1.1 },
+  // oni brute: wide, low, aggressive, a heavy loose swing
+  enra: { weight: 0.75, bounce: 0.5, lean: 0.8, stance: 0.9, width: 1.35, chest: -0.08, hip: 0.0, sway: 0.5, aimK: 95, aimD: 9, lag: 1.2, squash: 0.65 },
+  // festival heavyweight: planted wide sumo stance, staccato stomping run, loose heavy aim, big landing squash
+  gantetsu: { weight: 0.92, bounce: 0.7, lean: 0.55, stance: 0.85, width: 1.5, chest: 0.05, hip: 0.0, sway: 0.6, aimK: 80, aimD: 9, lag: 1.3, squash: 0.85 },
+  // pilot on foot: eager, springy
+  haruto: { weight: 0.3, bounce: 0.55, lean: 0.75, stance: 0.6, width: 1.1, chest: 0.05, hip: 0.2, sway: 0.4, aimK: 220, aimD: 20, lag: 0.6, squash: 1.0 },
+};
+const PERSONA_DEFAULT: Persona = { weight: 0.4, bounce: 0.4, lean: 0.5, stance: 0.5, width: 1.05, chest: 0, hip: 0.2, sway: 0.5, aimK: 150, aimD: 15, lag: 0.8, squash: 0.7 };
+// hard-surface mechs: chunky loose aim, no stretch to speak of
+const PERSONA_MECH: Persona = { weight: 1, bounce: 0.3, lean: 0.3, stance: 0.5, width: 1.3, chest: 0, hip: 0, sway: 0.2, aimK: 70, aimD: 10, lag: 1.4, squash: 0.15 };
+export function personaOf(hero: string, mech = false): Persona { return PERSONA[hero] ?? (mech ? PERSONA_MECH : PERSONA_DEFAULT); }
+/** the performance layer ships with the desktop edition; off, every hero moves exactly as the original animator did */
+let PERF = FULL;
+export function setPerformanceLayer(on: boolean) { PERF = on; }
+// the original animator's constants expressed as a persona (no lag, no squash, no contrapposto)
+const PERSONA_LEGACY: Persona = { weight: 0, bounce: 0.5, lean: 0.714, stance: 0.5, width: 1, chest: 0, hip: 0, sway: 0.5, aimK: 150, aimD: 15, lag: 0, squash: 0 };
+
+/** damped spring toward a target, sub-stepped so stiff springs stay stable on slow frames; returns the new value */
+function spring(s: { x: number; v: number }, target: number, k: number, d: number, dt: number): number {
+  const n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
+  for (let i = 0; i < n; i++) { s.v += ((target - s.x) * k - s.v * d) * h; s.x += s.v * h; }
+  return s.x;
+}
+const clampA = (v: number, m: number) => Math.max(-m, Math.min(m, v));
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAxisAngle(axis, a);
 
@@ -137,11 +203,79 @@ export class Animator {
   /** optional held prop (model-space child of the rig root) posed along the hammer path each frame */
   prop: THREE.Object3D | null = null;
   hammerLen = 1;
+  /** twin chaingun props (model-space children of the rig root) [left hand, right hand], barrels along the forearms */
+  guns: [THREE.Object3D, THREE.Object3D] | null = null;
+  // ---- performance layer outputs, applied by the view: whole-body tilt about a pivot at the hips, squash & stretch
+  tilt = { pitch: 0, roll: 0 };
+  sqY = 1; sqXZ = 1;
+  private tiltP = { x: 0, v: 0 }; private tiltR = { x: 0, v: 0 };
+  private sq = { x: 0, v: 0 }; private lastJump = 9; private lastLand = 9;
+  private lagY = { x: 0, v: 0 }; private lagP = { x: 0, v: 0 }; private lastPitch = 0; private yawRate = 0;
+  private headF = { x: 0, v: 0 };                  // the head's follow-through on hits (lags, then overshoots the body)
+  private kick = { x: 0, v: 0 };                   // heavy footfall punctuation (chest + hips dip on each contact)
+  private tumble = 0; private hitX = 0; private hitZ = 1;
+  private shiftT = 0; private shift = { x: 0, v: 0 };   // contrapposto weight side
+  private ang = { swoop: 0, sup: 0, glide: 0, flare: 0, hover: 0, sling: 0 };   // angel state weights (smoothed)
+  private wLift = { x: 0, v: 0 }; private wSweep = { x: 0.5, v: 0 }; private wFidget = 0; private stepFlutter = 0;
+  private prevVel = new THREE.Vector3(); private acc = new THREE.Vector3(); private isAngel = false;
   private gripG = new THREE.Vector3(); private gripH = new THREE.Vector3(0, 1, 0); private gripT = new THREE.Vector3(1, 0, 0);
   // spring chain state: world-space tip + previous tip per chain segment
   private spring = new Map<string, { tip: THREE.Vector3; prev: THREE.Vector3 }>();
   private posCache = new Map<string, THREE.Vector3>();
   private hipsOffNow = new THREE.Vector3();
+
+  /** a foot lands: the step event (sound, dust), the heavy chest/hips punctuation, a flutter through an angel's wings */
+  private footfall(i: number, heavy: boolean, P: Persona) {
+    this.onStep?.(i, heavy);
+    this.kick.v += (heavy ? 1.6 : 2.4) * P.weight * this.moveBlend;
+    if (this.isAngel) this.stepFlutter += 0.035;
+  }
+
+  /**
+   * Mirei's arms per flight state, in the body frame: floating out to the sides in the descent, streamlined in a swoop with
+   * the lead hand reaching for the ally, down along the sides in a superjump, thrown forward in the braking flare, relaxed
+   * and drifting in a hover; standing, the right hand carries its blade across the front the way a medic carries a staff.
+   * Null when the arm is busy (beam, casting, shooting) or no state applies.
+   */
+  private angelArm(i: number, side: number, sh: THREE.Vector3, Lr: number, s: AnimState, idleW: number, run: number) {
+    if (!PERF || this.cast > 0.05 || (i === 1 && (s.beam || this.atk > 0.05)) || (i === 0 && this.atk > 0.3)) return null;
+    const W = this.ang, t = s.time, lead = i === 1;
+    const V = (x: number, y: number, z: number) => new THREE.Vector3(side * x, y, z).multiplyScalar(Lr);
+    const targets: [THREE.Vector3, number][] = [
+      [V(0.78, -0.5 + Math.sin(t * 1.5 + side) * 0.06, 0.08), W.glide],
+      [lead ? V(-0.05, -0.3, 0.9) : V(0.28, -0.88, -0.32), W.swoop + W.sling],
+      [V(0.2, -0.96, -0.18), W.sup],
+      [V(0.62, -0.1, 0.55), W.flare],
+      [V(0.55 + Math.sin(t * 1.1 + i) * 0.04, -0.72, 0.22), W.hover],
+      [lead ? V(0.12, -0.6, 0.42) : V(0.3, -0.9, 0.1), idleW * (1 - 0.6 * run) * (s.grounded ? 1 : 0)],
+    ];
+    let tw = 0; const hand = new THREE.Vector3();
+    for (const [v, w] of targets) if (w > 1e-3) { hand.addScaledVector(v, w); tw += w; }
+    if (tw < 0.05) return null;
+    hand.divideScalar(tw).add(sh);
+    return { hand, w: Math.min(1, tw) * (lead ? 1 : 0.9), pole: new THREE.Vector3(side * 0.7, -0.4, -0.6) };
+  }
+
+  /** the twin chainguns ride in the fists, barrels along the forearms - so they point wherever the arms aim */
+  /** `aim` (first person, model space): point both barrels at this spot ahead of the reticle instead of along the forearms */
+  private placeGuns(aim?: THREE.Vector3) {
+    if (!this.guns) return;
+    const R = this.rest as Record<BoneName, Rest>;
+    (['L', 'R'] as const).forEach((S, i) => {
+      const g = this.guns![i], fa = `forearm_${S}` as BoneName, hn = `hand_${S}` as BoneName;
+      if (!this.bones[fa] || !R[fa]) { g.visible = false; return; }
+      const fq = this.modelQ.get(this.bones[fa]!) ?? R[fa].q;
+      const at = this.modelPos(this.bones[hn] && R[hn] ? hn : fa);
+      const Zv = aim ? aim.clone().sub(at).normalize() : R[fa].dir.clone().applyQuaternion(fq.clone().multiply(R[fa].q.clone().invert())).normalize();
+      const Yv = new THREE.Vector3(0, 1, 0).addScaledVector(Zv, -Zv.y);
+      if (Yv.lengthSq() < 1e-4) Yv.set(0, 0, 1);
+      Yv.normalize();
+      const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
+      g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
+      g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
+      g.visible = true;
+    });
+  }
 
   /** current model-space position of a bone head (FK from the deltas applied this frame) */
   private modelPos(n: BoneName): THREE.Vector3 {
@@ -316,7 +450,7 @@ export class Animator {
    * held prop (Tenkai-Oh's hammer) along a grip.
    */
   updateFirstPerson(o: { hands: [THREE.Vector3 | null, THREE.Vector3 | null]; poles?: [THREE.Vector3, THREE.Vector3]; wrist?: [THREE.Quaternion | null, THREE.Quaternion | null];
-    prop?: { pos: THREE.Vector3; dir: THREE.Vector3; side: THREE.Vector3 } | null }) {
+    prop?: { pos: THREE.Vector3; dir: THREE.Vector3; side: THREE.Vector3 } | null; gunAim?: THREE.Vector3 }) {
     if (!this.ok) return;
     const R = this.rest as Record<BoneName, Rest>;
     this.modelQ.clear();
@@ -345,6 +479,8 @@ export class Animator {
         this.setModelQ(hn, Qh);
       }
     }
+    this.hipsOffNow.set(0, 0, 0); this.posCache.clear();
+    this.placeGuns(o.gunAim);
     if (this.prop) {
       this.prop.visible = !!o.prop;
       if (o.prop) {
@@ -364,6 +500,8 @@ export class Animator {
     this.modelQ.clear();
     const heavy = s.frame === 'mech';
     const flyer = s.frame === 'flyer';
+    const PS = PERF ? personaOf(s.hero ?? '', heavy) : PERSONA_LEGACY;
+    this.isAngel = !!s.angel;
     // velocity in model space (character faces +Z at its yaw)
     const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
     const lvx = (s.vel.x * cy - s.vel.z * sy) / s.scale, lvz = (s.vel.x * sy + s.vel.z * cy) / s.scale;
@@ -376,7 +514,8 @@ export class Animator {
     this.airBlend += ((s.grounded ? 0 : 1) - this.airBlend) * Math.min(1, dt * 8);
     this.flyBlend += ((s.flying ? 1 : 0) - this.flyBlend) * Math.min(1, dt * 5);
     // ---------------- clip layer: a baked mocap / keyframed pose, blended per body region below
-    const eligible = !heavy && s.frame !== 'drone' && !s.flying && !s.hammer && !s.move;
+    const angelAir = PERF && !!s.angel && ((s.swoop ?? -1) >= 0 || !!s.gliding || !!s.superjump || !!s.slingshot || (s.swoopFlare ?? 9) < 0.4);
+    const eligible = !heavy && s.frame !== 'drone' && !s.flying && !s.hammer && !s.move && !angelAir;
     this.clipW += ((eligible || s.dead ? 1 : 0) - this.clipW) * Math.min(1, dt * 8);
     const L = this.layer ? this.layer.update(s, { speed: speed / this.legLen, angle: Math.atan2(lvx, lvz), moveBlend: this.moveBlend, airBlend: this.airBlend, eligible: this.clipW > 0.01 || !!s.dead }) : null;
     this.clip = L;
@@ -398,13 +537,35 @@ export class Animator {
     const pTw = -0.45 * Math.max(0, this.punchExt) * this.punchW;
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
+    // ---------------- squash & stretch (Gibson: Tracer's jump - stretch the torso on takeoff, hang a little at the top,
+    // squash hard on landing with the head tucked, then settle past neutral)
+    if (s.jumpAge < this.lastJump - 1e-6) this.sq.v += 1.6 * PS.squash * (1 - 0.55 * PS.weight);
+    if (s.landAge < this.lastLand - 1e-6) this.sq.v -= (1.1 + 1.4 * PS.weight) * PS.squash;
+    this.lastJump = s.jumpAge; this.lastLand = s.landAge;
+    const rise = !s.grounded && !s.flying ? Math.max(-0.4, Math.min(1, s.vel.y / 12)) : 0;
+    spring(this.sq, rise * 0.05 * PS.squash, 160, 11, dt);
+    this.sqY = 1 + Math.max(-0.2, Math.min(0.18, this.sq.x)); this.sqXZ = 1 / Math.sqrt(this.sqY);
+    // model-space acceleration (world m/s^2): legs and wings swing behind it like pendulums
+    const vNow = new THREE.Vector3(lvx * s.scale, s.vel.y, lvz * s.scale);
+    if (dt > 0) this.acc.lerp(vNow.clone().sub(this.prevVel).divideScalar(dt), Math.min(1, dt * 8));
+    this.prevVel.copy(vNow);
+    // knocked about in the air: a tumble pose blends in (Davis: knockbacks spring between directional float poses)
+    this.tumble += ((PERF && s.knocked && !s.grounded ? 1 : 0) - this.tumble) * Math.min(1, dt * 7);
+    // angel state weights (Mirei): smoothed so every change of state reads as a follow-through, not a pop
+    const AW = this.ang, angel = !!s.angel;
+    const inSwoop = angel && (s.swoop ?? -1) >= 0;
+    const tw = (k: 'swoop' | 'sup' | 'glide' | 'flare' | 'hover' | 'sling', on: boolean, rate: number) => { AW[k] += ((on ? 1 : 0) - AW[k]) * Math.min(1, dt * rate); };
+    tw('swoop', inSwoop, 14); tw('flare', angel && (s.swoopFlare ?? 9) < 0.35, 16);
+    tw('sup', angel && !!s.superjump && s.vel.y > 1.5, 9); tw('sling', angel && !!s.slingshot && !s.grounded && !inSwoop, 9);
+    tw('glide', angel && !!s.gliding && !inSwoop, 6); tw('hover', angel && s.flying && !inSwoop, 6);
+    const idleW = (1 - this.moveBlend) * (1 - this.airBlend);
     // ---------------- lower-body yaw: legs face where we move, the torso twists back to the aim (hero-shooter strafing)
     {
       let mv = speed > 0.6 && moving ? Math.atan2(lvx, lvz) : 0;
       if (Math.abs(mv) > 1.95) mv -= Math.sign(mv) * Math.PI;          // backpedal: legs face forward, walk backwards
       const target = Math.max(-1.05, Math.min(1.05, mv)) * this.moveBlend * (1 - wLegs);   // 8-way clips turn the legs themselves
       const yawRate = (() => { let d = s.yaw - this.lastYaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return dt > 0 ? d / dt : 0; })();
-      this.lastYaw = s.yaw;
+      this.lastYaw = s.yaw; this.yawRate = yawRate;
       // when turning in place the legs lag behind the torso for a beat
       this.hipYawV += ((target - this.hipYaw) * 90 - this.hipYawV * 14) * dt;
       this.hipYaw += this.hipYawV * dt - (this.moveBlend < 0.5 ? yawRate * dt * 0.35 : 0);
@@ -441,7 +602,7 @@ export class Animator {
             // touch-down: plant where the stride says this foot lands, then keep it there in the world
             const land = restFoot.clone().addScaledVector(md, travel * (0.5 - ph / duty));
             this.pplant[i] = toWorld(land); this.pplant[i]!.y = s.pos.y + this.footY * s.scale;
-            if (this.cLegs < 0.5) this.onStep?.(i, heavy);
+            if (this.cLegs < 0.5) this.footfall(i, heavy, PS);
           }
           tgt = toModel(this.pplant[i]!);
         } else {
@@ -466,7 +627,7 @@ export class Animator {
           this.restepT[i] -= dt;
           const u = 1 - Math.max(0, this.restepT[i]) / 0.22;
           m = this.swingFrom[i]!.clone().lerp(restFoot, u); m.y = this.footY + Math.sin(u * Math.PI) * lift * 0.5;
-          if (this.restepT[i] <= 0) { this.pplant[i] = toWorld(restFoot); this.pplant[i]!.y = s.pos.y + this.footY * s.scale; if (this.cLegs < 0.5) this.onStep?.(i, heavy); }
+          if (this.restepT[i] <= 0) { this.pplant[i] = toWorld(restFoot); this.pplant[i]!.y = s.pos.y + this.footY * s.scale; if (this.cLegs < 0.5) this.footfall(i, heavy, PS); }
         }
         tgt = m;
       }
@@ -475,14 +636,29 @@ export class Animator {
         const tuck = flyer ? 0.25 : Math.max(0, Math.min(1, (s.vel.y + 4) / 10));
         const air = new THREE.Vector3((i === 0 ? R.foot_L : R.foot_R).p.x + side * this.hipW * 0.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
         if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
-        if (s.angel) {
-          // angelic flight: legs together and long; hovering, one knee softly bent and that foot a little behind;
-          // flying fast, both legs trail back in line with the body; gliding, they hang straight down
+        if (s.angel && !PERF) {
+          // (web edition) the original angel legs: together and long, trailing back when fast, straight down gliding
           const fastK = Math.min(1, speed / (this.legLen * 6));
           air.set((i === 0 ? R.foot_L : R.foot_R).p.x * 0.35,
             this.footY + this.legLen * (s.gliding ? 0.04 : (i === 1 ? 0.14 : 0.05) * (1 - fastK) + 0.08 * fastK),
             this.legLen * (-0.04 - 0.5 * fastK - (i === 1 && !s.gliding ? 0.1 * (1 - fastK) : 0)));
           air.y += Math.sin(s.time * 1.6 + i * 0.6) * 0.015 * this.legLen;
+        } else if (s.angel) {
+          // angelic flight. The whole body tilts into a swoop (the view rotates it), so these targets are in the BODY frame:
+          //  hover - legs together and long, one knee softly bent, the feet swinging behind the acceleration (pendulum)
+          //  swoop / slingshot - legs straight and trailing, one knee bent, toes pointed; superjump - a locked straight dart
+          //  descent - knees soft, feet drifting back with a slow flutter kick; flare - knees up to brake
+          const Lg = this.legLen, rx = (i === 0 ? R.foot_L : R.foot_R).p.x, bent = i === 1 ? 1 : 0;
+          const T = (x: number, y: number, z: number) => new THREE.Vector3(rx * x, this.footY + Lg * y, Lg * z);
+          const pend = new THREE.Vector3(this.acc.x, 0, this.acc.z).multiplyScalar(-Lg * 0.3 / 24);
+          const hover = T(0.35, 0.05 + 0.09 * bent, -0.05 - 0.1 * bent).add(pend);
+          hover.y += Math.sin(s.time * 1.6 + i * 0.6) * 0.015 * Lg;
+          const dart = T(0.28, 0.02 + 0.13 * bent * (1 - AW.sup), -0.1 - 0.14 * bent * (1 - AW.sup));
+          const desc = T(0.4, 0.07 + 0.05 * bent, -0.12 - 0.08 * bent + Math.sin(s.time * 2.3 + i * Math.PI) * 0.035);
+          const flare = T(0.45, 0.24 - 0.06 * bent, 0.1);
+          const wd = AW.swoop + AW.sling + AW.sup, tot = AW.hover + wd + AW.glide + AW.flare;
+          if (tot > 1e-3) air.lerp(hover.multiplyScalar(AW.hover).addScaledVector(dart, wd).addScaledVector(desc, AW.glide).addScaledVector(flare, AW.flare).divideScalar(tot), Math.min(1, tot));
+          else { air.x *= 0.7; if (i === 1) { air.y += 0.06 * Lg; air.z -= 0.06 * Lg; } }   // a plain jump: one knee up, graceful
         }
         tgt.lerp(air, this.airBlend);
       }
@@ -503,7 +679,7 @@ export class Animator {
         ct.y += this.footY - (R[tb].p.y - this.legLen);    // a straight standing leg in the clip = this rig's rest ankle height
         let tgt = ct;
         if (L.pose.contact[i] > 0.5 && L.loco > 0.5 && moving && s.grounded) {
-          if (!this.cplant[i]) { this.cplant[i] = toWorld(ct); if (wLegs > 0.5) this.onStep?.(i, heavy); }
+          if (!this.cplant[i]) { this.cplant[i] = toWorld(ct); if (wLegs > 0.5) this.footfall(i, heavy, PS); }
           const lk = toModel(this.cplant[i]!); lk.y = ct.y;
           if (lk.distanceTo(ct) > this.legLen * 0.25) { this.cplant[i] = null; this.cerr[i].copy(lk).sub(ct); }
           else { tgt = lk; this.cerr[i].copy(lk).sub(ct); }
@@ -516,12 +692,16 @@ export class Animator {
         this.foot[i].lerp(tgt, wLegs);
       }
     } else { this.cplant[0] = this.cplant[1] = null; }
+    // persona stance width at rest (a sumo's planted base, a medic's feet together) - on top of clip or procedural feet
+    if (idleW > 0.01 && Math.abs(PS.width - 1) > 0.01) for (let i = 0; i < 2; i++) this.foot[i].x += (i === 0 ? 1 : -1) * this.hipW * (PS.width - 1) * 0.9 * idleW;
     for (let i = 0; i < 2; i++) this.plant[i] = wLegs > 0.5 ? this.cplant[i] : this.pplant[i];
     // body bob: lowest at mid-stance (twice per cycle)
     const bobPh = this.phase * 2 * Math.PI * 2;
-    this.bob = (Math.cos(bobPh) * 0.5 - 0.5) * this.legLen * (heavy ? 0.06 : 0.035) * this.moveBlend;
-    // combat stance: knees soft, weight low; melee heroes lunge into their swings
-    const stance = (1 - this.moveBlend) * (1 - this.airBlend) * (heavy ? 0.03 : 0.045);
+    // heavies drop hard onto each foot and pop back up (staccato); light heroes float through the stride
+    const bc = 0.5 - Math.cos(bobPh) * 0.5;
+    this.bob = -Math.pow(bc, 1 + PS.weight * 2.5) * this.legLen * (heavy ? 0.06 : 0.02 + 0.03 * PS.bounce) * this.moveBlend;
+    // combat stance: knees soft, weight low (per hero); melee heroes lunge into their swings
+    const stance = idleW * (heavy ? 0.03 : 0.02 + 0.05 * PS.stance);
     const lunge = s.melee ? Math.sin(Math.min(1, this.atk) * Math.PI) * 0.12 * this.legLen : 0;
     hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0) - stance * this.legLen - lunge * 0.3;
     hipsOff.z += lunge;
@@ -532,25 +712,40 @@ export class Animator {
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
     if (s.angel && s.flying) hipsOff.y += Math.sin(s.time * 1.8) * 0.025 * this.legLen * (1 - Math.min(1, speed / (this.legLen * 6)));
     if (L && wLegs > 0) hipsOff.lerp(L.pose.d[RT_INDEX.hips].clone().multiplyScalar(this.legLen), wLegs);
+    // ---- overlays that ride on clips too: contrapposto (weight on one leg, swapping every few seconds), stance depth,
+    // footfall punctuation
+    const wsh = spring(this.shift, Math.tanh(Math.sin(s.time * 0.19 + 1.3) * 5) * PS.hip * idleW, 30, 9, dt);
+    spring(this.kick, 0, 180, 12, dt);
+    hipsOff.x += wsh * 0.045 * this.legLen;
+    hipsOff.y -= (L && wLegs > 0 ? idleW * 0.03 * PS.stance + Math.abs(wsh) * 0.012 : 0) * this.legLen + this.kick.x * 0.05 * this.legLen;
     // lean into velocity with a damped spring (overshoots when you stop or turn) + roll into turns
     const leanTarget = new THREE.Vector2(
-      Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? 0.35 : 0.14) + this.turnRoll,
-      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? (s.angel ? 0.75 : 0.45) : heavy ? 0.1 : 0.18));
+      Math.max(-1, Math.min(1, lvx / 8)) * (flyer && s.flying ? (!PERF ? 0.35 : s.angel ? 0.1 : 0.2) : 0.14) + this.turnRoll,
+      Math.max(-1, Math.min(1, lvz / 8)) * (flyer && s.flying ? (!PERF ? (s.angel ? 0.75 : 0.45) : s.angel ? 0.15 : 0.3) : heavy ? 0.1 : 0.08 + 0.14 * PS.lean) + (s.rush ? 0.3 : 0));
     this.leanV.x += ((leanTarget.x - this.lean.x) * 70 - this.leanV.x * 9) * dt;
     this.leanV.y += ((leanTarget.y - this.lean.y) * 70 - this.leanV.y * 9) * dt;
     this.lean.x += this.leanV.x * dt; this.lean.y += this.leanV.y * dt;
     // hit flinch + weapon recoil: impulses into springs
-    if (s.hitAge < this.lastHitAge) { this.flinchV += 7; this.flinchDir = Math.random() < 0.5 ? -1 : 1; }
+    if (s.hitAge < this.lastHitAge) {
+      this.flinchV += 7;
+      // directional (Davis: a pose per hit direction on a spring): shoved away from the attacker, the body leads and the
+      // head follows through a beat later
+      if (PERF && s.hitDir) { this.hitX = s.hitDir[0]; this.hitZ = s.hitDir[1]; } else if (PERF) { this.hitX = Math.random() < 0.5 ? -0.5 : 0.5; this.hitZ = 0.85; }
+      else { this.hitX = (Math.random() < 0.5 ? -1 : 1) * 0.89; this.hitZ = 1; }
+      this.flinchDir = this.hitX >= 0 ? 1 : -1;
+    }
     this.lastHitAge = s.hitAge;
     this.flinchV += (-this.flinch * 160 - this.flinchV * 14) * dt; this.flinch += this.flinchV * dt;
-    if (s.attackAge < this.lastAtkAge && !s.melee && s.attackKind !== 'punch') this.recoilV += heavy ? 3 : 5;
+    spring(this.headF, this.flinch, 70, 6, dt);
+    if (s.attackAge < this.lastAtkAge && !s.melee && s.attackKind !== 'punch') this.recoilV += s.dual ? 0.7 : heavy ? 3 : 5;
     this.lastAtkAge = s.attackAge;
     this.recoilV += (-this.recoil * 220 - this.recoilV * 16) * dt; this.recoil += this.recoilV * dt;
     const hipSway = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.09 : 0.06) * this.moveBlend;
     const idleShift = Math.sin(s.time * 0.55) * 0.03 * (1 - this.moveBlend);
     const stepRoll = heavy ? Math.sin(this.phase * 2 * Math.PI) * 0.05 * this.moveBlend : 0;   // mechs rock side to side per stomp
     // ---------------- hips (face the movement direction)
-    const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.22).premultiply(rot(X, this.lean.y * 0.4)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift + stepRoll));
+    const tumP = -0.45 * this.tumble * this.hitZ, tumR = 0.4 * this.tumble * this.hitX;
+    const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.22).premultiply(rot(X, this.lean.y * 0.4 + tumP)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift * PS.sway * 2 + stepRoll + wsh * 0.07 + tumR));
     if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
     // clip torso: the clip's deltas with the gameplay additives on top (aim pitch, flinch, recoil)
     const withAim = (q: THREE.Quaternion | null, pitch: number) => q ? q.clone().premultiply(rot(X, pitch)) : null;
@@ -563,19 +758,36 @@ export class Animator {
     const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
     const breath = Math.sin(s.time * 1.6) * 0.015;
     const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
-    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 - this.flinch * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0) + (charging ? 0.38 : 0))).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4)).multiply(rot(Z, this.flinch * 0.4 * this.flinchDir));
-    blendD(Ds, withAim(cq('spine'), aimP * 0.2 - this.flinch * 0.6), wTorso);
+    // the upper body trails a fast aim turn and springs back past centre, the eyes stay on target (Boehm's spring aims:
+    // tight for duellists, flowing for the floaty, loose for heavies)
+    const pitchRate = dt > 0 ? (s.pitch - this.lastPitch) / dt : 0; this.lastPitch = s.pitch;
+    const lagYaw = spring(this.lagY, clampA(-this.yawRate * 0.045 * PS.lag, 0.35), PS.aimK, PS.aimD, dt);
+    const lagPitch = spring(this.lagP, clampA(pitchRate * 0.03 * PS.lag, 0.2), PS.aimK, PS.aimD, dt);
+    const carriage = -PS.chest * 0.28 * (1 - this.moveBlend * 0.4) - (s.rush ? 0.1 : 0);   // proud and open, or hunched
+    const fP = -this.flinch * this.hitZ, fR = this.flinch * 0.45 * this.hitX;           // shoved away from the hit
+    // hero-shooter carriage on the run: mocap sprints lean ~28 deg into the stride; an Overwatch hero stays upright with
+    // the weapon forward (readability), so the clip's lean is pulled back up as the run speeds up
+    const upright = PERF ? -0.2 * this.moveBlend * run * (heavy ? 0.4 : 1) : 0;
+    // the clip's own torso keeps these additives (aim, flinch, lag, carriage)
+    const withAdd = (q: THREE.Quaternion | null, p: number, y: number, r: number) => q ? q.clone().premultiply(rot(Z, r)).premultiply(rot(Y, y)).premultiply(rot(X, p)) : null;
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 + fP * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0) + (charging ? 0.38 : 0) + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright))
+      .multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4 + lagYaw * 0.35)).multiply(rot(Z, fR - wsh * 0.04));
+    blendD(Ds, withAdd(cq('spine'), aimP * 0.2 + fP * 0.6 + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright, lagYaw * 0.35, fR - wsh * 0.04), wTorso);
     if (this.bones.spine) this.applyDelta('spine', Ds);
-    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 - this.flinch * 0.4 - this.recoil * 0.9 + breath)).multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6 + (charging ? -0.35 : 0)));
-    blendD(Dc, withAim(cq('chest'), aimP * 0.5 - this.flinch - this.recoil * 0.9), wTorso);
+    const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 + fP * 0.4 - this.recoil * 0.9 + breath + lagPitch * 0.7 + carriage * 0.6 + this.kick.x * 0.08 + upright * 0.6))
+      .multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.55 + twist * 0.6 - idleShift * 0.5 + (hTw + pTw) * 0.6 + (charging ? -0.35 : 0) + lagYaw * 0.65)).multiply(rot(Z, -wsh * 0.08));
+    blendD(Dc, withAdd(cq('chest'), aimP * 0.5 + fP - this.recoil * 0.9 + lagPitch * 0.7 + carriage * 0.6 + this.kick.x * 0.08 + upright * 0.6, lagYaw * 0.65, -wsh * 0.08), wTorso);
     this.applyDelta('chest', Dc);
     const Dn = Dc.clone().multiply(rot(X, aimP * 0.2));
-    blendD(Dn, withAim(cq('neck'), aimP * 0.7 - this.flinch), wTorso);
+    blendD(Dn, withAim(cq('neck'), aimP * 0.7 + fP), wTorso);
     if (this.bones.neck) this.applyDelta('neck', Dn);
-    // the head keeps the eyes on the aim and glances around when idle
+    // the head keeps the eyes on the aim, glances around when idle, follows a hit through, tucks on a hard landing,
+    // and looks back up out of a swoop
     const look = Math.sin(s.time * 0.37) * 0.12 * (1 - this.moveBlend) * (1 - Math.min(1, this.atk * 3));
-    const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02));
-    blendD(Dhd, withAim(cq('head'), aimP + this.recoil * 0.3 - this.flinch), wTorso);
+    const headFollow = PERF ? (this.headF.x - this.flinch) * -this.hitZ * 1.1 : 0;
+    const headP = -lagPitch * 0.9 - carriage * 0.8 + (PERF ? this.landDip * 2.5 : 0) + headFollow - this.tilt.pitch * 0.55 - upright * 1.3;
+    const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85 - lagYaw * 0.95)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02 + headP));
+    blendD(Dhd, withAdd(cq('head'), aimP + this.recoil * 0.3 + fP + headP, -lagYaw * 0.95, 0), wTorso);
     this.applyDelta('head', Dhd);
     // ---------------- legs (IK)
     const hipsPos = R.hips.p.clone().add(hipsOff);
@@ -603,6 +815,8 @@ export class Animator {
     // ---------------- arms
     const armSwing = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.25 : 0.4) * this.moveBlend * Math.min(1, speed / 5 + 0.3);
     const aimDir = new THREE.Vector3(0, Math.sin(s.pitch), Math.cos(s.pitch)).normalize();
+    // a tilted body (a swoop) still aims where the camera looks: undo the whole-body tilt on the aim line
+    if (Math.abs(this.tilt.pitch) + Math.abs(this.tilt.roll) > 1e-3) aimDir.applyQuaternion(rot(X, this.tilt.pitch).multiply(rot(Z, this.tilt.roll)).invert());
     const armAct = L ? L.armsAction * cw : 0;
     for (let i = 0; i < 2; i++) {
       const S = i === 0 ? 'L' : 'R', side = i === 0 ? 1 : -1;
@@ -625,7 +839,7 @@ export class Animator {
       this.readyW = readyW;
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
       // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
-      let over: { hand: THREE.Vector3; w: number } | null = null;
+      let over: { hand: THREE.Vector3; w: number; pole?: THREE.Vector3 } | null = null;
       const leftFree = s.move === 'shatter' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
       if (hs && (i === 1 || !leftFree)) {
         const HH = this.height;
@@ -649,6 +863,17 @@ export class Animator {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
+      } else if (s.dual) {
+        // twin chainguns held at the hips, barrels along the aim; each gun kicks back on its own rounds and chatters while
+        // it fires; running they ride lower and bounce, in the rush they tuck in under the shoulders
+        const age = i === 0 ? s.dual.fireL : s.dual.fireR, Lr = l1 + l2, kickG = Math.max(0, 1 - age / 0.06);
+        const hand = shoulder.clone().add(new THREE.Vector3(side * 0.34 * Lr, -0.44 * Lr, 0.12 * Lr)).addScaledVector(aimDir, (0.58 - 0.07 * kickG) * Lr);
+        if (age < 0.12) hand.add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, 0).multiplyScalar(0.02 * Lr));
+        hand.y -= (0.06 * run + Math.abs(armSwing) * 0.05 + (s.rush ? 0.08 : 0)) * Lr;
+        if (s.rush) hand.x -= side * 0.06 * Lr;
+        over = { hand, w: 1, pole: new THREE.Vector3(side * 0.9, -0.6, -0.5) };
+      } else if (s.angel) {
+        over = this.angelArm(i, side, shoulder, l1 + l2, s, idleW, run);
       }
       const lead = i === 1 ? 1 : 0.35;
       const act = (1 - armAct) * Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
@@ -657,7 +882,7 @@ export class Animator {
       const put = (n: BoneName, dir: THREE.Vector3, c: THREE.Vector3 | null) => this.aimBone(n, c && wArm > 0 ? dir.clone().lerp(c, wArm).normalize() : dir);
       if (this.bones[`shoulder_${S}` as BoneName]) this.applyDelta(`shoulder_${S}` as BoneName, blendD(Dc.clone(), cq(`shoulder_${S}` as RtBone), wArm));
       if (over) {
-        const [u, l] = this.ik(shoulder, over.hand, l1, l2, new THREE.Vector3(side * 0.5, -1, -0.4));
+        const [u, l] = this.ik(shoulder, over.hand, l1, l2, over.pole ?? new THREE.Vector3(side * 0.5, -1, -0.4));
         this.aimBone(ua, relaxed.clone().lerp(u, over.w).normalize());
         this.aimBone(fa, relaxed.clone().lerp(l, over.w).normalize());
       } else if (act > 0.01) {
@@ -720,19 +945,40 @@ export class Animator {
       }
     }
     // ---------------- wings
-    if ((this.bones.wing_L || this.bones.wing_R) && s.angel) {
-      // angel wings: hovering - spread wide with slow, deep strokes; dashing - swept back along the body;
-      // gliding - held high and open; on the ground - folded against the back
+    if ((this.bones.wing_L || this.bones.wing_R) && s.angel && !PERF) {
+      // (web edition) the original angel wings: spread with slow strokes hovering, swept back fast, raised gliding
       const fastK = Math.min(1, speed / (this.legLen * 6)) * this.flyBlend;
       const air = Math.max(this.flyBlend, s.gliding ? 1 : 0);
       this.flap += dt * (s.gliding ? 0.4 : 1.1 + 0.8 * fastK);
       const beat = Math.sin(this.flap * 2 * Math.PI) * (s.gliding ? 0.04 : 0.16 * (1 - fastK) + 0.06);
-      const lift = s.gliding ? 0.38 : 0.12 * (1 - fastK) * air;                  // raise (open) the wings
-      const sweep = 0.55 * fastK + (1 - air) * 0.12;                             // back along the body
+      const lift = s.gliding ? 0.38 : 0.12 * (1 - fastK) * air;
+      const sweep = 0.55 * fastK + (1 - air) * 0.12;
       for (const [n, side] of [['wing_L', 1], ['wing_R', -1]] as [BoneName, number][]) {
         if (!this.bones[n]) continue;
-        // on the ground the wings rest as sculpted (raised, half open) and only breathe
         this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (beat * air + lift - (1 - air) * 0.06 + (1 - air) * Math.sin(s.time * 1.3) * 0.02))).multiply(rot(Y, side * sweep)));
+      }
+    } else if ((this.bones.wing_L || this.bones.wing_R) && s.angel) {
+      // angel wings on springs, so every change of state snaps and overshoots: folded back on the ground (with a stretch
+      // now and then - Juno's idle fidget), a flare on takeoff, spread wide with slow deep strokes when hovering, swept
+      // hard back in a swoop, thrown forward to brake on arrival, folded up like a dart in a superjump, a raised wide V
+      // for the angelic descent
+      const W = this.ang, fastK = Math.min(1, speed / (this.legLen * 6)) * this.flyBlend, sw = W.swoop + W.sling;
+      const air = Math.min(1, Math.max(W.hover, W.glide, sw, W.sup, W.flare, this.airBlend)), ground = 1 - air;
+      this.wFidget = Math.max(0, this.wFidget - dt);
+      if (ground > 0.9 && this.moveBlend < 0.1 && Math.random() < dt / 7) this.wFidget = 1.1;
+      const fid = this.wFidget > 0 ? Math.sin((1.1 - this.wFidget) / 1.1 * Math.PI) : 0;
+      const jumpFlare = !s.grounded && s.jumpAge < 0.5 ? Math.sin(Math.min(1, s.jumpAge / 0.5) * Math.PI) * (1 - W.hover) : 0;
+      // lift: + raises / opens; sweep: + back along the body
+      const liftT = ground * (-0.08 + 0.3 * fid) + W.hover * 0.1 + sw * 0.16 + W.glide * 0.32 + W.sup * 0.42 + W.flare * 0.38 + jumpFlare * 0.3;
+      const sweepT = ground * (0.34 - 0.3 * fid - 0.06 * this.moveBlend) + W.hover * (0.05 + 0.3 * fastK) + sw * 0.55 - W.glide * 0.06 + W.sup * 0.5 - W.flare * 0.3 - jumpFlare * 0.25;
+      const lift = spring(this.wLift, liftT, 85, 8, dt), sweep = spring(this.wSweep, sweepT, 85, 8, dt);
+      // strokes: slow and deep hovering, a fast shiver in a swoop, a slow sway in the descent, a flutter per footstep
+      this.flap += dt * (0.9 * W.hover + 6 * sw + 0.55 * W.glide + 1.6 * fastK * W.hover + 0.3 * ground);
+      this.stepFlutter *= Math.exp(-dt * 10);
+      const beat = Math.sin(this.flap * 2 * Math.PI) * (0.17 * W.hover * (1 - 0.5 * fastK) + 0.025 * sw + 0.05 * W.glide + 0.015 * ground) + this.stepFlutter;
+      for (const [n, side] of [['wing_L', 1], ['wing_R', -1]] as [BoneName, number][]) {
+        if (!this.bones[n]) continue;
+        this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (lift + beat))).multiply(rot(Y, side * sweep)));
       }
     } else if (this.bones.wing_L || this.bones.wing_R) {
       const rate = s.flying ? (s.vel.y > 1 ? 4.2 : 2.6) : 0.8;
@@ -745,8 +991,29 @@ export class Animator {
         this.applyDelta(n, Dc.clone().multiply(rot(Z, side * (f - fold))).multiply(rot(Y, side * fold * 0.6)));
       }
     }
+    // ---------------- whole-body tilt, applied by the view about the hips: the angel leans her whole body along a swoop
+    // (Mercy's guardian-angel flight), flares back to brake, rocks gently in the descent and banks into a hover; every
+    // flyer banks into its flight
+    {
+      let pT = 0, rT = 0, k = 55, d = 9;
+      const hs2 = Math.hypot(lvx, lvz) * s.scale, dx = hs2 > 0.5 ? lvx * s.scale / hs2 : 0, dz = hs2 > 0.5 ? lvz * s.scale / hs2 : 0;
+      if (s.angel) {
+        const W = this.ang, wt = W.swoop + W.sling * 0.8;
+        const along = hs2 > 0.5 ? Math.min(1.2, Math.atan2(hs2, s.vel.y) * 0.8) : 0;     // 0 = straight up
+        pT = wt * along * dz - W.flare * 0.42 - W.sup * 0.1 + W.glide * (-0.1 + clampA(lvz * s.scale * 0.025, 0.2))
+          + W.hover * (clampA(lvz * s.scale / 9, 1) * 0.4 + clampA(this.acc.z / 30, 0.25));
+        rT = -wt * along * dx + W.glide * (Math.sin(s.time * 2.9) * 0.08 - clampA(lvx * s.scale * 0.025, 0.2))
+          - W.hover * (clampA(lvx * s.scale / 9, 1) * 0.35 + clampA(this.acc.x / 30, 0.25));
+        if (W.swoop > 0.5) { k = 90; d = 11; } else if (W.glide > 0.5) { k = 40; d = 7; }
+      } else if (flyer && s.flying) {
+        pT = clampA(lvz * s.scale / 9, 1) * 0.3; rT = -clampA(lvx * s.scale / 9, 1) * 0.3;
+      }
+      if (!PERF) { pT = 0; rT = 0; }
+      this.tilt.pitch = spring(this.tiltP, pT, k, d, dt); this.tilt.roll = spring(this.tiltR, rT, k, d, dt);
+    }
     // ---------------- secondary motion: hair / coat tails / skirts
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
     this.springs(s, dt);
+    this.placeGuns();
   }
 }

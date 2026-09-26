@@ -118,6 +118,7 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 @keyframes pulse { 50% { opacity: .55; } }
 .ammo { position: absolute; right: 60px; bottom: 170px; font: 800 38px Orbitron; } .ammo small { font-size: 18px; opacity: .6; }
 .flight { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: .2em; }
+.flight .sw { display: block; margin-top: 3px; opacity: .5; font-size: 11px; } .flight .sw.on { opacity: 1; color: #bfe8ff; }
 .flight .fb { width: 160px; height: 6px; background: rgba(255,255,255,.15); margin: 0 auto 4px; } .flight .fb i { display: block; height: 100%; background: #bfe8ff; width: 100%; transform-origin: left; }
 .obj { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
 .obj .side { width: 140px; height: 16px; background: rgba(0,0,0,.5); position: relative; transform: skewX(-20deg); } .obj .side i { position: absolute; inset: 0 auto 0 0; }
@@ -209,3 +210,71 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .ar-owned i { font-style: normal; padding: 4px 10px; font-size: 14px; border: 1px solid; } .ar-owned i.common { border-color: #7dd87d; } .ar-owned i.rare { border-color: #5cb4ff; } .ar-owned i.epic { border-color: #c77dff; } .ar-owned i.pow { border-color: #9d7bff; color: #d9c8ff; }
 .armory .ready { min-width: 200px; font-size: 20px; padding: 14px; }
 .results .sres { font: 700 20px Orbitron; letter-spacing: .1em; color: var(--gold); margin: 0 0 18px; }
+
+/* ======================================================= desktop edition: queues, ranks, career, results, Tab screen */
+.btns button small { display: block; font: 600 12px Rajdhani; opacity: .7; letter-spacing: .08em; }
+.title .full { position: relative; z-index: 1; margin-top: 22px; max-width: 520px; padding: 16px 20px; background: rgba(8,10,18,.72); border: 1px solid var(--gold); }
+.title .full h3 { margin: 0 0 8px; font: 800 18px Orbitron; letter-spacing: .12em; color: var(--gold); }
+.title .full ul { margin: 0 0 12px; padding-left: 18px; font-size: 15px; line-height: 1.45; color: #d7dcee; }
+.title .full .dl { display: inline-block; text-decoration: none; }
+.emblem { position: relative; width: var(--s); height: var(--s); display: inline-grid; place-items: center; }
+.emblem i { position: absolute; inset: 8%; background: linear-gradient(145deg, #fff 0%, var(--c) 38%, color-mix(in srgb, var(--c) 55%, #000) 100%); clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); box-shadow: 0 0 18px var(--c); }
+.emblem::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--c); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); opacity: .7; }
+.emblem b { position: relative; font: 900 calc(var(--s) * .38) Orbitron; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+.queue h3, .career h3 { font: 800 16px Orbitron; letter-spacing: .15em; margin: 18px 0 10px; opacity: .85; }
+.roles { display: flex; gap: 22px; flex-wrap: wrap; }
+.card { background: #0d111c; border: 2px solid var(--line); padding: 18px 20px; cursor: pointer; transition: transform .15s, border-color .15s; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 210px; }
+.card:hover, .card.sel { transform: translateY(-3px); border-color: var(--gold); }
+.card b { font: 900 22px Orbitron; letter-spacing: .08em; } .card p { margin: 0; opacity: .8; text-align: center; }
+.card .rl { font: 800 16px Orbitron; } .card .rec { opacity: .7; font-size: 14px; }
+.ri { width: 42px; height: 42px; display: block; background: var(--gold); }
+.ri.tank { clip-path: polygon(50% 0, 100% 20%, 90% 70%, 50% 100%, 10% 70%, 0 20%); }
+.ri.damage { clip-path: polygon(40% 0, 60% 0, 60% 60%, 80% 60%, 50% 100%, 20% 60%, 40% 60%); }
+.ri.support { clip-path: polygon(38% 0, 62% 0, 62% 38%, 100% 38%, 100% 62%, 62% 62%, 62% 100%, 38% 100%, 38% 62%, 0 62%, 0 38%, 38% 38%); }
+.ri.flex { border-radius: 50%; }
+.diffs { display: flex; gap: 16px; } .diffs .card { min-width: 180px; }
+.mapsq { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } .mapsq .rnd { height: 110px; display: grid; place-items: center; font: 900 60px Orbitron; opacity: .5; }
+.qtag { margin-right: auto; font: 800 14px Orbitron; letter-spacing: .15em; color: var(--gold); }
+.find .st { font: 800 22px Orbitron; letter-spacing: .15em; } .find .st .tm { color: var(--gold); margin-left: 12px; }
+.find .bar { position: absolute; left: 0; right: 0; bottom: 0; }
+.found .mf { font: 900 26px Orbitron; letter-spacing: .3em; color: var(--gold); margin: 0; animation: pulse 1s ease-in-out infinite alternate; }
+.found .obj { font: 800 18px Orbitron; letter-spacing: .1em; color: #fff; }
+@keyframes pulse { from { opacity: .6; } to { opacity: 1; } }
+.career .rank { cursor: default; min-width: 250px; } .pbar { width: 100%; height: 8px; background: rgba(255,255,255,.12); position: relative; overflow: hidden; }
+.pbar i { position: absolute; top: 0; bottom: 0; left: 0; } .pbar.big { height: 14px; width: 360px; } .pbar .old { background: rgba(255,255,255,.55); }
+.pbar .new.gain { background: #5cffa7; } .pbar .new.loss { background: #ff5d7a; }
+.hist { width: 100%; border-collapse: collapse; font-size: 15px; } .hist td, .hist th { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+.hist tr.w td:nth-child(4) { color: #5cffa7; } .hist tr.l td:nth-child(4) { color: #ff5d7a; } .hist small { opacity: .6; }
+.queue-res h2.win { color: #5cffa7; } .queue-res h2.loss { color: #ff5d7a; }
+.mystats { display: flex; gap: 12px; } .mystats div { background: rgba(0,0,0,.45); border: 1px solid var(--line); padding: 10px 16px; text-align: center; min-width: 110px; }
+.mystats b { display: block; font: 800 24px Orbitron; } .mystats small { opacity: .65; letter-spacing: .1em; }
+.rankup { display: flex; align-items: center; gap: 26px; padding: 14px 22px; background: rgba(0,0,0,.45); border: 1px solid var(--line); }
+.rankup .from, .rankup .to { display: flex; flex-direction: column; align-items: center; gap: 6px; font: 700 14px Orbitron; }
+.rankup .mid { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rankup .dl { font: 900 26px Orbitron; } .rankup .dl.gain { color: #5cffa7; } .rankup .dl.loss { color: #ff5d7a; }
+.rankup .mods { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 380px; } .rankup .mods span { font: 700 12px Rajdhani; letter-spacing: .08em; padding: 3px 8px; background: rgba(255,215,106,.15); border: 1px solid rgba(255,215,106,.4); }
+.rankup .bn { margin: 0; font: 900 18px Orbitron; color: var(--gold); } .rankup.down .bn { color: #ff5d7a; } .qp { opacity: .8; }
+/* HUD: Control overtime, Mikoshi Rush route */
+.obj .mid.ot { border-color: #ffcc33; color: #ffcc33; animation: pulse .5s ease-in-out infinite alternate; }
+.obj .push { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.obj .push .trk { width: 460px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid var(--line); position: relative; }
+.obj .push .trk i { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; } .obj .push .trk .c { left: 50%; background: rgba(255,255,255,.5); }
+.obj .push .trk .bu { background: var(--z); } .obj .push .trk .bt { background: var(--u); }
+.obj .push .trk .fl { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; transform: rotate(45deg); background: #e8b64a; border: 2px solid #fff; transition: left .2s linear; }
+.obj .push .trk .fl.us { background: var(--z); } .obj .push .trk .fl.them { background: var(--u); } .obj .push .trk .fl.con { background: #ffcc33; }
+/* Tab screen (Overwatch 2 style) */
+.board.ow2 { min-width: 980px; padding: 18px 24px; background: rgba(8,10,18,.9); }
+.board.ow2 .hdr { display: flex; justify-content: space-between; gap: 20px; font: 700 15px Orbitron; letter-spacing: .08em; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.board.ow2 .hdr b { color: var(--gold); } .board.ow2 .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.board.ow2 .tm.mine h3 { color: var(--z); } .board.ow2 .tm.enemy h3 { color: var(--u); }
+.board.ow2 td.h { display: flex; align-items: center; gap: 6px; } .board.ow2 td.h em { font-style: normal; font-size: 11px; color: var(--gold); }
+.board.ow2 td.h .u, .board.ow2 td.h .up { margin-left: auto; font: 700 11px Orbitron; font-style: normal; opacity: .75; } .board.ow2 td.h .u { color: var(--gold); opacity: 1; }
+.board.ow2 tr.dead { opacity: .45; } .board.ow2 th { font: 700 12px Orbitron; opacity: .7; }
+.board.ow2 .mine { display: flex; gap: 18px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); position: relative; }
+.board.ow2 .mine .who { display: flex; flex-direction: column; align-items: center; min-width: 120px; } .board.ow2 .mine .who img { width: 64px; height: 64px; object-fit: cover; object-position: top; }
+.board.ow2 .mine .who small { opacity: .6; } .board.ow2 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1; }
+.board.ow2 .tiles div { background: rgba(255,255,255,.05); padding: 6px 10px; } .board.ow2 .tiles small { display: block; opacity: .6; font-size: 12px; letter-spacing: .06em; }
+.board.ow2 .tiles b { font: 800 18px Orbitron; } .board.ow2 .shots { position: absolute; right: 0; bottom: -18px; margin: 0; opacity: .5; font-size: 12px; }
+.board.ow2 h2.win { color: #5cffa7; } .board.ow2 h2.loss { color: #ff5d7a; }
+.btns.two { display: grid; grid-template-columns: repeat(2, 300px); width: auto; } .btns.two .primary { grid-column: 1 / -1; width: 300px; }
+.title .full .dl { background: linear-gradient(90deg, #ffb347, #ffd76a); color: #1a1206; border: 0; font-weight: 800; }

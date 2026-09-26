@@ -6,6 +6,12 @@ import type { Actor } from '../game/Actor';
 import type { GameEvent, World } from '../game/World';
 import { QUICK_MELEE } from '../game/weapons';
 import { BASE } from '../render/Assets';
+import { FULL } from '../edition';
+import { ROUNDS_TO_WIN } from '../game/World';
+
+/** hero-specific lines on the Tab screen (Overwatch 2 shows each hero's own numbers) */
+const HERO_STAT: Record<string, string> = { swoops: 'Starwing Swoops', ignites: 'Enemies Ignited', volatile: 'Volatile Crits', roar: 'Crowd-Roar Health', packs: 'Health Packs Used', healAssists: 'Healing Assists' };
+const QNAME: Record<string, string> = { quickplay: 'QUICK PLAY', competitive: 'COMPETITIVE', practice: 'AI QUICK MATCH', skirmish: 'PLAY VS AI', spectate: 'WATCH', aitest: 'AI LAB' };
 
 const el = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 
@@ -101,12 +107,17 @@ export class Hud {
       if (ready && !this.ultWasReady) this.onUltReady?.();
       this.ultWasReady = ready;
       const P = me.def.primary;
-      this.ammo.innerHTML = P.kind === 'charge' ? `<b>${me.charging ? Math.round(me.charge * 100) + '%' : 'DRAW'}</b>` : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${me.maxAmmo}</small>`) : '<b>∞</b>';
+      this.ammo.innerHTML = P.kind === 'charge' ? `<b>${me.charging ? Math.round(me.charge * 100) + '%' : 'DRAW'}</b>`
+        // twin chainguns: left drum | right drum (endless inside the Grand Dohyo)
+        : me.def.dualGuns ? (me.has('dohyo', t) ? '<b>∞</b><small> | </small><b>∞</b>' : me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small> | </small><b>${me.sv.ammo2 ?? 0}</b>`)
+        : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${me.maxAmmo}</small>`) : '<b>∞</b>';
       const flies = me.def.frame === 'flyer' || !!me.def.jets;
       this.flight.style.display = flies ? '' : 'none';
-      if (flies) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>`;
+      // Mirei: the swoop's cooldown sits under the flight gauge (F)
+      const swoop = me.def.id === 'mirei' ? (me.has('swoop', t) ? 'SWOOP' : me.cdLeft('swoop', t) > 0 ? `F ${me.cdLeft('swoop', t).toFixed(1)}` : 'F SWOOP') : '';
+      if (flies) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>${swoop ? `<span class="sw${me.ready('swoop', t) ? ' on' : ''}">${swoop}</span>` : ''}`;
       const st: string[] = [];
-      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'BLOOD PACT', '#ff2d55']];
+      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'LIFESTEAL', '#ff2d55'], ['burning', 'BURNING', '#ff8a3d'], ['tachiai', 'UNSTOPPABLE', '#34d1bf'], ['taiko', 'TAIKO HEARTBEAT', '#ffb35c'], ['dohyo', 'GRAND DOHYO', '#ffe6a8']];
       for (const [k, n, c] of S2) if (me.has(k, t)) st.push(`<span style="--c:${c}">${n}</span>`);
       this.status.innerHTML = st.join('');
       this.root.classList.toggle('dead', !me.alive);
@@ -137,6 +148,27 @@ export class Hud {
       this.obj.innerHTML = `<div class="pips us">${pips(S.wins[my], 'z')}</div><div class="side us"><i style="width:${mine}%"></i><b>${mine.toFixed(0)}%</b></div>
         <div class="mid ${P.owner ? (P.owner === my ? 'us' : 'them') : ''}">STADIUM · ROUND ${S.round}<small>${capTxt}${S.phase === 'fight' ? ` · ${fmtTime(Math.max(0, 120 - (t - S.roundStart)))}` : ''}${me ? ` · $${me.cash.toLocaleString('en-US')}` : ''}</small></div>
         <div class="side them"><i style="width:${theirs}%"></i><b>${theirs.toFixed(0)}%</b></div><div class="pips them">${pips(S.wins[them], 'u')}</div>`;
+    } else if (w.rules === 'control') {
+      // Control (best of 3): round pips, the point's state, each team's percentage, overtime
+      const P = w.point, C = w.control, my = me?.team ?? 'zenith', them = my === 'zenith' ? 'umbra' : 'zenith';
+      const pips = (n: number, cls: string) => Array.from({ length: ROUNDS_TO_WIN }, (_, i) => `<i class="${i < n ? cls : ''}"></i>`).join('');
+      const unlock = Math.max(0, P.unlockAt - t);
+      const st = C.phase === 'intermission' ? `ROUND ${C.round + 1} IN ${Math.max(0, Math.ceil(C.phaseEnd - t))}` : C.overtime ? 'OVERTIME' : unlock > 0 ? `POINT OPENS ${unlock.toFixed(0)}` : P.contested ? 'CONTESTED' : P.capTeam ? `${P.capTeam === my ? 'CAPTURING' : 'LOSING'} ${P.capture.toFixed(0)}%` : P.owner ? (P.owner === my ? 'HOLDING' : 'ENEMY HOLDS') : 'NEUTRAL';
+      const mine = P.progress[my], theirs = P.progress[them];
+      this.obj.innerHTML = `<div class="pips us">${pips(C.wins[my], 'z')}</div><div class="side us"><i style="width:${mine}%"></i><b>${mine.toFixed(0)}%</b></div>
+        <div class="mid ${C.overtime ? 'ot' : P.owner ? (P.owner === my ? 'us' : 'them') : ''}">ROUND ${C.round}<small>${st}</small></div>
+        <div class="side them"><i style="width:${theirs}%"></i><b>${theirs.toFixed(0)}%</b></div><div class="pips them">${pips(C.wins[them], 'u')}</div>`;
+    } else if (w.rules === 'push') {
+      // Mikoshi Rush: the route with the float on it, each team's furthest push, who is moving it, the clock
+      const M = w.push, my = me?.team ?? 'zenith', them = my === 'zenith' ? 'umbra' : 'zenith';
+      const toward = (team: string) => team === 'zenith' ? 1 : -1;   // + = toward the Umbra end
+      const x = (d: number) => 50 + d / Math.max(1, M.half) * 50 * toward(my);   // our goal on the right
+      const unlock = Math.max(0, M.unlockAt - t);
+      const st = unlock > 0 ? `THE MIKOSHI RISES IN ${unlock.toFixed(0)}` : M.overtime ? 'OVERTIME' : M.contested ? 'CONTESTED' : M.owner ? (M.owner === my ? 'YOUR TEAM PUSHES' : 'ENEMY PUSHES') : 'STANDING STILL';
+      const left = Math.max(0, w.timeLimit - t);
+      this.obj.innerHTML = `<div class="push"><div class="trk"><i class="c"></i><i class="bu" style="left:${x(M.best[my] * toward(my))}%"></i><i class="bt" style="left:${x(-M.best[them] * toward(my))}%"></i>
+        <b class="fl ${M.contested ? 'con' : M.owner ? (M.owner === my ? 'us' : 'them') : ''}" style="left:${x(M.d)}%"></b></div>
+        <div class="mid">MIKOSHI RUSH<small>${st} · ${fmtTime(left)} · YOU ${Math.round(M.best[my])}m / THEM ${Math.round(M.best[them])}m</small></div></div>`;
     } else if (w.mode !== 'training') {
       const P = w.point, my = me?.team ?? 'zenith';
       const unlock = Math.max(0, P.unlockAt - t);
@@ -179,11 +211,39 @@ export class Hud {
     });
     // scoreboard
     this.board.style.display = showBoard || w.winner ? '' : 'none';
-    if (showBoard || w.winner) {
+    this.board.classList.toggle('ow2', FULL);
+    if ((showBoard || w.winner) && FULL) this.board.innerHTML = this.tabScreen(w, me);
+    else if (showBoard || w.winner) {
       const row = (a: Actor) => `<tr class="${a === me ? 'me' : ''}"><td><img src="${BASE}img/portrait_${a.def.id}.webp" onerror="this.remove()">${a.def.name}</td><td>${a.kills}</td><td>${a.assists}</td><td>${a.deaths}</td><td>${Math.round(a.dmgDone)}</td><td>${Math.round(a.healDone)}</td></tr>`;
       const team = (tm: string, title: string) => `<h3 class="${tm}">${title}</h3><table><tr><th>Hero</th><th>K</th><th>A</th><th>D</th><th>Damage</th><th>Healing</th></tr>${w.actors.filter(a => a.team === tm && !a.isRobot).map(row).join('')}</table>`;
       this.board.innerHTML = (w.winner ? `<h2 class="${w.winner}">${w.winner === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} VICTORY</h2>` : '') + team('zenith', 'Zenith Vanguard') + team('umbra', 'Umbra Syndicate');
     }
+  }
+
+  /** Tab (Overwatch 2 style): both teams' E / A / D / DMG / H / MIT, your hero's numbers (accuracy first) */
+  private tabScreen(w: World, me: Actor | null): string {
+    const my = me?.team ?? 'zenith', them = my === 'zenith' ? 'umbra' : 'zenith', t = w.time;
+    const f = (n: number) => Math.round(n).toLocaleString('en-US');
+    const row = (a: Actor) => `<tr class="${a === me ? 'me' : ''} ${a.alive ? '' : 'dead'}"><td class="h"><img src="${BASE}img/portrait_${a.def.id}.webp" onerror="this.remove()"><span>${a.def.name}${a === me ? ' <em>YOU</em>' : ''}</span>${a.ult >= a.def.ult.charge ? '<i class="u">ULT</i>' : `<i class="up">${Math.floor(a.ult / a.def.ult.charge * 100)}%</i>`}</td>
+      <td>${a.kills + a.assists}</td><td>${a.stats.healAssists ?? 0}</td><td>${a.deaths}</td><td>${f(a.dmgDone)}</td><td>${f(a.healDone)}</td><td>${f(a.mitigated)}</td></tr>`;
+    const table = (team: string, title: string) => `<div class="tm ${team === my ? 'mine' : 'enemy'}"><h3>${title}</h3><table><tr><th></th><th title="Eliminations">E</th><th title="Assists">A</th><th title="Deaths">D</th><th>DMG</th><th>H</th><th>MIT</th></tr>
+      ${w.actors.filter(a => a.team === team && !a.isRobot).map(row).join('')}</table></div>`;
+    const score = w.rules === 'push' ? `${Math.round(w.push.best[my])}m - ${Math.round(w.push.best[them])}m` : w.rules === 'control' ? `${w.control.wins[my]} - ${w.control.wins[them]}` : `${w.point.progress[my].toFixed(0)}% - ${w.point.progress[them].toFixed(0)}%`;
+    const head = `<div class="hdr"><b>${QNAME[w.mode] ?? w.mode.toUpperCase()}</b><span>${w.map.name} · ${w.rules === 'push' ? 'MIKOSHI RUSH' : 'CONTROL'}${w.rules === 'control' ? ` · ROUND ${w.control.round}` : ''} · ${score}</span><span>${fmtTime(t)}</span></div>`;
+    let mine = '';
+    if (me) {
+      const pct = (a: number, b: number) => b ? `${Math.round(a / b * 100)}%` : '-';
+      const tiles: [string, string][] = [
+        ['Weapon Accuracy', pct(me.hits, me.shots)], ['Critical Hit Accuracy', pct(me.crits, me.hits)], ['Eliminations', String(me.kills + me.assists)], ['Final Blows', String(me.kills)],
+        ['Objective Time', fmtTime(me.objTime)], ['Damage Mitigated', f(me.mitigated)], ['Best Kill Streak', String(me.bestStreak)], ['Ultimates Used', String(me.ults)],
+        ...Object.entries(me.stats).filter(([k, v]) => HERO_STAT[k] && v > 0).map(([k, v]) => [HERO_STAT[k], f(v)] as [string, string]),
+      ];
+      mine = `<div class="mine"><div class="who"><img src="${BASE}img/portrait_${me.def.id}.webp" onerror="this.remove()"><b>${me.def.name}</b><small>${me.def.title}</small></div>
+        <div class="tiles">${tiles.map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div><p class="shots">${me.hits.toLocaleString('en-US')} of ${me.shots.toLocaleString('en-US')} shots hit</p></div>`;
+    }
+    const banner = w.winner ? `<h2 class="${w.winner === my ? 'win' : 'loss'}">${w.winner === my ? 'VICTORY' : 'DEFEAT'}</h2>` : '';
+    void t;
+    return banner + head + `<div class="teams">${table(my, my === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE')}${table(them, them === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE')}</div>` + mine;
   }
 
   event(e: GameEvent, me: Actor | null, now: number) {

@@ -64,3 +64,65 @@ export function buildBlaster(modelHeight: number): THREE.Group {
   add(new THREE.SphereGeometry(0.012 * L, 10, 8), core, 0.018 * L, 0.03 * L, 0.06 * L);               // sun cell
   return g;
 }
+
+export interface ChaingunProp { group: THREE.Group; spin: THREE.Group; flash: THREE.Mesh; core: THREE.MeshStandardMaterial; len: number; }
+
+/**
+ * Gantetsu's rotary chainguns, built like black-lacquer festival drums: gold rims and rivets, glowing ember vents, a
+ * six-barrel cluster that really spins up, a drum magazine underneath and an accent ring (jade = Hinoko, the left gun;
+ * gold = Hanabi, the right). Local frame: the grip (fist) at the origin, barrels along +Z, top of the gun +Y.
+ */
+export function buildChaingun(modelHeight: number, side: 'L' | 'R'): ChaingunProp {
+  const L = modelHeight, len = 0.44 * L;
+  const lacquer = new THREE.MeshStandardMaterial({ color: '#17131a', metalness: 0.45, roughness: 0.3 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#c8922e', metalness: 0.85, roughness: 0.3 });
+  const steel = new THREE.MeshStandardMaterial({ color: '#3a3d45', metalness: 0.8, roughness: 0.35 });
+  const accentC = side === 'L' ? '#2fd3b8' : '#ffb84a';
+  const accent = new THREE.MeshStandardMaterial({ color: accentC, emissive: new THREE.Color(accentC), emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.4 });
+  const core = new THREE.MeshStandardMaterial({ color: '#ffd9a0', emissive: new THREE.Color('#ff7a1f'), emissiveIntensity: 2.6, roughness: 0.5 });
+  const g = new THREE.Group();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+  };
+  const alongZ = (geo: THREE.BufferGeometry) => geo.rotateX(Math.PI / 2);
+  const bodyR = 0.066 * L, bodyZ0 = -0.03 * L, bodyZ1 = 0.25 * L, cy = -0.03 * L;       // the drum sits just under the fist
+  const bodyL = bodyZ1 - bodyZ0, bz = (bodyZ0 + bodyZ1) / 2;
+  add(alongZ(new THREE.CylinderGeometry(bodyR, bodyR * 1.04, bodyL, 22)), lacquer, 0, cy, bz);
+  // gold rims front and back, a ring of rivets on each
+  for (const z of [bodyZ0 + 0.004 * L, bodyZ1 - 0.004 * L]) {
+    add(alongZ(new THREE.TorusGeometry(bodyR * 1.03, 0.0075 * L, 8, 28).rotateX(Math.PI / 2)), gold, 0, cy, z);
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; add(new THREE.SphereGeometry(0.0055 * L, 6, 5), gold, Math.cos(a) * bodyR * 1.06, cy + Math.sin(a) * bodyR * 1.06, z + 0.012 * L * (z < bz ? 1 : -1)); }
+  }
+  // ember heat vents along the flanks and the accent band
+  for (const sx of [1, -1]) for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.006 * L, 0.03 * L, 0.028 * L), core, sx * bodyR * 1.0, cy + 0.01 * L, bodyZ0 + (0.05 + k * 0.055) * L);
+  add(alongZ(new THREE.CylinderGeometry(bodyR * 1.045, bodyR * 1.045, 0.022 * L, 22, 1, true)), accent, 0, cy, bz - 0.02 * L).material = accent;
+  // the front shroud with a glowing core, and the spinning six-barrel cluster
+  add(alongZ(new THREE.CylinderGeometry(bodyR * 0.82, bodyR * 0.95, 0.05 * L, 20)), steel, 0, cy, bodyZ1 + 0.02 * L);
+  const face = add(new THREE.CircleGeometry(bodyR * 0.55, 20), core, 0, cy, bodyZ1 + 0.046 * L);
+  void face;
+  const spin = new THREE.Group(); spin.position.set(0, cy, bodyZ1 + 0.045 * L); g.add(spin);
+  for (let k = 0; k < 6; k++) {
+    const a = k / 6 * Math.PI * 2, r = bodyR * 0.46;
+    add(alongZ(new THREE.CylinderGeometry(0.011 * L, 0.011 * L, 0.13 * L, 8)), steel, Math.cos(a) * r, Math.sin(a) * r, 0.065 * L, spin);
+    add(alongZ(new THREE.TorusGeometry(0.011 * L, 0.003 * L, 5, 10).rotateX(Math.PI / 2)), gold, Math.cos(a) * r, Math.sin(a) * r, 0.13 * L, spin);
+  }
+  add(alongZ(new THREE.CylinderGeometry(bodyR * 0.62, bodyR * 0.62, 0.012 * L, 18)), gold, 0, 0, 0.09 * L, spin);
+  add(alongZ(new THREE.CylinderGeometry(bodyR * 0.2, bodyR * 0.2, 0.14 * L, 10)), lacquer, 0, 0, 0.065 * L, spin);
+  // drum magazine slung under the rear, gold-rimmed, with the accent emblem
+  const mag = add(new THREE.CylinderGeometry(0.058 * L, 0.058 * L, 0.05 * L, 22).rotateZ(Math.PI / 2), lacquer, 0, cy - bodyR - 0.035 * L, 0.03 * L);
+  void mag;
+  for (const sx of [1, -1]) {
+    add(new THREE.TorusGeometry(0.058 * L, 0.005 * L, 6, 24).rotateY(Math.PI / 2), gold, sx * 0.025 * L, cy - bodyR - 0.035 * L, 0.03 * L);
+    add(new THREE.CircleGeometry(0.03 * L, 16).rotateY(sx * Math.PI / 2), accent, sx * 0.0255 * L, cy - bodyR - 0.035 * L, 0.03 * L);
+  }
+  // grip block under the fist and a top handle rail
+  add(new THREE.BoxGeometry(0.03 * L, 0.05 * L, 0.05 * L), steel, 0, -0.005 * L, 0);
+  add(new THREE.BoxGeometry(0.018 * L, 0.012 * L, 0.2 * L), gold, 0, cy + bodyR + 0.004 * L, bz);
+  // muzzle flash: a crisp four-petal star (stylized, readable), flickered by the view while the gun fires
+  const star = new THREE.Shape();
+  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, r = (k % 2 ? 0.03 : 0.11) * L; if (k) star.lineTo(Math.cos(a) * r, Math.sin(a) * r); else star.moveTo(r, 0); }
+  const flash = new THREE.Mesh(new THREE.ShapeGeometry(star), new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  flash.position.set(0, cy, bodyZ1 + 0.2 * L); flash.visible = false;
+  g.add(flash);
+  return { group: g, spin, flash, core, len };
+}

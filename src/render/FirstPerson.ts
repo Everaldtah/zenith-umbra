@@ -13,7 +13,7 @@ import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
 
 type V = [number, number, number];     // view space metres: right, up, forward (from the eye)
-type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun';
+type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun' | 'dual';
 // push: eye forward past a bulky collar / coat (m); clip: cut viewmodel geometry closer than this to the camera (m) -
 // a high collar that would otherwise wrap the view (hands are always further out)
 // keep: how much hand weight a triangle needs to stay in the viewmodel (armsOnly; default 0.75) - raise it for heroes
@@ -33,6 +33,7 @@ export const FP_STYLE: Record<string, Style> = {
   haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
   tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
+  gantetsu: { grip: 'dual', R: [0.44, -0.3, 0.42], L: [-0.44, -0.3, 0.42], recoil: 0.03, push: 0.08 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -125,6 +126,7 @@ export class FirstPersonArms {
 
   constructor(public actor: Actor, skinId = 'classic') {
     this.view = new CharacterView(actor, actor.team, skinId);
+    this.view.noSmear = true;
     this.style = FP_STYLE[actor.def.id] ?? DEFAULT;
     this.view.anim.useClips(null);                 // body clips don't apply to a viewmodel
     this.scene.add(this.view.group);
@@ -206,6 +208,7 @@ export class FirstPersonArms {
     this.view.group.position.set(-(this.eye.x + off.x) * k - bob[0], -(this.eye.y + off.y) * k + bob[1], -(this.eye.z + off.z) * k);
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
     this.view.inner.scale.setScalar(1);
+    this.view.updateGuns(dt, t);
     // ---- 1. authored clips (Overwatch-style: gameplay owns the clock - see assetgen/blender/fp_choreo.py)
     if (this.mixer) {
       const kind = a.anim.attackKind;
@@ -278,6 +281,15 @@ export class FirstPersonArms {
         wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3 - u * 0.6, 0, dir * (0.9 - u * 1.4)));
         src = 'slash';
       }
+    } else if (S.grip === 'dual' && L) {
+      // twin chainguns: each gun kicks straight back on its own rounds (Boehm: push, snap back, a little rock) and the
+      // spun-up guns chatter; nothing covers the reticle
+      for (const [k, age] of [[1, t - a.anim.fireR], [0, t - a.anim.fireL]] as [number, number][]) {
+        const kk = Math.max(0, 1 - age / 0.06), jit = age < 0.1 ? 0.004 : 0;
+        const d: V = [(Math.random() - 0.5) * jit, 0.005 * kk + (Math.random() - 0.5) * jit, -S.recoil * kk];
+        if (k === 1) R = add(R, d); else L = add(L, d);
+        if (age < 0.1) src = 'chaingun';
+      }
     } else if (kind !== 'punch' && atk < 0.5 && S.grip !== 'bow') {
       // ranged: per-grip kick
       const r = Math.max(0, 1 - atk / 0.18);
@@ -316,7 +328,9 @@ export class FirstPersonArms {
     const toM = (v: V) => new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(this.eye);
     const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L) : null, toM(R)];
     const prop = S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
-    an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop });
+    // twin chainguns converge on a point well past the reticle (hip-held guns never follow the bent forearms)
+    const gunAim = S.grip === 'dual' ? toM([0, 0, 14]) : undefined;
+    an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop, gunAim });
     this.source = `proc:${src}`;
   }
 

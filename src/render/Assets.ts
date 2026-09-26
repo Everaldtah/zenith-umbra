@@ -76,6 +76,9 @@ export function texture(path: string, repeat = true, srgb = true): THREE.Texture
   return t;
 }
 
+/** a texture the asset manifest lists (call after loadManifest) */
+export function hasTexture(path: string): boolean { return !!manifest?.textures.includes(path); }
+
 export async function exists(path: string): Promise<boolean> {
   await loadManifest();
   return !!manifest?.textures.includes(path);

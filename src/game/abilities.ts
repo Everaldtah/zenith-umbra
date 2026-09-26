@@ -3,6 +3,7 @@ import { isAbility } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from './Actor';
 import { dist3, norm, type Proj, type World, type Zone } from './World';
+import { ignite } from './weapons';
 
 let ZID = 1;
 type Impl = (w: World, a: Actor) => boolean;
@@ -10,7 +11,7 @@ type Impl = (w: World, a: Actor) => boolean;
 const CC = ['stun', 'root', 'silence', 'grounded', 'tethered'];
 const DEBUFF = ['brand', 'bleed', 'antiheal', 'slow', 'vuln', ...CC];
 
-function ccBlocked(w: World, x: Actor) { return x.has('ccimmune', w.time) || x.has('linked', w.time); }
+function ccBlocked(w: World, x: Actor) { return x.has('ccimmune', w.time) || x.has('linked', w.time) || x.has('tachiai', w.time); }
 function applyCC(w: World, src: Actor, x: Actor, kind: string, dur: number): boolean {
   if (ccBlocked(w, x)) {
     w.fx('immune', x.center, { color: '#bfe8ff', actor: x });
@@ -207,7 +208,7 @@ const I: Record<string, Impl> = {
   },
   wish(w, a) {
     const tg = w.coneTarget(a, 30, 12, x => x.team === a.team) ?? a;
-    w.shield(tg, 300, 4, 'wish');
+    w.shield(tg, 300, 4, 'wish', a);
     w.fx('wish', tg.center, { actor: tg, color: '#bfe8ff', dur: 4 }); w.sfx('wish', tg.center, a);
     return true;
   },
@@ -277,8 +278,8 @@ const I: Record<string, Impl> = {
   },
   // ================================================================ Gorgoth
   plating(w, a) {
-    w.shield(a, 250, 3, 'void');
-    for (const x of w.allies(a, false)) if (dist3(x.pos, a.pos) < 8) { w.shield(x, 100, 3, 'void'); w.fx('voidshield', x.center, { actor: x, color: '#ff2244', dur: 3 }); }
+    w.shield(a, 250, 3, 'void', a);
+    for (const x of w.allies(a, false)) if (dist3(x.pos, a.pos) < 8) { w.shield(x, 100, 3, 'void', a); w.fx('voidshield', x.center, { actor: x, color: '#ff2244', dur: 3 }); }
     w.fx('voidshield', a.center, { actor: a, color: '#ff2244', dur: 3 }); w.sfx('plating', a.center, a);
     return true;
   },
@@ -457,7 +458,51 @@ const I: Record<string, Impl> = {
     w.fx('ultflash', a.center, { color: '#ff6a2a', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('roar', a.center, a);
     return true;
   },
+  // ================================================================ Gantetsu
+  tachiai(w, a) {
+    if (a.has('root', w.time)) return false;
+    const t = w.time;
+    a.set('tachiai', t, 2.5); a.sv.rushYaw = a.yaw; a.sv.rushStart = t;
+    (a as any)._rushHit = new Set<number>();
+    w.sfx('charge', a.center, a); w.sfx('roar', a.center, a);
+    w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur: 2.5 });
+    return true;
+  },
+  taiko(w, a) {
+    a.set('taiko', w.time, 4); a.sv.taikoBeat = w.time;
+    w.fx('taiko', a.center, { actor: a, color: '#ffb35c', r: 12 }); w.sfx('taiko', a.center, a);
+    return true;
+  },
+  dohyo(w, a) {
+    // the ring is stamped where he stands: everyone of the other team inside it is caught for the bout
+    const t = w.time, g = w.level.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.5);
+    const p = { x: a.pos.x, y: g > -Infinity ? g : a.pos.y, z: a.pos.z };
+    const trapped = w.enemies(a).filter(x => Math.hypot(x.pos.x - p.x, x.pos.z - p.z) < 9 + x.radius * 0.5 && Math.abs(x.pos.y - p.y) < 6).map(x => x.id);
+    zone(w, a, 'dohyo', p, 9, 6, { trapped });
+    a.set('dohyo', t, 6);
+    a.reloadUntil = 0; a.ammo = a.maxAmmo; if (!isAbility(a.def.secondary)) a.sv.ammo2 = Math.max(1, Math.round((a.def.secondary.ammo ?? 0) * (1 + a.mods.ammo)));
+    w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('slam', p, { r: 9, color: '#ffe6a8', actor: a });
+    w.sfx('ultcall', a.center, a); w.sfx('dohyo', p, a); w.sfx('slam', p, a);
+    w.emit({ t: 'msg', text: 'GANTETSU · GRAND DOHYO', color: a.def.color });
+    return true;
+  },
 };
+
+/** Shiko Stomp: the leap out of a Tachiai Rush lands - everyone close is launched into the air and set alight */
+function shikoStomp(w: World, a: Actor) {
+  const t = w.time, p = { ...a.pos };
+  for (const x of w.enemies(a)) {
+    const dx = x.pos.x - p.x, dz = x.pos.z - p.z, d = Math.hypot(dx, dz);
+    if (d > 5 + x.radius || Math.abs(x.pos.y - p.y) > 2.5) continue;
+    w.damage(a, x, 60, { kind: 'ability' }); ignite(w, a, x, 8);
+    if (ccBlocked(w, x) || x.def.frame === 'mech' || x.isBoss) continue;
+    const n = d > 0.1 ? { x: dx / d, z: dz / d } : { x: 0, z: 0 };
+    x.vel.y = 9.5; x.grounded = false; x.lastGroundedAt = -9;
+    x.forced = { vx: n.x * 4, vy: 0, vz: n.z * 4, until: t + 0.35, kind: 'knock' };
+  }
+  w.fx('slam', p, { r: 5, color: a.def.glow, actor: a }); w.fx('stomp', p, { r: 5, color: '#ffb35c', actor: a }); w.fx('dust', p, { r: 3 });
+  w.sfx('slam', p, a); w.sfx('mechland', p, a);
+}
 
 // ------------------------------------------------------------------ projectile specials
 function onProj(w: World, p: Proj, at: V3, hit: Actor | null) {
@@ -561,6 +606,43 @@ export function tickAbilities(w: World, dt: number) {
     w.fx('arrowhit', p, { color: '#ffd27a' });
     if (z.data.left % 4 === 0) w.sfx('arrowhit', p);
   }
+  // Gantetsu: Tachiai Rush shoves (and cracks barriers), the stomp lands, Taiko Heartbeat feeds the team's lifesteal
+  for (const a of w.actors) {
+    if (!a.alive) { a.sv.stompArmed = 0; continue; }
+    if (a.has('tachiai', t)) {
+      const hit: Set<number> = (a as any)._rushHit ?? ((a as any)._rushHit = new Set<number>());
+      const ry = a.sv.rushYaw ?? a.yaw, f = { x: Math.sin(ry), z: Math.cos(ry) };
+      for (const x of w.enemies(a)) {
+        if (hit.has(x.id) || Math.hypot(x.pos.x - a.pos.x, x.pos.z - a.pos.z) > a.radius + x.radius + 0.5 || Math.abs(x.pos.y - a.pos.y) > 2.2) continue;
+        hit.add(x.id);
+        w.damage(a, x, 30, { kind: 'ability' }); ignite(w, a, x, 6);
+        w.fx('impact', x.center, { color: a.def.glow }); w.sfx('punch', x.center, a);
+        if (ccBlocked(w, x) || x.def.frame === 'mech' || x.isBoss) continue;
+        // shoved aside, off the charge line
+        const side = (x.pos.x - a.pos.x) * -f.z + (x.pos.z - a.pos.z) * f.x >= 0 ? 1 : -1;
+        x.vel.y = Math.max(x.vel.y, 3.5); x.grounded = false;
+        x.forced = { vx: -f.z * side * 9 + f.x * 6, vy: 0, vz: f.x * side * 9 + f.z * 6, until: t + 0.3, kind: 'knock' };
+      }
+      // COUNTER: ploughing into the Solar Bulwark cracks it
+      for (const b of w.actors) {
+        if (!b.alive || b.team === a.team || !b.barrier.up || hit.has(-b.id)) continue;
+        const bf = b.forward(), c = { x: b.pos.x + bf.x * 1.7 * b.scale, y: b.pos.y + 1.5, z: b.pos.z + bf.z * 1.7 * b.scale };
+        if (Math.hypot(c.x - a.pos.x, c.z - a.pos.z) > a.radius + 1.3) continue;
+        hit.add(-b.id);
+        w.hitBarrier(b, 300, a, c);
+        w.emit({ t: 'counter', actor: a, target: b, text: 'Tachiai Rush cracks the Solar Bulwark' });
+      }
+    }
+    if (a.sv.stompArmed) {
+      if (a.grounded && t - a.anim.jumpAt > 0.1) { a.sv.stompArmed = 0; a.clear('stompair'); shikoStomp(w, a); }
+      else if (!a.has('stompair', t)) a.sv.stompArmed = 0;
+    }
+    if (a.has('taiko', t)) {
+      for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 12) x.set('lifesteal', t, 0.3, x === a ? 0.4 : 0.3);
+      if (t - (a.sv.taikoBeat ?? 0) > 0.5) { a.sv.taikoBeat = t; w.fx('taikopulse', a.center, { actor: a, color: '#ffb35c', r: 12 }); w.sfx('taikobeat', a.center, a); }
+    }
+  }
+  for (const z of w.zones) if (z.kind === 'dohyo' && !z.owner.alive) z.until = t;
   // dashes that interact with enemies on the way
   for (const a of w.actors) {
     if (!a.alive || !a.forced) continue;
@@ -586,6 +668,13 @@ export function tickAbilities(w: World, dt: number) {
           w.emit({ t: 'counter', actor: a, target: x, text: 'Dawn Charge breaks the Abyss Charge head-on' });
           w.fx('slam', x.pos, { r: 3, color: '#ffd76a', actor: a }); w.sfx('slam', x.pos, a);
           a.forced.until = t; break;
+        }
+        if (x.has('tachiai', t)) {
+          // COUNTER (Gantetsu): an unstoppable rush can't be pinned - the two heavyweights collide and the charge breaks
+          a.forced.until = t; w.damage(a, x, 30, { kind: 'ability' });
+          w.emit({ t: 'counter', actor: x, target: a, text: "Tachiai Rush can't be pinned" });
+          w.fx('slam', x.pos, { r: 2.5, color: x.def.glow, actor: x }); w.sfx('slam', x.pos, a);
+          break;
         }
         if (!pin && !ccBlocked(w, x) && x.def.frame !== 'mech' && !x.isBoss) { pin = x; a.sv.pinned = x.id; w.sfx('pin', x.center, a); continue; }
         if (x.def.frame === 'mech' || x.isBoss) { w.damage(a, x, 60, { kind: 'ability' }); a.forced.until = t; w.fx('slam', x.pos, { r: 2, color: '#ffd76a' }); break; }
@@ -630,7 +719,7 @@ export function castAbility(w: World, a: Actor, id: string, slot: 'a1' | 'a2' | 
   const ok = I[id](w, a);
   if (!ok) return false;
   const def = slot === 'a1' ? a.def.ability1 : slot === 'a2' ? a.def.ability2 : slot === 'ult' ? a.def.ult : (isAbility(a.def.secondary) ? a.def.secondary : null);
-  if (slot === 'ult') a.ult = 0;
+  if (slot === 'ult') { a.ult = 0; a.ults++; }
   else if (def) a.cd[id] = t + def.cooldown * (1 - a.mods.cdr) * (1 - (a.mods.cdrBy[id] ?? 0));   // Stadium cooldown items / powers
   a.anim.castAt = t; a.anim.castId = id;
   w.stats.casts[id] = (w.stats.casts[id] ?? 0) + 1;

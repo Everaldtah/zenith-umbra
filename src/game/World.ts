@@ -1,19 +1,33 @@
 // Deterministic fixed-step simulation: movement, combat, projectiles, zones, capture point.
 // Rendering, audio and HUD only read state and drain `events`.
 import { HERO, PILOTS, PILOT_BY_ID, type HeroDef, type TeamId, isAbility } from '../data/heroes';
-import { MAP, type MapDef } from '../data/maps';
+import { mapFor, type MapDef } from '../data/maps';
 import { Level, STEP, type V3 } from '../engine/Physics';
 import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
 import { castAbility, tickAbilities } from './abilities';
 import { updateWeapons } from './weapons';
 import { Stadium } from './stadium';
+import { FULL } from '../edition';
 
 /** Tenkai-Oh's ult: 3.3m x 2.2 = 7.3m, four times an average hero's height */
 export const TITAN_SCALE = 2.2;
 
 export const G = 24;
-export type Mode = 'training' | 'skirmish' | 'stadium' | 'spectate' | 'aitest' | 'campaign' | 'gallery';
+/** Grand Dohyo: height of the rope wall above the ring floor (m) */
+export const RING_H = 8;
+export type Mode = 'training' | 'skirmish' | 'stadium' | 'spectate' | 'aitest' | 'campaign' | 'gallery' | 'quickplay' | 'competitive' | 'practice';
+/** how a match is won: the legacy single-round point (web build, AI lab), Overwatch-style Control (best of 3 rounds) or
+ *  Mikoshi Rush (escort the festival float into the enemy's end) */
+export type Rules = 'legacy' | 'control' | 'push';
+export const ROUNDS_TO_WIN = 2;
+/** Control: % per second while holding the point; capture speed per player on it (up to three count) */
+export const HOLD_RATE = 1.3;
+/** Mikoshi Rush: the float's speed (m/s) with one pusher, +10% per extra pusher (up to three), and the time limit */
+export const FLOAT_SPEED = 1.2;
+export const PUSH_TIME = 300;
+/** health packs */
+export const PACK = { small: { hp: 75, respawn: 10 }, big: { hp: 250, respawn: 15 } };
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
@@ -44,12 +58,23 @@ export class World {
   zones: Zone[] = [];
   events: GameEvent[] = [];
   timers: { at: number; fn: () => void }[] = [];
-  prevIn = new Map<number, { a1: boolean; a2: boolean; ult: boolean; alt: boolean; jump: boolean; fire: boolean; melee: boolean }>();
+  prevIn = new Map<number, { a1: boolean; a2: boolean; ult: boolean; alt: boolean; jump: boolean; fire: boolean; melee: boolean; swoop: boolean; descend: boolean }>();
   attackers = new Map<number, Map<number, number>>();
   // capture point
   point = { owner: null as TeamId | null, capture: 0, capTeam: null as TeamId | null, progress: { zenith: 0, umbra: 0 }, contested: false, unlockAt: 8, r: 6 };
   winner: TeamId | null = null;
   timeLimit = 360;
+  rules: Rules = 'legacy';
+  /** desktop edition features (Mirei's swoop, the new modes); the web build runs the lite game */
+  full = true;
+  /** Control: rounds (first to ROUNDS_TO_WIN), the transition between them, overtime */
+  control = { round: 1, wins: { zenith: 0, umbra: 0 } as Record<TeamId, number>, phase: 'fight' as 'fight' | 'intermission', phaseEnd: 0, overtime: false };
+  /** Mikoshi Rush: the float's signed distance from the centre along the path (+ toward the Umbra end), each team's
+   *  furthest push, who is moving it */
+  push = { d: 0, best: { zenith: 0, umbra: 0 } as Record<TeamId, number>, owner: null as TeamId | null, contested: false, unlockAt: 15, half: 0, pos: { x: 0, y: 0, z: 0 } as V3, checkpoint: 0, overtime: false };
+  private pathPts: V3[] = []; private pathCum: number[] = [];
+  /** health packs: position, size, and when each is back */
+  packs: { x: number; y: number; z: number; big: boolean; readyAt: number }[] = [];
   /** campaign hooks: enemy/boss definitions and the encounter director */
   extraDefs: Record<string, HeroDef> = {};
   director: { update(dt: number): void; onKill?(a: Actor, src: Actor | null): void } | null = null;
@@ -57,9 +82,38 @@ export class World {
   stadium: Stadium | null = null;
   stats = { counters: 0, casts: {} as Record<string, number>, sfx: {} as Record<string, number>, fx: {} as Record<string, number> };
 
-  constructor(mapId: string | MapDef, public mode: Mode) {
-    this.map = typeof mapId === 'string' ? MAP[mapId] : mapId;
+  constructor(mapId: string | MapDef, public mode: Mode, opts: { full?: boolean; rules?: Rules } = {}) {
+    this.full = opts.full ?? FULL;
+    this.map = typeof mapId === 'string' ? mapFor(mapId, this.full) : mapId;
     this.level = new Level(this.map);
+    this.rules = opts.rules ?? (this.full && (mode === 'quickplay' || mode === 'competitive' || mode === 'practice' || mode === 'spectate') ? (this.map.objective ?? 'control') : 'legacy');
+    for (const p of this.map.packs ?? []) {
+      const y = p.y ?? Math.max(0, this.level.groundAt(p.x, p.z, 0.3));
+      this.packs.push({ x: p.x, y, z: p.z, big: !!p.big, readyAt: 0 });
+    }
+    if (this.rules === 'control') { this.point.unlockAt = 12; this.timeLimit = 1500; }
+    if (this.rules === 'push') {
+      const path = this.map.path ?? [[-this.map.size[0] + 6, 0], [this.map.size[0] - 6, 0]];
+      let cum = 0;
+      path.forEach(([x, z], i) => {
+        const p = { x, y: Math.max(0, this.level.groundAt(x, z, 20)), z };
+        if (i) cum += Math.hypot(x - this.pathPts[i - 1].x, z - this.pathPts[i - 1].z);
+        this.pathPts.push(p); this.pathCum.push(cum);
+      });
+      this.push.half = cum / 2;
+      this.push.pos = this.pathAt(0);
+      this.timeLimit = PUSH_TIME;
+    }
+  }
+
+  /** a point on the push path, `d` metres from its centre (+ toward the Umbra end) */
+  pathAt(d: number): V3 {
+    const s = Math.max(0, Math.min(this.push.half * 2, this.push.half + d));
+    const C = this.pathCum, P = this.pathPts;
+    let i = 1; while (i < C.length - 1 && C[i] < s) i++;
+    const k = (s - C[i - 1]) / Math.max(1e-6, C[i] - C[i - 1]);
+    const x = P[i - 1].x + (P[i].x - P[i - 1].x) * k, z = P[i - 1].z + (P[i].z - P[i - 1].z) * k;
+    return { x, y: Math.max(0, this.level.groundAt(x, z, 20)), z };
   }
 
   // ------------------------------------------------------------------ setup
@@ -78,8 +132,9 @@ export class World {
     const i = this.actors.filter(o => o.team === a.team).indexOf(a);
     const ang = i * 1.3;
     a.pos = { x: sx + Math.cos(ang) * 2.5 * (first ? 1 : Math.random() + 0.5), y: 0, z: sz + Math.sin(ang) * 3 };
-    a.pos.y = Math.max(0, this.level.groundAt(a.pos.x, a.pos.z, 30));
-    if (a.pos.y === -Infinity) a.pos.y = 0;
+    // the floor at spawn level (spawn rooms have roofs: sampling from high up would put the team on top of them)
+    const g0 = this.level.groundAt(a.pos.x, a.pos.z, 1);
+    a.pos.y = Math.max(0, g0 > -Infinity ? g0 : this.level.groundAt(a.pos.x, a.pos.z, 30));
     if (a.def.frame === 'drone') a.pos.y += 3;
     a.vel = { x: 0, y: 0, z: 0 };
     a.yaw = a.team === 'zenith' ? Math.PI / 2 : -Math.PI / 2;
@@ -90,6 +145,7 @@ export class World {
     a.shields = []; a.st = {}; a.sv = {}; a.src = {}; a.forced = null;
     a.alive = true; a.respawnAt = 0; a.flight = 100; a.flying = false;
     a.ammo = a.maxAmmo; a.reloadUntil = 0;
+    if (a.def.dualGuns && !isAbility(a.def.secondary)) a.sv.ammo2 = Math.max(1, Math.round((a.def.secondary.ammo ?? 0) * (1 + a.mods.ammo)));
     if (a.barrier.max) a.barrier = { hp: a.barrier.max, max: a.barrier.max, up: false, regenAt: 0, brokenUntil: 0 };
     a.set('spawnprot', this.time, first ? 0 : 2);
     this.emit({ t: 'fx', kind: 'spawn', pos: { ...a.pos }, color: a.def.glow, actor: a });
@@ -120,7 +176,12 @@ export class World {
     return dist3(viewer.pos, b.pos) < 2.5;
   }
 
-  muzzle(a: Actor): V3 {
+  muzzle(a: Actor, slot?: string): V3 {
+    if (a.def.dualGuns) {
+      // twin chainguns held at the hips: LMB = the left gun, RMB = the right; barrels along the aim
+      const side = slot === 'secondary' ? 1 : -1, rx = -Math.cos(a.yaw), rz = Math.sin(a.yaw), d = a.aimDir(), k = a.scale;
+      return { x: a.pos.x + rx * side * 0.52 * k + d.x * 1.15 * k, y: a.pos.y + a.height * 0.48 + d.y * 1.15 * k, z: a.pos.z + rz * side * 0.52 * k + d.z * 1.15 * k };
+    }
     const r = a.def.frame === 'mech' ? 1.1 : 0.32, d = a.def.frame === 'mech' ? 0.7 : 0.25;
     const e = a.eye, rx = -Math.cos(a.yaw), rz = Math.sin(a.yaw), f = a.forward();
     return { x: e.x + rx * r * a.scale + f.x * 0.4, y: e.y - d * a.scale, z: e.z + rz * r * a.scale + f.z * 0.4 };
@@ -197,6 +258,7 @@ export class World {
     if (src?.has('dmgamp', t)) dmg *= 1.3;
     if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
+    if (tgt.has('taiko', t)) { tgt.mitigated += dmg * 0.25; dmg *= 0.75; }
     if (src?.has('ambush', t) && o.kind !== 'dot') { dmg += 50; src.clear('ambush'); }
     // Hex: Stitched Decoy eats one huge hit
     if (tgt.def.id === 'hex' && dmg > 90 && tgt.ready('decoy', t)) {
@@ -212,6 +274,7 @@ export class World {
       if (dmg <= 0) break;
       const take = Math.min(s.amt, dmg * sm);
       s.amt -= take; dmg -= take / sm; dealt += take;
+      (s.src ?? tgt).mitigated += take;
       if (s.amt <= 0 && sm > 1 && s.kind === 'wish' && src?.def.id === 'gorgoth') this.emit({ t: 'counter', actor: src, target: tgt, text: 'Null Lance shatters Wish Barrier' });
     }
     tgt.shields = tgt.shields.filter(s => s.amt > 0.5);
@@ -237,6 +300,14 @@ export class World {
       src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
+      // Gantetsu - Roar of the Crowd: critical hits turn half their damage into temporary health (max 150)
+      if (src.def.id === 'gantetsu' && o.crit) {
+        const s = src.shields.find(x => x.kind === 'roar');
+        const before = s ? s.amt : 0;
+        if (s) { s.amt = Math.min(150, s.amt + dealt * 0.5); s.until = t + 60; } else src.shields.push({ amt: Math.min(150, dealt * 0.5), until: t + 60, kind: 'roar' });
+        src.stats.roar = (src.stats.roar ?? 0) + Math.min(150, before + dealt * 0.5) - before;
+        src.sv.roarAt = t;
+      }
       if (!o.noLifesteal) {
         let ls = (src.has('lifesteal', t) ? (src.sv.lifesteal ?? 0.3) : 0) + src.mods.lifesteal;
         if (src.has('asura', t)) ls += 0.3;
@@ -266,13 +337,14 @@ export class World {
       src.healDone += h; src.ult = Math.min(src.def.ult.charge, src.ult + h * (1 + src.mods.ultgain));
       if (src.def.id === 'kaien' && src.hp < src.def.hp) src.hp = Math.min(src.def.hp, src.hp + h * 0.25);
     }
+    if (src !== tgt) { tgt.sv.healedBy = src.id; tgt.sv.healedAt = this.time; }
     if (!quiet || h > 20) this.emit({ t: 'dmg', src, tgt, amt: h, crit: false, heal: true, pos: tgt.center });
     return h;
   }
 
-  shield(tgt: Actor, amt: number, dur: number, kind: string) {
+  shield(tgt: Actor, amt: number, dur: number, kind: string, src?: Actor) {
     tgt.shields = tgt.shields.filter(s => s.kind !== kind);
-    tgt.shields.push({ amt, until: this.time + dur, kind });
+    tgt.shields.push({ amt, until: this.time + dur, kind, src });
   }
 
   /** a destroyed frame: explode it, pop the pilot out on foot (keeps the mech's ult for later) */
@@ -301,9 +373,13 @@ export class World {
     tgt.forced = null; tgt.flying = false; tgt.barrier.up = false; tgt.beamOn = false; tgt.flameOn = false;
     const killer = src && src !== tgt ? src : (tgt.lastHitBy && this.time - tgt.lastHitAt < 6 ? tgt.lastHitBy : null);
     if (killer) {
-      killer.kills++;
+      killer.kills++; killer.streak++; killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       if (killer.has('judgment', this.time)) killer.cd.flashstep = 0;
+      // the healer keeping the killer alive gets the assist (Overwatch's healing assists)
+      const healer = this.time - (killer.sv.healedAt ?? -99) < 4 ? this.actors.find(x => x.id === killer.sv.healedBy) : undefined;
+      if (healer && healer !== killer) healer.stats.healAssists = (healer.stats.healAssists ?? 0) + 1;
     }
+    tgt.streak = 0;
     const m = this.attackers.get(tgt.id);
     if (m) for (const [id, at] of m) if (this.time - at < 6 && id !== killer?.id) { const as = this.actors.find(x => x.id === id); if (as) as.assists++; }
     this.attackers.delete(tgt.id);
@@ -382,6 +458,7 @@ export class World {
       if (p.heal) { this.heal(p.owner, x, p.dmg); this.fx('healhit', hitPos, { color: p.owner.def.glow }); this.sfx('healhit', hitPos); }
       else if (p.special) { this.projEnd(p, hitPos, x); return false; }
       else {
+        p.owner.hits++; if (head) p.owner.crits++;
         this.damage(p.owner, x, p.dmg * (head ? p.crit : 1), { crit: head, kind: 'proj' });
         this.fx('hit', hitPos, { color: p.owner.def.glow });
         this.sfx(head ? 'crit' : 'hit', hitPos);
@@ -418,6 +495,21 @@ export class World {
 
   barrierHit(team: TeamId, o: V3, d: V3, max: number): { t: number; owner: Actor } | null {
     let best: { t: number; owner: Actor } | null = null;
+    // Grand Dohyo: a sacred rope wall around the ring - enemy fire can't cross it in either direction
+    for (const z of this.zones) {
+      if (z.kind !== 'dohyo' || z.team === team) continue;
+      const ox = o.x - z.x, oz = o.z - z.z, A = d.x * d.x + d.z * d.z;
+      if (A < 1e-8) continue;
+      const B = 2 * (ox * d.x + oz * d.z), C = ox * ox + oz * oz - z.r * z.r, disc = B * B - 4 * A * C;
+      if (disc < 0) continue;
+      const s = Math.sqrt(disc);
+      for (const tt of [(-B - s) / (2 * A), (-B + s) / (2 * A)]) {
+        if (tt < 0 || tt > max || (best && tt > best.t)) continue;
+        const y = o.y + d.y * tt;
+        if (y < z.y - 1 || y > z.y + RING_H) continue;
+        best = { t: tt, owner: z.owner }; break;
+      }
+    }
     for (const a of this.actors) {
       if (!a.alive || !a.barrier.up || a.team === team) continue;
       const f = a.forward(), k = a.scale, c = { x: a.pos.x + f.x * 1.7 * k, y: a.pos.y, z: a.pos.z + f.z * 1.7 * k };
@@ -434,7 +526,9 @@ export class World {
   }
 
   hitBarrier(owner: Actor, dmg: number, src: Actor, at: V3) {
-    owner.barrier.hp -= dmg;
+    // no shield of its own: the shot struck a Grand Dohyo wall (it has no health, it just lasts its 6 seconds)
+    if (!owner.barrier.max) { this.fx('ringhit', at, { color: '#ffe6a8' }); owner.mitigated += dmg; return; }
+    owner.barrier.hp -= dmg; owner.mitigated += Math.max(0, dmg + Math.min(0, owner.barrier.hp));
     owner.barrier.regenAt = this.time + 2;
     this.fx('barrierhit', at, { color: owner.def.glow, actor: owner });
     this.sfx('barrierhit', at);
@@ -458,21 +552,76 @@ export class World {
     if (!this.stadium?.frozen) {
       for (const a of this.actors) if (a.alive && a.controller) a.controller.think(dt);
     } else {
-      for (const a of this.actors) { const i = a.input; i.mx = i.mz = 0; i.fire = i.alt = i.a1 = i.a2 = i.ult = i.jump = i.jumpHeld = i.melee = i.reload = false; }
+      for (const a of this.actors) { const i = a.input; i.mx = i.mz = 0; i.fire = i.alt = i.a1 = i.a2 = i.ult = i.jump = i.jumpHeld = i.melee = i.reload = i.swoop = false; }
     }
     for (const a of this.actors) this.updateActor(a, dt);
     this.separate();
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
     this.zones = this.zones.filter(z => z.until > t);
+    this.updatePacks();
     if (this.director) this.director.update(dt);
     else if (this.stadium) this.stadium.update(dt);
+    else if (this.rules === 'push') this.updatePush(dt);
     else if (this.mode !== 'training') this.updatePoint(dt);
   }
 
-  pressed(a: Actor, k: 'a1' | 'a2' | 'ult' | 'alt' | 'jump' | 'fire' | 'melee') {
+  // ------------------------------------------------------------------ health packs
+  private updatePacks() {
+    const t = this.time;
+    for (const p of this.packs) {
+      if (t < p.readyAt) continue;
+      for (const a of this.actors) {
+        if (!a.alive || a.isRobot || a.isBoss || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 1.1 || Math.abs(a.pos.y - p.y) > 1.3) continue;
+        const dot = a.has('burning', t) || a.has('brand', t) || a.has('bleed', t);
+        if (a.health >= a.maxHp - 0.5 && !dot) continue;
+        // a pack heals through healing reduction and burns away damage over time (as in Overwatch)
+        const P = p.big ? PACK.big : PACK.small;
+        let left = P.hp;
+        const h = Math.min(left, a.def.hp - a.hp); a.hp += h; left -= h;
+        const ar = Math.min(left, a.maxArmor - a.armor); a.armor += ar;
+        for (const s of ['burning', 'brand', 'bleed']) a.clear(s);
+        p.readyAt = t + P.respawn;
+        a.stats.packs = (a.stats.packs ?? 0) + 1;
+        this.emit({ t: 'dmg', src: a, tgt: a, amt: h + ar, crit: false, heal: true, pos: a.center });
+        this.fx('healthpack', { x: p.x, y: p.y + 0.5, z: p.z }, { color: '#7dffb0', r: p.big ? 1.6 : 1 }); this.sfx('healthpack', { x: p.x, y: p.y, z: p.z }, a);
+        break;
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ Mikoshi Rush
+  private updatePush(dt: number) {
+    const t = this.time, M = this.push;
+    if (this.winner) return;
+    if (t < M.unlockAt) { M.pos = this.pathAt(M.d); return; }
+    if (t - dt < M.unlockAt) { this.emit({ t: 'msg', text: 'THE MIKOSHI RISES - PUSH IT HOME' }); this.sfx('announce'); }
+    const on = { zenith: 0, umbra: 0 };
+    for (const a of this.actors) if (a.alive && !a.isRobot && Math.hypot(a.pos.x - M.pos.x, a.pos.z - M.pos.z) < 5 && Math.abs(a.pos.y - M.pos.y) < 4) { on[a.team]++; a.objTime += dt; }
+    M.contested = on.zenith > 0 && on.umbra > 0;
+    M.owner = M.contested ? M.owner : on.zenith ? 'zenith' : on.umbra ? 'umbra' : null;
+    if (!M.contested && M.owner) {
+      const n = on[M.owner], sp = FLOAT_SPEED * (1 + 0.1 * (Math.min(3, n) - 1));
+      M.d += (M.owner === 'zenith' ? 1 : -1) * sp * dt;
+      M.best.zenith = Math.max(M.best.zenith, M.d); M.best.umbra = Math.max(M.best.umbra, -M.d);
+      // checkpoints every sixth of the route: the pushing team is told, the defenders hear the alarm
+      const cp = Math.floor(Math.abs(M.d) / (M.half / 3));
+      if (cp > M.checkpoint && cp < 3) { M.checkpoint = cp; this.emit({ t: 'msg', text: `${M.owner === 'zenith' ? 'ZENITH' : 'UMBRA'} REACHES CHECKPOINT ${cp}`, color: M.owner === 'zenith' ? '#5cc8ff' : '#ff3b5c' }); this.sfx('capture'); }
+    }
+    M.pos = this.pathAt(M.d);
+    if (M.d >= M.half - 0.5) return this.end('zenith');
+    if (-M.d >= M.half - 0.5) return this.end('umbra');
+    // time: the furthest push wins; a push still moving the float (and contested) plays on in overtime
+    if (t > this.timeLimit) {
+      const lead: TeamId = M.best.zenith >= M.best.umbra ? 'zenith' : 'umbra';
+      M.overtime = M.contested || (M.owner !== null && M.owner !== lead);
+      if (!M.overtime || t > this.timeLimit + 30) this.end(M.best.zenith === M.best.umbra ? (M.d >= 0 ? 'zenith' : 'umbra') : lead);
+    }
+  }
+
+  pressed(a: Actor, k: 'a1' | 'a2' | 'ult' | 'alt' | 'jump' | 'fire' | 'melee' | 'swoop' | 'descend') {
     const p = this.prevIn.get(a.id);
-    return a.input[k] && !(p && p[k]);
+    return !!a.input[k] && !(p && p[k]);
   }
 
   private updateActor(a: Actor, dt: number) {
@@ -486,10 +635,16 @@ export class World {
     if (per('brand')) this.damage(a.src.brand ?? null, a, 12 * dt, { kind: 'dot', noLifesteal: true });
     if (per('bleed')) this.damage(a.src.bleed ?? null, a, (a.sv.bleed ?? 33) * dt, { kind: 'dot', noLifesteal: true });
     if (per('hot') && a.src.hot) this.heal(a.src.hot, a, (a.sv.hot ?? 0) * dt, true);
+    if (per('burning')) this.damage(a.src.burning ?? null, a, 16 * dt, { kind: 'dot', noLifesteal: true });
+    if (a.def.id === 'gantetsu') { const s = a.shields.find(x => x.kind === 'roar'); if (s && t - (a.sv.roarAt ?? 0) > 2) s.amt -= 12 * dt; }
     if (per('linked') && a.src.linked) this.heal(a.src.linked, a, 25 * dt, true);
     if (a.def.id === 'enra' && t - a.lastDamagedAt > 3 && a.hp < a.def.hp) a.hp = Math.min(a.def.hp, a.hp + 12 * dt);
     if (a.isRobot && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
-    a.shields = a.shields.filter(s => s.until > t);
+    // the spawn room heals quickly (not the web build's legacy match)
+    if (this.full && this.mode !== 'campaign' && t - a.lastDamagedAt > 1.5 && Math.hypot(a.pos.x - a.spawn[0], a.pos.z - a.spawn[1]) < 7) {
+      a.hp = Math.min(a.def.hp, a.hp + 150 * dt); a.armor = Math.min(a.maxArmor, a.armor + 150 * dt);
+    }
+    a.shields = a.shields.filter(s => s.until > t && s.amt > 0.5);
     if (a.st.asura && !per('asura') && a.scale > 1) { a.scale = 1; a.maxArmor = a.def.armor; a.armor = Math.min(a.armor, a.maxArmor); }
     // Dawn Colossus: grow into the giant over ~1s, hold it for the ult's duration, then shrink back and drop the bonus armor
     if (a.st.titan !== undefined) {
@@ -516,6 +671,7 @@ export class World {
       const silenced = a.has('silence', t);
       if (!silenced) {
         if (a.forced?.kind === 'dawncharge' && this.pressed(a, 'a1') && t - (a.sv.chargeStart ?? 0) > 0.3) a.forced.until = t;
+        else if (a.has('tachiai', t) && this.pressed(a, 'a1') && t - (a.sv.rushStart ?? 0) > 0.3) a.clear('tachiai');
         else if (this.pressed(a, 'a1')) castAbility(this, a, a.def.ability1.id, 'a1');
         if (this.pressed(a, 'a2')) castAbility(this, a, a.def.ability2.id, 'a2');
         if (this.pressed(a, 'ult') && a.ult >= a.def.ult.charge) castAbility(this, a, a.def.ult.id, 'ult');
@@ -524,7 +680,7 @@ export class World {
       }
     } else { a.barrier.up = false; a.beamOn = false; a.flameOn = false; a.charging = false; }
     const i = a.input;
-    this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire, melee: i.melee });
+    this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire, melee: i.melee, swoop: !!i.swoop, descend: i.descend });
   }
 
   /** movement integration only (also used by co-op clients to predict their own hero) */
@@ -534,6 +690,8 @@ export class World {
     const wasGrounded = a.grounded;
     // colossi can't be dragged, pulled or knocked around by heroes
     if (a.isBoss && a.forced && (a.forced.kind === 'pull' || a.forced.kind === 'knock')) a.forced = null;
+    // Tachiai Rush is unstoppable: shoves and pulls slide off it
+    if (a.forced && a.has('tachiai', t) && (a.forced.kind === 'pull' || a.forced.kind === 'knock')) a.forced = null;
     if (a.forced) {
       const f = a.forced;
       if (t >= f.until) { a.forced = null; f.onEnd?.(); a.vel.x *= 0.3; a.vel.z *= 0.3; if (f.ignoreGravity) a.vel.y = Math.min(a.vel.y, 0); }
@@ -555,8 +713,25 @@ export class World {
       const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), rx = -Math.cos(a.yaw), rz = Math.sin(a.yaw);
       let wx = (fx * mz + rx * mx) * spd, wz = (fz * mz + rz * mx) * spd;
       if (rooted) { wx = 0; wz = 0; }
+      // Gantetsu - Tachiai Rush: a straight-ahead charge the aim steers only slowly (the guns stay free to fire where he
+      // looks); SPACE ends it in a leaping Shiko Stomp
+      const rush = a.has('tachiai', t);
+      if (rush) {
+        const cur = a.sv.rushYaw ?? a.yaw;
+        let dy = inp.yaw - cur; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+        const ny = cur + Math.max(-2.2 * dt, Math.min(2.2 * dt, dy));
+        a.sv.rushYaw = ny;
+        wx = Math.sin(ny) * spd * 1.85; wz = Math.cos(ny) * spd * 1.85;
+        if (this.pressed(a, 'jump') && a.grounded) {
+          a.vel.y = 9.5; a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
+          a.clear('tachiai'); a.set('stompair', t, 2.5); a.sv.stompArmed = 1;
+          this.sfx('mechjump', a.pos, a);
+        }
+      }
+      // Mirei - Starwing Swoop: the swoop drives her velocity this step (flight, steering and gravity sit it out)
+      const swooping = this.swoopStep(a, dt);
       // flight
-      const canFly = (d.frame === 'flyer' || d.frame === 'drone' || !!d.jets) && !a.has('grounded', t) && !rooted;
+      const canFly = (d.frame === 'flyer' || d.frame === 'drone' || !!d.jets) && !a.has('grounded', t) && !rooted && !swooping;
       if (d.frame === 'drone') a.flying = true;
       else if (canFly && inp.jumpHeld && a.flight > 5 && (!a.grounded || !this.pressed(a, 'jump'))) a.flying = true;
       if (!canFly || a.flight <= 0) a.flying = false;
@@ -574,10 +749,13 @@ export class World {
         const want = a.sv.hoverY ?? ((a.sv.hoverGround ?? a.pos.y - 3.2) + 3.2);
         a.vel.y += ((want - a.pos.y) * 2 - a.vel.y) * Math.min(1, dt * 3);
       }
-      const k = a.grounded ? 14 : a.flying ? 4 : 2.5;
-      a.vel.x += (wx - a.vel.x) * Math.min(1, dt * k);
-      a.vel.z += (wz - a.vel.z) * Math.min(1, dt * k);
-      if (this.pressed(a, 'jump') && !rooted) {
+      // air control: a slingshot / superjump out of a swoop carries its momentum (steering nudges it, not brakes it)
+      const k = a.grounded ? 14 : a.flying ? 4 : a.has('slingshot', t) || a.has('superjump', t) ? 0.55 : 2.5;
+      if (!swooping) {
+        a.vel.x += (wx - a.vel.x) * Math.min(1, dt * k);
+        a.vel.z += (wz - a.vel.z) * Math.min(1, dt * k);
+      }
+      if (this.pressed(a, 'jump') && !rooted && !rush && !swooping) {
         if (a.grounded || t - a.lastGroundedAt < 0.1) {
           a.vel.y = d.frame === 'mech' ? 8 : 8.6; a.grounded = false; a.anim.jumpAt = t; a.lastGroundedAt = -9;
           a.airJumps = d.id === 'raijin' ? 1 : 0;
@@ -586,9 +764,9 @@ export class World {
           a.airJumps--; a.vel.y = 8.2; a.anim.jumpAt = t; this.sfx('doublejump', a.pos, a); this.fx('doublejump', a.pos, { color: d.glow });
         }
       }
-      if (!a.flying && d.frame !== 'drone') a.vel.y -= G * dt * (a.has('glide', t) && a.vel.y < 0 ? 0.18 : 1);
-      // Mirei's angelic descent: out of flight energy, holding SPACE floats her down slowly instead of dropping
-      if (d.id === 'mirei' && !a.flying && !a.grounded && inp.jumpHeld && a.vel.y < -2.2 && !a.forced) { a.vel.y = -2.2; a.set('angelglide', t, 0.15); }
+      if (!a.flying && d.frame !== 'drone' && !swooping) a.vel.y -= G * dt * (a.has('glide', t) && a.vel.y < 0 ? 0.18 : 1);
+      // Mirei's angelic descent: holding SPACE while falling floats her down slowly instead of dropping
+      if (d.id === 'mirei' && !a.flying && !a.grounded && !swooping && inp.jumpHeld && a.vel.y < -2.2 && !a.forced) { a.vel.y = -2.2; a.set('angelglide', t, 0.15); }
     }
     // integrate with sub-steps so fast dashes don't tunnel
     // a non-finite velocity would make the sub-step count infinite and freeze the whole simulation
@@ -598,10 +776,19 @@ export class World {
     let hitWall = false;
     const y0 = a.pos.y, x0 = a.pos.x, z0 = a.pos.z;
     for (let i = 0; i < n; i++) {
+      const head = a.pos.y + a.colHeight;
       a.pos.x += a.vel.x * dt / n; a.pos.y += a.vel.y * dt / n; a.pos.z += a.vel.z * dt / n;
+      // ceilings: rising into a slab (an upper floor, a roof, a door lintel) stops the climb
+      if (a.vel.y > 0) {
+        const c = L.ceilingAt(a.pos.x, a.pos.z, head);
+        if (a.pos.y + a.colHeight > c) { a.pos.y = c - a.colHeight - 0.01; a.vel.y = 0; }
+      }
       if (L.collide(a.pos, a.colRadius, a.colHeight)) hitWall = true;
     }
     if (hitWall && (a.forced?.kind === 'abysscharge' || a.forced?.kind === 'dawncharge')) { if (a.forced.kind === 'dawncharge') a.sv.chargeWall = 1; a.forced.until = t; }
+    // a swoop that runs into a wall stops dead instead of grinding along it
+    if (hitWall && a.has('swoop', t) && Math.hypot(a.pos.x - x0, a.pos.z - z0) < Math.hypot(a.vel.x, a.vel.z) * dt * 0.25) { a.clear('swoop'); a.cd.swoop = t + 1.6; a.vel.x *= 0.2; a.vel.z *= 0.2; }
+    this.ringClamp(a);
     const [X, Z] = L.size;
     a.pos.x = Math.max(-X - 1, Math.min(X + 1, a.pos.x)); a.pos.z = Math.max(-Z - 1, Math.min(Z + 1, a.pos.z));
     // AI walkers never step off a ledge into the void on their own (knockbacks / pulls still can)
@@ -643,6 +830,78 @@ export class World {
     }
   }
 
+  /**
+   * Mirei's Starwing Swoop (a guardian-angel dash): F streaks her toward the ally under the crosshair within 30m, speeding
+   * up as she goes; SPACE mid-swoop slingshots her onward with the swoop's momentum, CTRL launches her straight up.
+   * Weapons and the heal beam keep working throughout. Returns true while the swoop owns her velocity this step.
+   */
+  private swoopStep(a: Actor, dt: number): boolean {
+    const t = this.time;
+    if (a.def.id !== 'mirei' || !this.full) return false;
+    const blocked = a.has('grounded', t) || a.has('root', t) || a.has('stun', t) || a.has('silence', t) || !!a.forced;
+    if (!a.has('swoop', t)) {
+      if (!this.pressed(a, 'swoop') || blocked || !a.ready('swoop', t)) return false;
+      const tg = this.coneTarget(a, 30, 14, x => x.team === a.team && x !== a && !x.isRobot);
+      if (!tg) { this.sfx('denied', a.pos, a); return false; }
+      a.sv.swoopT = tg.id; a.sv.swoopStart = t; a.sv.swoopD0 = dist3(tg.center, a.center);
+      a.set('swoop', t, 2.4); a.flying = false; a.grounded = false; a.lastGroundedAt = -9;
+      a.stats.swoops = (a.stats.swoops ?? 0) + 1;
+      this.sfx('swoop', a.center, a); this.fx('swoop', a.center, { actor: a, target: tg, color: a.def.glow });
+    }
+    const tg = this.actors.find(x => x.id === a.sv.swoopT);
+    const end = (keep: number) => { a.clear('swoop'); a.cd.swoop = t + 1.6; a.sv.swoopEndAt = t; a.vel.x *= keep; a.vel.y *= keep; a.vel.z *= keep; };
+    if (!tg || !tg.alive || blocked) { end(0.5); return false; }
+    const v = { x: tg.pos.x - a.pos.x, y: tg.pos.y + tg.height * 0.35 - a.pos.y - a.height * 0.35, z: tg.pos.z - a.pos.z };
+    const dist = Math.hypot(v.x, v.y, v.z) || 1e-3, dir = { x: v.x / dist, y: v.y / dist, z: v.z / dist };
+    const age = t - (a.sv.swoopStart ?? t), sp = Math.min(21, 13 + age * 16);
+    const prog = Math.min(1, age / Math.max(0.35, (a.sv.swoopD0 ?? 12) / 17));
+    a.sv.swoopProg = prog;
+    if (this.pressed(a, 'jump')) {
+      // slingshot: fling onward with the swoop's momentum (more the further into the swoop)
+      const k = 0.55 + 0.45 * prog;
+      a.vel = { x: dir.x * sp * k, y: Math.max(0, dir.y * sp * k) + 7 * k, z: dir.z * sp * k };
+      end(1); a.set('slingshot', t, 1.2); a.anim.jumpAt = t;
+      this.sfx('sunhop', a.pos, a); this.fx('swoopburst', a.center, { actor: a, color: a.def.glow });
+      return true;
+    }
+    if (this.pressed(a, 'descend')) {
+      // superjump: straight up, then Angelic descent takes over while SPACE is held
+      const k = 0.55 + 0.45 * prog;
+      a.vel = { x: a.vel.x * 0.2, y: 10 + 7 * k, z: a.vel.z * 0.2 };
+      end(1); a.set('superjump', t, 1.4); a.anim.jumpAt = t;
+      this.sfx('sunhop', a.pos, a); this.fx('swoopburst', a.center, { actor: a, color: a.def.glow });
+      return true;
+    }
+    if (dist < 1.2 + tg.radius + a.radius) {
+      // arrival: flare the wings and bleed off most of the speed beside the ally
+      a.vel = { x: dir.x * sp * 0.28, y: Math.max(dir.y * sp * 0.2, 0) + 1.2, z: dir.z * sp * 0.28 };
+      end(1); a.set('swoopflare', t, 0.4);
+      return true;
+    }
+    a.vel = { x: dir.x * sp, y: dir.y * sp, z: dir.z * sp };
+    // skim just above the floor rather than sliding along it
+    if (a.vel.y < 0.4 && a.pos.y - this.level.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.5) < 0.5) a.vel.y = 0.4;
+    a.grounded = false;
+    void dt;
+    return true;
+  }
+
+  /** Grand Dohyo: enemies caught in the ring can't step out; the rest can't step in (allies pass freely) */
+  private ringClamp(a: Actor) {
+    for (const z of this.zones) {
+      if (z.kind !== 'dohyo' || a.team === z.team || !a.alive) continue;
+      if (a.pos.y < z.y - 2 || a.pos.y > z.y + RING_H) continue;
+      const dx = a.pos.x - z.x, dz = a.pos.z - z.z, d = Math.hypot(dx, dz) || 1e-3;
+      const inside = (z.data?.trapped as number[] | undefined)?.includes(a.id);
+      const lim = inside ? z.r - a.radius : z.r + a.radius;
+      if (inside ? d <= lim : d >= lim) continue;
+      a.pos.x = z.x + dx / d * lim; a.pos.z = z.z + dz / d * lim;
+      const out = (a.vel.x * dx + a.vel.z * dz) / d;          // velocity across the wall
+      if (inside ? out > 0 : out < 0) { a.vel.x -= dx / d * out; a.vel.z -= dz / d * out; }
+      this.level.collide(a.pos, a.colRadius, a.colHeight);
+    }
+  }
+
   private separate() {
     const list = this.actors.filter(a => a.alive && !a.has('phased', this.time));
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
@@ -663,6 +922,7 @@ export class World {
   private updatePoint(dt: number) {
     const P = this.point, t = this.time;
     if (this.winner) return;
+    if (this.rules === 'control') return this.updateControl(dt);
     if (t < P.unlockAt) return;
     if (t - dt < P.unlockAt) { this.emit({ t: 'msg', text: 'THE POINT IS OPEN' }); this.sfx('announce'); }
     const [px, py, pz] = this.map.point;
@@ -684,6 +944,56 @@ export class World {
       if (P.progress[P.owner] >= 100 && !(on[P.owner === 'zenith' ? 'umbra' : 'zenith'] > 0)) this.end(P.owner);
     }
     if (t > this.timeLimit) this.end(P.progress.zenith >= P.progress.umbra ? 'zenith' : 'umbra');
+  }
+
+  /** Overwatch Control: the point unlocks, a team takes it (up to three players speed the capture), the holder climbs
+   *  to 100% while the point is theirs and uncontested; at 99% an enemy on the point forces overtime. First to
+   *  ROUNDS_TO_WIN rounds; between rounds everyone is reset to spawn and the point goes neutral. */
+  private updateControl(dt: number) {
+    const P = this.point, C = this.control, t = this.time;
+    if (C.phase === 'intermission') {
+      if (t >= C.phaseEnd) {
+        C.round++; C.phase = 'fight'; C.overtime = false;
+        P.owner = null; P.capture = 0; P.capTeam = null; P.progress = { zenith: 0, umbra: 0 }; P.contested = false;
+        P.unlockAt = t + 10;
+        this.emit({ t: 'msg', text: `ROUND ${C.round}` }); this.sfx('announce');
+      }
+      return;
+    }
+    if (t < P.unlockAt) return;
+    if (t - dt < P.unlockAt) { this.emit({ t: 'msg', text: 'THE POINT IS OPEN' }); this.sfx('announce'); }
+    const [px, py, pz] = this.map.point;
+    const on = { zenith: 0, umbra: 0 };
+    for (const a of this.actors) if (a.alive && !a.isRobot && Math.hypot(a.pos.x - px, a.pos.z - pz) < P.r && a.pos.y > py - 1 && a.pos.y < py + 5) { on[a.team]++; a.objTime += dt; }
+    P.contested = on.zenith > 0 && on.umbra > 0;
+    const solo: TeamId | null = P.contested ? null : on.zenith ? 'zenith' : on.umbra ? 'umbra' : null;
+    if (solo && solo !== P.owner) {
+      if (P.capTeam !== solo) { P.capture = Math.max(0, P.capture - dt * 25); if (P.capture === 0) P.capTeam = solo; }
+      else P.capture = Math.min(100, P.capture + dt * 11 * (1 + 0.5 * (Math.min(3, on[solo]) - 1)));
+      if (P.capture >= 100) {
+        P.owner = solo; P.capture = 0; P.capTeam = null;
+        this.emit({ t: 'msg', text: `${solo === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} TOOK THE POINT`, color: solo === 'zenith' ? '#5cc8ff' : '#ff3b5c' });
+        this.sfx('capture');
+      }
+    } else if (!solo && !P.contested) P.capture = Math.max(0, P.capture - dt * 8);
+    if (P.owner) {
+      const foe: TeamId = P.owner === 'zenith' ? 'umbra' : 'zenith';
+      if (!P.contested) P.progress[P.owner] = Math.min(100, P.progress[P.owner] + dt * HOLD_RATE);
+      // overtime: the round can't be won while an enemy stands on the point
+      C.overtime = P.progress[P.owner] >= 99 && on[foe] > 0;
+      if (C.overtime) P.progress[P.owner] = Math.min(P.progress[P.owner], 99);
+      if (P.progress[P.owner] >= 100) {
+        const w = P.owner;
+        C.wins[w]++;
+        this.emit({ t: 'msg', text: `${w === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} WINS ROUND ${C.round}`, color: w === 'zenith' ? '#5cc8ff' : '#ff3b5c' });
+        this.sfx('capture');
+        if (C.wins[w] >= ROUNDS_TO_WIN) return this.end(w);
+        C.phase = 'intermission'; C.phaseEnd = t + 7;
+        // everyone back to spawn for the next round (ult charge is kept)
+        this.after(3, () => { for (const a of this.actors) if (!a.isRobot) { const u = a.ult; this.respawn(a, true); a.ult = u; } });
+      }
+    }
+    if (t > this.timeLimit) this.end(C.wins.zenith !== C.wins.umbra ? (C.wins.zenith > C.wins.umbra ? 'zenith' : 'umbra') : P.progress.zenith >= P.progress.umbra ? 'zenith' : 'umbra');
   }
 
   end(w: TeamId) {

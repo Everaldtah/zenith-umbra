@@ -10,7 +10,7 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p 
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--window-size=1280,720'], defaultViewport: { width: 1280, height: 720 } });
 const p = await b.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/favicon|404/.test(m.text())) errs.push(m.text().slice(0, 200)); });
-await p.goto(`http://localhost:5199/play.html${query}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+await p.goto(`http://localhost:${process.env.ZU_PORT ?? 5199}/play.html${query}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await p.waitForFunction(() => !!window.__zu?.game, { timeout: 60000 });
 fs.mkdirSync('tests/e2e/shots/fp', { recursive: true });
 const tmp = 'tests/e2e/shots/strip';

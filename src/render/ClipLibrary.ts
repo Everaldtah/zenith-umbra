@@ -15,6 +15,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RT, RT_INDEX, type RtBone } from './Rig';
 import { bakeClips, analyse, type PoseClip } from './Retarget';
+import { FULL } from '../edition';
 
 export type Slot = 'idle' | 'jump_start' | 'jump_loop' | 'land' | 'death' | 'hit' | 'punch' | 'melee' | 'roll' | 'dash'
   | 'slide' | 'vault' | 'flip' | 'cast' | 'throw' | 'stun' | 'shoot' | 'block' | 'reload';
@@ -312,7 +313,8 @@ export function animLibrary(): Promise<ClipLibrary | null> {
   // ?anim=procedural turns the library off; ?animdir=/some/dir/ loads another library (tests, pack previews)
   const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
   const dir = q?.get('animdir') ?? `${BASE}anim/`;
-  libP = q?.get('anim') === 'procedural' ? Promise.resolve(null) : loadLibrary(dir.endsWith('/') ? dir : dir + '/');
+  // the web edition stays light: procedural animation, no clip-library download (~9 MB)
+  libP = q?.get('anim') === 'procedural' || !FULL ? Promise.resolve(null) : loadLibrary(dir.endsWith('/') ? dir : dir + '/');
   return libP;
 }
 /** the library once loaded (null while loading, missing or disabled) */

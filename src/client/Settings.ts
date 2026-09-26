@@ -11,7 +11,8 @@ export const PRESETS: Record<Preset, Quality & { antialias: boolean; fxCap: numb
 
 export interface Settings { preset: Preset; sens: number; volume: number; fov: number; view: 'third' | 'first'; difficulty: number; showFps: boolean; }
 
-export const IS_DESKTOP = new URLSearchParams(location.search).get('platform') === 'desktop' || navigator.userAgent.includes('Electron');
+import { IS_DESKTOP } from '../edition';
+export { IS_DESKTOP };
 
 function detect(): Preset {
   if (IS_DESKTOP) return 'ultra';

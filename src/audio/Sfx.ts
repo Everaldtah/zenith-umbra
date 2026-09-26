@@ -32,6 +32,11 @@ const R: Record<string, Layer[]> = {
   // rocket hammer: a rising thruster roar through the wind-up, a heavy whoosh as the head comes round
   hammer: [{ n: true, d: 0.3, v: 0.22, bp: 500, q: 0.7 }, { w: 'sawtooth', f: 70, f1: 150, d: 0.28, v: 0.08, lp: 600 }, { n: true, d: 0.22, v: 0.3, bp: 1400, q: 1.2, dl: 0.18 }],
   blaster: [{ w: 'square', f: 900, f1: 300, d: 0.12, v: 0.15 }],
+  // Gantetsu's rotary chainguns: a clattering burst per three rounds - Hinoko (left) low and throaty, Hanabi (right) brighter
+  chaingun: [{ n: true, d: 0.07, v: 0.26, bp: 1700, q: 1.2 }, { w: 'square', f: 140, f1: 90, d: 0.06, v: 0.16, lp: 1500 }, { n: true, d: 0.05, v: 0.16, hp: 3000, dl: 0.035 }],
+  chaingun2: [{ n: true, d: 0.07, v: 0.26, bp: 2600, q: 1.4 }, { w: 'square', f: 190, f1: 120, d: 0.06, v: 0.14, lp: 2200 }, { n: true, d: 0.05, v: 0.16, hp: 4000, dl: 0.035 }],
+  spinup: [{ w: 'sawtooth', f: 60, f1: 260, d: 0.35, v: 0.1, lp: 900 }, { n: true, d: 0.3, v: 0.08, bp: 1200, q: 3 }],
+  ignite: [{ n: true, d: 0.4, v: 0.28, lp: 600, lp1: 2400 }, { w: 'sine', f: 180, f1: 90, d: 0.3, v: 0.1 }],
   // ---------------- impacts & feedback
   hit: [{ w: 'triangle', f: 700, f1: 500, d: 0.05, v: 0.12 }],
   crit: [{ w: 'triangle', f: 1400, f1: 1100, d: 0.09, v: 0.2 }, { w: 'sine', f: 2100, d: 0.07, v: 0.1, dl: 0.02 }],
@@ -57,6 +62,7 @@ const R: Record<string, Layer[]> = {
   barrierhit: [{ w: 'triangle', f: 320, f1: 260, d: 0.08, v: 0.12 }],
   barrierbreak: [{ n: true, d: 0.6, v: 0.5, hp: 1500 }, { w: 'triangle', f: 900, f1: 100, d: 0.5, v: 0.25 }],
   healhit: [{ w: 'sine', f: 1046, f1: 1318, d: 0.18, v: 0.12 }],
+  healthpack: [{ w: 'sine', f: 523, f1: 1046, d: 0.25, v: 0.22 }, { w: 'sine', f: 784, f1: 1568, d: 0.3, v: 0.14, dl: 0.06 }, { n: true, d: 0.15, v: 0.08, hp: 4000 }],
   interrupt: [{ w: 'square', f: 300, f1: 150, d: 0.2, v: 0.2 }, { n: true, d: 0.15, v: 0.2, bp: 2000, q: 2 }],
   denied: [{ w: 'square', f: 200, d: 0.08, v: 0.15 }, { w: 'square', f: 150, d: 0.1, v: 0.15, dl: 0.1 }],
   zonebreak: [{ n: true, d: 0.4, v: 0.35, hp: 2500 }, { w: 'triangle', f: 1600, f1: 200, d: 0.35, v: 0.18 }],
@@ -101,6 +107,12 @@ const R: Record<string, Layer[]> = {
   chainthrow: [{ n: true, d: 0.4, v: 0.25, bp: 3000, q: 6 }, { w: 'square', f: 900, f1: 600, d: 0.3, v: 0.05 }],
   chainhit: [{ w: 'square', f: 600, f1: 200, d: 0.2, v: 0.2 }, { n: true, d: 0.2, v: 0.25, bp: 3000, q: 3 }],
   brand: [{ n: true, d: 0.5, v: 0.4, lp: 500, lp1: 2500 }, { w: 'sawtooth', f: 80, f1: 50, d: 0.4, v: 0.2, lp: 500 }],
+  // festival drums: the Taiko Heartbeat opening double-strike, its pulse, and the Grand Dohyo's ceremonial clap + drum roll
+  taiko: [{ w: 'sine', f: 110, f1: 45, d: 0.5, v: 0.6 }, { n: true, d: 0.12, v: 0.35, lp: 800 }, { w: 'sine', f: 92, f1: 40, d: 0.5, v: 0.5, dl: 0.18 }, { n: true, d: 0.12, v: 0.3, lp: 800, dl: 0.18 }],
+  taikobeat: [{ w: 'sine', f: 95, f1: 42, d: 0.35, v: 0.3 }, { n: true, d: 0.08, v: 0.15, lp: 700 }],
+  dohyo: [{ n: true, d: 0.08, v: 0.4, bp: 2500, q: 2 }, { n: true, d: 0.08, v: 0.4, bp: 2500, q: 2, dl: 0.22 }, { w: 'sine', f: 73, d: 1.6, v: 0.35, a: 0.05, dl: 0.4 }, { w: 'triangle', f: 146, d: 1.4, v: 0.1, dl: 0.4 }],
+  // Mirei's Starwing Swoop: an airy rush with a rising chime
+  swoop: [{ n: true, d: 0.45, v: 0.26, bp: 1600, q: 0.8 }, { w: 'sine', f: 988, f1: 1976, d: 0.35, v: 0.12 }, { w: 'sine', f: 1480, f1: 2960, d: 0.3, v: 0.06, dl: 0.06 }],
   roar: [{ w: 'sawtooth', f: 110, f1: 70, d: 1.2, v: 0.35, lp: 900 }, { n: true, d: 1.2, v: 0.3, lp: 700 }],
   // ---------------- UI / announcer stingers
   announce: [{ w: 'triangle', f: 523, d: 0.2, v: 0.2 }, { w: 'triangle', f: 784, d: 0.35, v: 0.2, dl: 0.18 }],

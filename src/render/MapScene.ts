@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Box, MapDef, Mat } from '../data/maps';
 import { Level } from '../engine/Physics';
-import { propModel, texture } from './Assets';
+import { propModel, texture, hasTexture } from './Assets';
 
 export interface Quality { shadows: number; pixelRatio: number; particles: number; bloom: boolean; tex: 'hi' | 'lo'; }
 
@@ -80,6 +80,10 @@ export class MapScene {
   particles: THREE.Points | null = null;
   clouds: THREE.Mesh | null = null;
   pads: THREE.Object3D[] = [];
+  /** health pack stations (glowing cross while ready, a dim base with a refill ring while respawning) */
+  packs: { g: THREE.Group; cross: THREE.Object3D; ring: THREE.Mesh; big: boolean }[] = [];
+  /** Mikoshi Rush: the festival float and its route */
+  float: THREE.Group | null = null;
   private pUniforms = { t: { value: 0 } };
   private cloudU = { t: { value: 0 } };
 
@@ -105,8 +109,16 @@ export class MapScene {
     tint.position.set(m.point[0], m.point[1] + 5, m.point[2]);
     this.group.add(tint);
     // ---------------- materials
-    const tex = (k: 'ground' | 'wall') => texture(`env/tex_${m.id}_${k}.webp`);
+    const tex = (k: 'ground' | 'wall' | 'roof') => texture(`env/tex_${m.id}_${k}.webp`);
+    const roofTex = hasTexture(`env/tex_${m.id}_roof.webp`) ? tex('roof') : null;
     const mats: Record<Mat, THREE.Material> = {
+      // tiled roofs in the map's own tile texture, or a painted tint of the walls
+      roof: new THREE.MeshStandardMaterial({ map: roofTex ?? tex('wall'), color: new THREE.Color(roofTex ? '#ffffff' : '#7d6a5a'), roughness: 0.55, metalness: 0.1 }),
+      // lit windows: warm light behind paper / glass (read as lived-in at a glance)
+      // (by day the panes are glass catching the sky with a faint glow behind - a lit pane in full sun blooms white)
+      window: m.sun.intensity < 2 ? new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffe2a8'), emissive: new THREE.Color('#ffc46b'), emissiveIntensity: 1.1, roughness: 0.3 })
+        : new THREE.MeshStandardMaterial({ color: new THREE.Color('#7d97ad'), emissive: new THREE.Color('#ffd49a'), emissiveIntensity: 0.12, roughness: 0.15, metalness: 0.35 }),
+      wood: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color('#a8744a'), roughness: 0.8 }),
       ground: new THREE.MeshStandardMaterial({ map: tex('ground'), color: new THREE.Color(m.id === 'hangar' ? '#6e6a62' : '#b8b8b8'), roughness: 0.85, metalness: 0.05 }),
       wall: new THREE.MeshStandardMaterial({ map: tex('wall'), roughness: 0.75, metalness: 0.1 }),
       trim: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color('#d8d2c8'), roughness: 0.6, metalness: 0.25 }),
@@ -115,7 +127,7 @@ export class MapScene {
     };
     const buckets: Record<string, THREE.BufferGeometry[]> = {};
     const add = (mat: Mat, g: THREE.BufferGeometry) => (buckets[mat] ??= []).push(g.index ? g.toNonIndexed() : g);
-    const voidMap = map.floors.length > 1;
+    const voidMap = map.floors.length > 1 && map.water === undefined;
     for (const f of map.floors) {
       add(f.mat ?? 'ground', boxGeo({ ...f, h: 0.01 }, voidMap ? 0.01 : 0.5));
       if (voidMap) {
@@ -129,6 +141,8 @@ export class MapScene {
       }
     }
     for (const b of map.boxes) add(b.mat ?? 'wall', b.ramp ? wedgeGeo(b) : boxGeo(b));
+    // render-only detail: frames, bands, awnings, eaves, lit panes
+    for (const b of map.decor ?? []) add(b.mat ?? 'trim', b.ramp ? wedgeGeo(b) : boxGeo(b));
     for (const [k, list] of Object.entries(buckets)) {
       for (const g of list) { if (!g.attributes.normal) g.computeVertexNormals(); for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n); }
       const merged = mergeGeometries(list, false);
@@ -168,8 +182,32 @@ export class MapScene {
       this.clouds.position.y = -22;
       this.group.add(this.clouds);
     }
+    // ---------------- harbour water: a painted, gently rolling surface with foam where it meets the land
+    if (m.water !== undefined) {
+      const wg = new THREE.PlaneGeometry(700, 700, 1, 1); wg.rotateX(-Math.PI / 2);
+      const wm = new THREE.ShaderMaterial({
+        transparent: false, fog: true,
+        uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { t: this.cloudU.t, deep: { value: new THREE.Color('#1d3f73') }, shallow: { value: new THREE.Color('#3f86b8') }, glow: { value: new THREE.Color(m.tint) } }]),
+        vertexShader: `#include <fog_pars_vertex>
+          varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz; vec4 mvPosition=viewMatrix*w; gl_Position=projectionMatrix*mvPosition;
+          #include <fog_vertex>
+          }`,
+        fragmentShader: `#include <fog_pars_fragment>
+          uniform float t; uniform vec3 deep; uniform vec3 shallow; uniform vec3 glow; varying vec3 vW;
+          float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+          float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
+          void main(){ vec2 p=vW.xz*0.12; float w=n(p+vec2(t*0.25,t*0.12))*0.6+n(p*2.3-vec2(t*0.3,0.0))*0.4;
+            float streak=smoothstep(0.72,0.8,w); vec3 c=mix(deep,shallow,w*0.8)+glow*0.12*sin(vW.x*0.05+t)*0.5+vec3(0.9,0.95,1.0)*streak*0.35;
+            gl_FragColor=vec4(c,1.0);
+            #include <fog_fragment>
+          }`,
+      });
+      wm.uniforms.t = this.cloudU.t;          // merge() clones: re-link the shared clock
+      const water = new THREE.Mesh(wg, wm); water.position.y = m.water; water.receiveShadow = false;
+      this.group.add(water);
+    }
     // ---------------- capture point
-    if (m.id !== 'training') {
+    if (m.id !== 'training' && m.objective !== 'push') {
       const [px, py, pz] = m.point;
       this.pointRing = new THREE.Mesh(new THREE.TorusGeometry(6, 0.12, 8, 64), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9 }));
       this.pointRing.rotation.x = Math.PI / 2; this.pointRing.position.set(px, py + 0.06, pz);
@@ -205,6 +243,53 @@ export class MapScene {
       g.add(ring, disc, arrow);
       g.position.set(p.x, y + 0.05, p.z);
       this.pads.push(g); this.group.add(g);
+    }
+    // ---------------- health packs: a teal pedestal with a floating plus (large ones bigger, with a halo)
+    for (const p of m.packs ?? []) {
+      const y = p.y ?? Math.max(0, level.groundAt(p.x, p.z, 0.3));
+      const k = p.big ? 1.35 : 1;
+      const g = new THREE.Group(); g.position.set(p.x, y, p.z);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62 * k, 0.72 * k, 0.22, 20), new THREE.MeshStandardMaterial({ color: '#e9f3f2', roughness: 0.4, metalness: 0.2 }));
+      base.position.y = 0.11; base.castShadow = true;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.62 * k, 0.05, 6, 28), new THREE.MeshBasicMaterial({ color: '#2fe3b0' }));
+      rim.rotation.x = Math.PI / 2; rim.position.y = 0.23;
+      const cross = new THREE.Group();
+      const cm = new THREE.MeshStandardMaterial({ color: '#b8ffd9', emissive: new THREE.Color('#29f0a0'), emissiveIntensity: 1.6, roughness: 0.3 });
+      cross.add(new THREE.Mesh(new THREE.BoxGeometry(0.62 * k, 0.2 * k, 0.2 * k), cm), new THREE.Mesh(new THREE.BoxGeometry(0.2 * k, 0.62 * k, 0.2 * k), cm));
+      cross.position.y = 0.95;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.66 * k, 0.78 * k, 32, 1, 0, Math.PI * 2), new THREE.MeshBasicMaterial({ color: '#2fe3b0', transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.25;
+      g.add(base, rim, cross, ring);
+      if (p.big) { const halo = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), new THREE.MeshBasicMaterial({ color: '#29f0a0', transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false })); halo.position.y = 0.95; cross.add(halo); }
+      this.group.add(g);
+      this.packs.push({ g, cross, ring, big: !!p.big });
+    }
+    // ---------------- Mikoshi Rush: the float (a generated model when available) and its lit route
+    if (m.objective === 'push' && m.path) {
+      const pts = m.path.map(([x, z]) => new THREE.Vector3(x, Math.max(0, level.groundAt(x, z, 20)) + 0.06, z));
+      const route = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0), pts.length * 12, 0.14, 6, false), new THREE.MeshBasicMaterial({ color: m.tint, transparent: true, opacity: 0.55 }));
+      this.group.add(route);
+      const f = new THREE.Group();
+      const gold = new THREE.MeshStandardMaterial({ color: '#e8b64a', metalness: 0.75, roughness: 0.3 });
+      const red = new THREE.MeshStandardMaterial({ color: '#b3122e', roughness: 0.45 });
+      const sled = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 2.2), new THREE.MeshStandardMaterial({ color: '#f4f6fb', roughness: 0.35, metalness: 0.3 }));
+      sled.position.y = 0.55;
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.08, 2.0), new THREE.MeshBasicMaterial({ color: '#5ff4ff' })); glow.position.y = 0.28;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.3, 1.5), red); body.position.y = 1.5;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(1.55, 0.9, 4), gold); roof.position.y = 2.6; roof.rotation.y = Math.PI / 4;
+      const bird = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), gold); bird.position.y = 3.2;
+      f.add(sled, glow, body, roof, bird);
+      for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8), gold); post.position.set(sx * 0.95, 1.5, sz * 0.8); f.add(post); }
+      f.traverse(o => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+      const light = new THREE.PointLight('#ffd27a', 14, 12, 1.6); light.position.y = 2.2; f.add(light);
+      this.float = f; this.group.add(f);
+      propModel('prop_kagura_mikoshi').then(mm => {
+        if (!mm || !this.float) return;
+        const box = new THREE.Box3().setFromObject(mm), h = box.max.y - box.min.y || 1, s = 3.4 / h;
+        mm.scale.setScalar(s); mm.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
+        for (const c of [...this.float.children]) if (c !== light) this.float.remove(c);
+        this.float.add(mm);
+      });
     }
     // ---------------- props (GLB when available, stand-in otherwise)
     for (const p of m.props) this.placeProp(p.id, p.x, p.z, p.y, p.rot ?? 0, p.s ?? 2, p.solid ?? 0.5);
@@ -266,11 +351,28 @@ export class MapScene {
     this.group.add(this.particles);
   }
 
-  update(time: number, point: { owner: string | null; capture: number; capTeam: string | null; contested: boolean }, viewerTeam: string) {
+  update(time: number, point: { owner: string | null; capture: number; capTeam: string | null; contested: boolean }, viewerTeam: string,
+    packs?: { readyAt: number }[], push?: { pos: { x: number; y: number; z: number }; owner: string | null; contested: boolean; d: number } | null) {
     this.pUniforms.t.value = time;
     this.cloudU.t.value = time;
+    // health packs: bob and spin while ready; dim, with a ring filling back up, while they respawn
+    this.packs.forEach((p, i) => {
+      const left = packs?.[i] ? packs[i].readyAt - time : 0, total = p.big ? 15 : 10;
+      p.cross.visible = left <= 0;
+      p.cross.position.y = 0.95 + Math.sin(time * 2.4 + i) * 0.08; p.cross.rotation.y = time * 1.4;
+      const ready = left <= 0;
+      p.ring.visible = true;
+      (p.ring.material as THREE.MeshBasicMaterial).opacity = ready ? 0.8 : 0.35;
+      p.ring.scale.setScalar(ready ? 1 : Math.max(0.05, 1 - left / total));
+    });
+    if (this.float && push) {
+      const f = this.float, prev = f.position.clone();
+      f.position.set(push.pos.x, push.pos.y + 0.35 + Math.sin(time * 1.8) * 0.08, push.pos.z);
+      const dx = f.position.x - prev.x, dz = f.position.z - prev.z;
+      if (dx * dx + dz * dz > 1e-5) f.rotation.y = Math.atan2(dx, dz);
+    }
     for (const p of this.pads) { const a = p.getObjectByName('arrow')!; a.position.y = 1.1 + Math.sin(time * 4) * 0.25; p.rotation.y = time * 0.5; }
-    if (this.map.id === 'training') return;
+    if (this.map.id === 'training' || this.map.objective === 'push') return;   // (push maps carry the float, not a point)
     const col = point.contested ? '#ffcc33' : point.owner === null ? '#ffffff' : point.owner === viewerTeam ? '#5cc8ff' : '#ff3b5c';
     (this.pointRing.material as THREE.MeshBasicMaterial).color.set(col);
     const du = (this.pointDisc.material as THREE.ShaderMaterial).uniforms;

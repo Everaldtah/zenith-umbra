@@ -7,12 +7,13 @@ export interface Input {
   jump: boolean; jumpHeld: boolean; descend: boolean;
   fire: boolean; alt: boolean; a1: boolean; a2: boolean; ult: boolean; reload: boolean;
   melee: boolean;                  // quick melee (C)
+  swoop?: boolean;                 // Mirei: Starwing Swoop to the ally under the crosshair (F)
   yaw: number; pitch: number;
 }
-export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, melee: false, yaw: 0, pitch: 0 });
+export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, melee: false, swoop: false, yaw: 0, pitch: 0 });
 
 export interface Forced { vx: number; vy: number; vz: number; until: number; kind: string; ignoreGravity?: boolean; onEnd?: () => void; }
-export interface Shield { amt: number; until: number; kind: string; }
+export interface Shield { amt: number; until: number; kind: string; src?: Actor; }
 
 let NEXT = 1;
 
@@ -42,8 +43,11 @@ export class Actor {
   mods: Mods = noMods();
   // stats
   kills = 0; deaths = 0; dmgDone = 0; healDone = 0; assists = 0;
+  // the Tab screen (Overwatch 2 style): weapon accuracy, crits, mitigation, objective time, streaks, ults, hero stats
+  shots = 0; hits = 0; crits = 0; mitigated = 0; objTime = 0; ults = 0; streak = 0; bestStreak = 0;
+  stats: Record<string, number> = {};
   // animation cues read by the renderer
-  anim = { attackAt: -9, attackKind: 'primary' as string, attackSide: 1, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0 };
+  anim = { attackAt: -9, attackKind: 'primary' as string, attackSide: 1, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0, fireL: -9, fireR: -9 };
   isPlayer = false;
   isRobot = false;
   noRespawn = false;

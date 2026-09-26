@@ -22,6 +22,7 @@ export class Bot {
   strafe = 1; strafeUntil = 0;
   stuck = { x: 0, z: 0, t: 0 }; stuckCount = 0;
   holdAlt = 0; holdFire = 0; flyUntil = 0;
+  swoopExit: '' | 'fwd' | 'up' = '';      // Mirei: how to leave the current swoop (slingshot / superjump / ride it in)
   aimAt: V3 | null = null;
   snap = false;
   goal: V3 = { x: 0, y: 0, z: 0 };
@@ -36,13 +37,19 @@ export class Bot {
 
   think(dt: number) {
     const w = this.w, a = this.a, t = w.time, i = a.input;
-    i.a1 = i.a2 = i.ult = i.jump = i.reload = false;
+    i.a1 = i.a2 = i.ult = i.jump = i.reload = i.swoop = false;
     if (a.isRobot) return this.robot(dt);
     if (t >= this.thinkAt) { this.thinkAt = t + 0.12 + Math.random() * 0.05; this.decide(); }
     if (t >= this.abilityAt) { this.abilityAt = t + this.react + Math.random() * 0.2; this.abilities(); }
     this.moveAlong(dt);
     this.aim(dt);
     this.shoot();
+    // Mirei mid-swoop: slingshot onward or superjump out, the way a guardian-angel player chains her mobility
+    if (a.has('swoop', t)) {
+      const prog = a.sv.swoopProg ?? 0;
+      if (this.swoopExit === 'up' && prog > 0.7) i.descend = true;
+      else if (this.swoopExit === 'fwd' && prog > 0.6) i.jump = true;
+    }
   }
 
   // ------------------------------------------------------------------ decisions
@@ -53,11 +60,15 @@ export class Bot {
     // target: close + low + visible, sticky
     const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0);
     this.target = vis.sort((p, q) => score(p) - score(q))[0] ?? null;
-    const P = w.map.point;
+    // the objective: the capture point, or (Mikoshi Rush) wherever the float is now
+    const P: [number, number, number] = w.rules === 'push' ? [w.push.pos.x, w.push.pos.y, w.push.pos.z] : w.map.point;
     const campaign = w.mode === 'campaign';
-    const pointOpen = w.mode !== 'training' && !campaign && t > w.point.unlockAt - 4;
+    const pointOpen = w.mode !== 'training' && !campaign && t > (w.rules === 'push' ? w.push.unlockAt : w.point.unlockAt) - 4;
     const hurt = a.health / a.maxHp;
     const role = a.def.role;
+    // low with no healer close: detour to the nearest health pack that's up (the way players use them)
+    const medic = w.allies(a, false).some(x => x.def.role === 'support' && dist3(x.pos, a.pos) < 12);
+    const pack = hurt < 0.45 && !medic ? w.packs.filter(p => p.readyAt <= t && dist3(p, a.pos) < 28).sort((p, q) => dist3(p, a.pos) - dist3(q, a.pos))[0] : undefined;
     if (role === 'support') {
       const allies = w.allies(a, false).filter(x => !x.isRobot);
       this.ally = allies.filter(x => dist3(x.pos, a.pos) < 30).sort((p, q) => p.health / p.maxHp - q.health / q.maxHp)[0] ?? null;
@@ -66,7 +77,10 @@ export class Bot {
       }
     }
     // goal selection
-    if (hurt < 0.3 && role !== 'tank' && this.target && dist3(this.target.pos, a.pos) < 14) {
+    if (pack && !(this.target && dist3(this.target.pos, a.pos) < 4)) {
+      this.mode = 'retreat';
+      this.goal = { x: pack.x, y: pack.y, z: pack.z };
+    } else if (hurt < 0.3 && role !== 'tank' && this.target && dist3(this.target.pos, a.pos) < 14) {
       this.mode = 'retreat';
       const sup = w.allies(a, false).find(x => x.def.role === 'support' && x !== a);
       this.goal = sup ? { ...sup.pos } : { x: a.spawn[0], y: 0, z: a.spawn[1] };
@@ -96,8 +110,8 @@ export class Bot {
       }
     } else if (pointOpen) {
       this.mode = 'objective';
-      const ang = (a.id * 2.4) % (Math.PI * 2);
-      this.goal = { x: P[0] + Math.cos(ang) * 3, y: P[1], z: P[2] + Math.sin(ang) * 3 };
+      const ang = (a.id * 2.4) % (Math.PI * 2), r = w.rules === 'push' ? 2.5 : 3;
+      this.goal = { x: P[0] + Math.cos(ang) * r, y: P[1], z: P[2] + Math.sin(ang) * r };
     } else {
       this.mode = 'objective';
       const f = a.team === 'zenith' ? 1 : -1;
@@ -117,6 +131,7 @@ export class Bot {
   private preferredRange() {
     const a = this.a, P = a.def.primary;
     if (a.def.id === 'tenkai') return 3.5;         // hammer reach is 5m: stand just inside it
+    if (a.def.id === 'gantetsu') return 8;          // chainguns: brawling range
     if (P.kind === 'melee') return 1.5;
     if (a.def.id === 'enra') return 4;
     if (a.def.id === 'gorgoth') return 7;
@@ -266,8 +281,10 @@ export class Bot {
     if (inRange && this.onTarget(P.kind === 'melee' ? 35 : P.kind === 'beam' ? 14 : 5)) i.fire = true;
     // quick melee when an enemy is in arm's reach (ranged heroes finish low targets / fight off divers this way)
     if (d < 1.2 + a.radius * 1.3 + tg.radius && t >= a.nextMelee && this.onTarget(30) && (P.kind !== 'melee' || Math.random() < 0.15)) i.melee = true;
+    // twin chainguns: both triggers down together once on target
+    if (a.def.dualGuns && inRange && this.onTarget(7)) i.alt = true;
     // melee secondaries / ranged secondaries
-    if (!isAbility(S) && !S.heal) {
+    if (!isAbility(S) && !S.heal && !a.def.dualGuns) {
       if (S.kind === 'melee' && d < S.range + tg.radius && this.onTarget(35)) i.alt = true;
       if (S.kind === 'projectile' && d > 4 && d < S.range && this.onTarget(4) && Math.random() < 0.25) i.alt = true;
     }
@@ -282,7 +299,7 @@ export class Bot {
   }
 
   /** look at a point and fire an ability on the next tick */
-  private castAt(slot: 'a1' | 'a2' | 'ult' | 'alt', p?: V3) {
+  private castAt(slot: 'a1' | 'a2' | 'ult' | 'alt' | 'swoop', p?: V3) {
     const i = this.a.input;
     if (p) { this.aimAt = p; this.snap = true; this.aim(0); this.aimAt = null; }
     if (slot === 'alt') { this.holdAlt = this.w.time + 0.1; i.alt = true; }
@@ -338,7 +355,21 @@ export class Bot {
         if (rdy('constellation') && (ccd || (noct && near(noct.pos, 15, allies).length >= 2) || lowAllies.length >= 2)) { this.castAt('a1'); break; }
         const dying = allies.filter(x => x.health / x.maxHp < 0.4 && t - x.lastDamagedAt < 1 && dist3(x.pos, a.pos) < 28 && vis(x))[0];
         if (dying && rdy('wish')) { this.castAt('a2', dying.center); break; }
-        if (ultReady && lowAllies.length >= 2) this.castAt('ult');
+        if (ultReady && lowAllies.length >= 2) { this.castAt('ult'); break; }
+        // Starwing Swoop, the way a guardian-angel player uses it: escape a diver toward the safest teammate, or close the
+        // gap to a hurt ally who is out of beam range - then slingshot / superjump out (never a joyride into the front line)
+        if (rdy('swoop') && !a.has('swoop', t) && !a.has('grounded', t)) {
+          const threatened = t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.65;
+          const beam = !isAbility(a.def.secondary) ? a.def.secondary.range : 18;
+          const cand = allies.filter(x => x !== a && !x.isRobot && vis(x) && dist3(x.pos, a.pos) < 29 && (threatened ? dist3(x.pos, a.pos) > 6 && near(x.pos, 8, foes).length === 0 : dist3(x.pos, a.pos) > beam - 2 && x.health / x.maxHp < 0.6))
+            .sort((p, q) => (threatened ? dist3(q.pos, a.pos) - dist3(p.pos, a.pos) : p.health / p.maxHp - q.health / q.maxHp));
+          const to = cand[0];
+          if (to) {
+            const r = Math.random();
+            this.swoopExit = r < 0.35 ? 'up' : r < 0.6 ? 'fwd' : '';
+            this.castAt('swoop', to.center); break;
+          }
+        }
         break;
       }
       case 'kaien': {
@@ -416,6 +447,26 @@ export class Bot {
         if (tg && d > 16 && rdy('veil') && !a.has('stealth', t)) { this.castAt('a2'); break; }
         if (tg && d > 5 && d < 15 && rdy('shadowstep') && vis(tg)) { this.castAt('a1', tg.pos); break; }
         if (ultReady && (near(a.pos, 14, foes).length >= 2 || (tg && tg.health < 130 && d < 14))) this.castAt('ult');
+        break;
+      }
+      case 'gantetsu': {
+        const ten = foes.find(x => x.def.id === 'tenkai');
+        const rushing = a.has('tachiai', t);
+        // stomp: leap out of the rush when it has carried him into a crowd (or right on top of the target)
+        if (rushing && a.grounded && (near(a.pos, 5, foes).length >= 2 || (tg && d < 3.2))) { a.input.jump = true; break; }
+        if (rushing) break;
+        // COUNTER: rush straight through the Solar Bulwark (it can't stop him, and it cracks), or meet a Dawn Charge head-on
+        if (ten && vis(ten) && rdy('tachiai') && ((ten.barrier.up && dist3(ten.pos, a.pos) < 13) || (ten.forced?.kind === 'dawncharge' && dist3(ten.pos, a.pos) < 18))) { this.castAt('a1', ten.center); break; }
+        // Grand Dohyo: trap a crowd (or a duel he's winning) in the ring
+        if (ultReady && (near(a.pos, 8, foes).length >= 2 || (tg && d < 7 && tg.health / tg.maxHp < 0.5 && a.health / a.maxHp > 0.5))) { this.castAt('ult', tg?.center); break; }
+        // Taiko Heartbeat: under fire, or when the team is brawling around him
+        if (rdy('taiko') && ((t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.8) || near(a.pos, 12, allies).filter(x => x !== a && t - x.lastDamagedAt < 1).length >= 2)) { this.castAt('a2'); break; }
+        // Tachiai Rush: close the gap on a visible target across solid ground
+        if (tg && vis(tg) && rdy('tachiai') && d > 6 && d < 18 && Math.abs(tg.pos.y - a.pos.y) < 1.5 && Math.random() < 0.35) {
+          let solid = true;
+          for (let k = 1; k <= 5 && solid; k++) { const u = k / 5; solid = w.level.groundAt(a.pos.x + (tg.pos.x - a.pos.x) * u, a.pos.z + (tg.pos.z - a.pos.z) * u, a.pos.y + 1) > a.pos.y - 1.5; }
+          if (solid) { this.castAt('a1', tg.center); break; }
+        }
         break;
       }
       case 'enra': {

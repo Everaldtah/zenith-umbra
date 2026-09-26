@@ -23,6 +23,7 @@ function breakStealth(w: World, a: Actor) {
 function meleeArc(w: World, a: Actor, reach: number, dmg: number, cosMin: number, vert: number, onHit?: (x: Actor) => void) {
   const f = a.forward();
   let n = 0;
+  a.shots++;
   for (const x of w.enemies(a)) {
     const v = { x: x.pos.x - a.pos.x, z: x.pos.z - a.pos.z }, l = Math.hypot(v.x, v.z);
     if (l > reach + x.radius || Math.abs(x.pos.y - a.pos.y) > vert) continue;
@@ -31,10 +32,25 @@ function meleeArc(w: World, a: Actor, reach: number, dmg: number, cosMin: number
     w.fx('slash', x.center, { color: a.def.glow });
     onHit?.(x);
   }
+  if (n) a.hits++;
   return n;
 }
 
 export const QUICK_MELEE = { damage: 40, cooldown: 0.9 };
+
+/**
+ * Heat from incendiary rounds / Tachiai Rush: it builds on the target, bleeds off at 5/s, and at 10 the target catches
+ * fire for 2.5s (16 dmg/s, see World.updateActor) - and becomes a critical target for Gantetsu's volatile chaingun.
+ */
+export function ignite(w: World, src: Actor, x: Actor, heat: number) {
+  const t = w.time;
+  const h = Math.max(0, (x.sv.heat ?? 0) - (t - (x.sv.heatAt ?? t)) * 5) + heat;
+  x.sv.heat = h; x.sv.heatAt = t;
+  if (h < 10) return;
+  x.sv.heat = 0;
+  if (!x.has('burning', t)) { w.fx('ignite', x.center, { actor: x, color: '#ff8a3d' }); w.sfx('ignite', x.center); src.stats.ignites = (src.stats.ignites ?? 0) + 1; }
+  x.set('burning', t, 2.5, undefined, src);
+}
 
 /** C: every hero's quick melee - a short jab in front of them */
 export function quickMelee(w: World, a: Actor) {
@@ -47,15 +63,19 @@ export function quickMelee(w: World, a: Actor) {
   if (n) w.fx('impact', { x: a.pos.x + a.forward().x * (a.radius + 0.9), y: a.pos.y + a.height * 0.6, z: a.pos.z + a.forward().z * (a.radius + 0.9) }, { color: a.def.glow });
 }
 
-export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'secondary', mult = 1) {
+export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'secondary', mult = 1, spreadMult = 1) {
   const t = w.time;
-  a.anim.attackAt = t; a.anim.attackKind = slot;
+  const dual = !!a.def.dualGuns;
+  // twin chainguns: each hand has its own fire cue (the animator kicks that gun), and neither is a "secondary swing"
+  a.anim.attackAt = t; a.anim.attackKind = dual ? 'primary' : slot;
+  if (dual) { if (slot === 'primary') a.anim.fireL = t; else a.anim.fireR = t; }
   breakStealth(w, a);
-  const muz = w.muzzle(a);
+  const muz = w.muzzle(a, slot);
   const aim = w.aimPoint(a, W.range * 1.5);
   const base = norm({ x: aim.x - muz.x, y: aim.y - muz.y, z: aim.z - muz.z });
   if (W.kind === 'projectile' || W.kind === 'charge') {
     const n = W.pellets ?? 1;
+    if (!W.heal) a.shots += n;
     for (let i = 0; i < n; i++) {
       const d = n > 1 ? spreadDir(base, (W.spread ?? 0.03) * (i === 0 ? 0 : 1)) : base;
       w.spawnProj(a, muz, d, (W.speed ?? 50) * (W.kind === 'charge' ? 0.5 + 0.5 * mult : 1), {
@@ -69,7 +89,7 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
     const ed = norm({ x: aim.x - e.x, y: aim.y - e.y, z: aim.z - e.z });
     const hits = new Map<Actor, { dmg: number; head: boolean }>();
     for (let i = 0; i < n; i++) {
-      const d = spreadDir(ed, W.spread ?? 0);
+      const d = spreadDir(ed, (W.spread ?? 0) * spreadMult);
       const lh = w.level.ray(e, d, W.range);
       let max = lh ? lh.t : W.range;
       const bh = w.barrierHit(a.team, e, d, max);
@@ -77,16 +97,26 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
       const ah = w.rayActors(e, d, max, x => x.team !== a.team);
       const end = ah ? ah.t : max;
       const endP = { x: e.x + d.x * end, y: e.y + d.y * end, z: e.z + d.z * end };
+      a.shots++;
       if (ah) {
+        a.hits++; if (ah.head) a.crits++;
         const fall = end > W.range * 0.5 ? 1 - (end - W.range * 0.5) / W.range : 1;
         const h = hits.get(ah.actor) ?? { dmg: 0, head: false };
         h.dmg += W.damage * Math.max(0.3, fall) * (ah.head ? 1.5 : 1); h.head ||= ah.head;
         hits.set(ah.actor, h);
       } else if (bh) w.hitBarrier(bh.owner, W.damage, a, endP);
       else if (lh) w.fx('impact', endP, { color: a.def.glow });
-      if (i < 4) w.fx('tracer', muz, { to: endP, color: a.def.glow });
+      if (i < 4 && (!dual || (a.sv.tracerN = (a.sv.tracerN ?? 0) + 1) % 2 === 0)) w.fx('tracer', muz, { to: endP, color: a.def.glow });
     }
-    for (const [x, h] of hits) { w.damage(a, x, h.dmg, { crit: h.head, kind: 'hitscan' }); w.sfx(h.head ? 'crit' : 'hit', x.center); }
+    for (const [x, h] of hits) {
+      let dmg = h.dmg, crit = h.head;
+      // Hanabi (volatile, right gun): every round into a burning enemy is a critical hit
+      if (dual && slot === 'secondary' && x.has('burning', t)) { dmg *= h.head ? 1.3 : 1.75; crit = true; a.stats.volatile = (a.stats.volatile ?? 0) + 1; }
+      w.damage(a, x, dmg, { crit, kind: 'hitscan' });
+      // Hinoko (incendiary, left gun): sustained fire sets them alight
+      if (dual && slot === 'primary') ignite(w, a, x, 1);
+      if (!dual || crit || Math.random() < 0.35) w.sfx(crit ? 'crit' : 'hit', x.center);
+    }
   } else if (W.kind === 'melee') {
     if (W.sweep) {
       // two-handed hammer: swings alternate sides; the blow lands after a short wind-up, where the swinger is by then
@@ -135,10 +165,45 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
       if (!n) w.sfx('whiff', a.pos, a);
     }
   }
-  w.sfx(W.sfx, muz, a);
+  // chainguns: one rattle per three rounds (16 rounds/s per gun would drown the mix - "play by sound")
+  if (!dual || ((a.sv[slot === 'primary' ? 'sfxL' : 'sfxR'] = (a.sv[slot === 'primary' ? 'sfxL' : 'sfxR'] ?? 0) + 1) % 3) === 1) w.sfx(W.sfx, muz, a);
+}
+
+/**
+ * Gantetsu's twin rotary chainguns: LMB the left (Hinoko), RMB the right (Hanabi), both at once for twice the lead at a
+ * wider spread. Each gun spins up while its trigger is held (40% -> 100% fire rate over ~0.35s) and spins down when
+ * released; the two drums reload together. Inside his Grand Dohyo they never run dry.
+ */
+function dualGuns(w: World, a: Actor, dt: number) {
+  const t = w.time, inp = a.input, P = a.def.primary, S = a.def.secondary as WeaponDef;
+  const max2 = Math.max(1, Math.round((S.ammo ?? 0) * (1 + a.mods.ammo)));
+  if (a.sv.ammo2 === undefined) a.sv.ammo2 = max2;
+  const endless = a.has('dohyo', t);
+  if (endless) a.reloadUntil = 0;
+  if (a.reloadUntil && t >= a.reloadUntil) { a.reloadUntil = 0; a.ammo = a.maxAmmo; a.sv.ammo2 = max2; }
+  const reload = () => { if (!a.reloadUntil && !endless) { a.reloadUntil = t + a.reloadTime(P.reload ?? 1.7); w.sfx('reload', a.pos, a); } };
+  if (inp.reload && (a.ammo < a.maxAmmo || a.sv.ammo2 < max2)) reload();
+  const busy = a.barrier.up || (a.forced && a.forced.kind !== 'knock' && a.forced.kind !== 'pull');
+  if (inp.melee && !busy && t >= a.nextMelee) { quickMelee(w, a); a.nextShot = Math.max(a.nextShot, t + 0.35); a.nextAlt = Math.max(a.nextAlt, t + 0.35); }
+  const both = inp.fire && inp.alt;
+  for (const [want, W, slot] of [[inp.fire, P, 'primary'], [inp.alt, S, 'secondary']] as [boolean, WeaponDef, 'primary' | 'secondary'][]) {
+    const key = slot === 'primary' ? 'spin1' : 'spin2';
+    const on = want && !busy && !a.reloadUntil;
+    if (on && !(a.sv[key] > 0.05)) w.sfx('spinup', a.pos, a);
+    a.sv[key] = Math.max(0, Math.min(1, (a.sv[key] ?? 0) + (on ? dt / 0.35 : -dt / 0.8)));
+    if (!on || t < (slot === 'primary' ? a.nextShot : a.nextAlt)) continue;
+    if ((slot === 'primary' ? a.ammo : a.sv.ammo2) <= 0 && !endless) { reload(); continue; }
+    fire(w, a, W, slot, 1, both ? 1.4 : 1);
+    // keep the cadence exact while the trigger is held; after a pause, count from now (no catch-up burst)
+    const iv = 1 / (a.rate(W.rate) * (0.4 + 0.6 * a.sv[key])), prev = slot === 'primary' ? a.nextShot : a.nextAlt;
+    const nx = t - prev > iv ? t + iv : prev + iv;
+    if (slot === 'primary') a.nextShot = nx; else a.nextAlt = nx;
+    if (!endless) { if (slot === 'primary') a.ammo--; else a.sv.ammo2--; }
+  }
 }
 
 export function updateWeapons(w: World, a: Actor, dt: number) {
+  if (a.def.dualGuns && !isAbility(a.def.secondary)) { dualGuns(w, a, dt); return; }
   const t = w.time, P = a.def.primary, inp = a.input;
   if (a.reloadUntil && t >= a.reloadUntil) { a.reloadUntil = 0; a.ammo = a.maxAmmo; }
   if (P.ammo && inp.reload && a.ammo < a.maxAmmo && !a.reloadUntil && P.kind !== 'charge') { a.reloadUntil = t + a.reloadTime(P.reload ?? 1.5); w.sfx('reload', a.pos, a); }
@@ -173,6 +238,8 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
       breakStealth(w, a);
       const range = P.range * (a.has('asura', t) ? 1.5 : 1) * a.scale;
       const e = a.eye, d = a.aimDir();
+      a.shots++;
+      let touched = false;
       for (const x of w.enemies(a)) {
         const c = x.center, v = { x: c.x - e.x, y: c.y - e.y, z: c.z - e.z }, l = Math.hypot(v.x, v.y, v.z);
         if (l > range + x.radius) continue;
@@ -180,8 +247,9 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
         if (!w.level.lineOfSight(e, c)) continue;
         const bh = w.barrierHit(a.team, e, norm(v), l);
         if (bh) { w.hitBarrier(bh.owner, P.damage / P.rate, a, c); continue; }
-        w.damage(a, x, P.damage / P.rate, { kind: 'beam' });
+        w.damage(a, x, P.damage / P.rate, { kind: 'beam' }); touched = true;
       }
+      if (touched) a.hits++;
     }
   } else if (inp.fire && !busy && t >= a.nextShot && !a.reloadUntil && P.damage > 0) {
     if (!P.ammo || a.ammo > 0) {

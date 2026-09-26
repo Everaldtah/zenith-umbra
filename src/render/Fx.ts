@@ -1,7 +1,7 @@
 // Visual effects: a pooled GPU point-particle system, shockwave rings, beams, projectile visuals,
 // persistent zone decals and per-actor status visuals. Driven by World events + state.
 import * as THREE from 'three';
-import type { GameEvent, Proj, World, Zone } from '../game/World';
+import { RING_H, type GameEvent, type Proj, type World, type Zone } from '../game/World';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from '../game/Actor';
 
@@ -223,6 +223,35 @@ export class Fx {
       case 'zonebreak': this.ring(p, e.r ?? 6, e.color ?? '#9d7bff', now, 0.5); P.emit(p, n(50), c, { speed: 6, life: 0.6, size: 0.3, spread: e.r ?? 4 }); break;
       case 'singularity': P.emit(p, n(30), c, { speed: 3, life: 0.6, size: 0.4, spread: 3 }); break;
       case 'fall': break;
+      // ---- Mirei: Starwing Swoop - a light guide to the ally and a burst of feathers; slingshot / superjump bursts
+      case 'swoop': {
+        if (e.actor && e.target) this.beam(e.actor.center, e.target.center, e.color ?? '#bfe8ff', now, 0.22, 0.025);
+        this.ring(p, 1.4, e.color ?? '#bfe8ff', now, 0.3, false);
+        P.emit(p, n(24), new THREE.Color('#fff4d6'), { speed: 4, life: 0.5, size: 0.28, spread: 0.6 });
+        break;
+      }
+      case 'swoopburst': this.ring(p, 2.2, e.color ?? '#bfe8ff', now, 0.35); P.emit(p, n(34), new THREE.Color('#fff4d6'), { speed: 6, life: 0.55, size: 0.3, spread: 0.6 }); this.light(p, e.color ?? '#bfe8ff', 25, now); break;
+      // ---- Gantetsu
+      case 'healthpack': this.ring({ x: p.x, y: p.y - 0.45, z: p.z }, (e.r ?? 1) * 1.6, '#29f0a0', now, 0.45); P.emit(p, n(26), new THREE.Color('#7dffb0'), { speed: 2.5, life: 0.7, size: 0.28, up: 3, spread: 0.6 }); this.light(p, '#29f0a0', 18, now); break;
+      case 'ringhit': P.emit(p, n(8), new THREE.Color('#ffe6a8'), { speed: 3, life: 0.3, size: 0.2 }); P.emit(p, n(3), new THREE.Color('#ffffff'), { speed: 1.5, life: 0.8, size: 0.22, grav: 3 }); break;
+      case 'ignite': this.ring(p, 1.1, '#ff8a3d', now, 0.3, false); P.emit(p, n(26), new THREE.Color('#ff8a3d'), { speed: 3, life: 0.6, size: 0.35, up: 2.5, spread: 0.5 }); break;
+      case 'taiko': case 'taikopulse': {
+        // a drumbeat shockwave rolling out through the team (the opening double-strike is brighter)
+        const big = e.kind === 'taiko', r = (e.r ?? 12) * (big ? 1 : 0.85);
+        this.ring({ x: p.x, y: p.y - (e.actor ? e.actor.height * 0.5 : 1), z: p.z }, r, e.color ?? '#ffb35c', now, big ? 0.7 : 0.55);
+        if (big) { this.ring(p, 2.4, e.color ?? '#ffb35c', now, 0.4, false); this.light(p, e.color ?? '#ffb35c', 30, now); }
+        P.emit(p, n(big ? 30 : 10), c, { speed: big ? 5 : 3, life: 0.5, size: 0.3, spread: 0.8 });
+        break;
+      }
+      case 'stomp': {
+        // Shiko Stomp: a ground shockwave, clods of earth thrown up, embers
+        this.ring(p, e.r ?? 5, e.color ?? '#ffb35c', now, 0.45);
+        this.ring(p, (e.r ?? 5) * 0.55, '#ffffff', now, 0.3);
+        P.emit({ x: p.x, y: p.y + 0.2, z: p.z }, n(30), new THREE.Color('#6b5b4a'), { speed: 6, life: 0.8, size: 0.45, up: 6, grav: 16, spread: 2.5 });
+        P.emit({ x: p.x, y: p.y + 0.3, z: p.z }, n(24), c, { speed: 7, life: 0.5, size: 0.3, up: 3, spread: 2 });
+        this.shake = Math.max(this.shake, 0.45 / (1 + near / 12));
+        break;
+      }
       case 'bossbeam': if (e.to) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.45); this.beam(p, e.to, '#ffffff', now, 0.07, 0.15); P.emit(e.to, n(3), c, { speed: 4, life: 0.3, size: 0.5 }); } break;
       default: P.emit(p, n(10), c, { speed: 3, life: 0.4, size: 0.25 });
     }
@@ -340,6 +369,7 @@ export class Fx {
         m.visible = !d.done;
         continue;
       }
+      if (z.kind === 'dohyo') { this.dohyo(z, m, now); continue; }
       const col = new THREE.Color(z.kind === 'seal' || z.kind === 'sanctuary' ? '#ffe28a' : z.kind === 'grievous' ? '#c77dff' : z.kind === 'singularity' ? '#ff2244' : '#ffd27a');
       if (!m) {
         m = new THREE.Group();
@@ -384,6 +414,61 @@ export class Fx {
     for (const [id, m] of this.zoneMeshes) if (!seen.has(id)) { this.group.remove(m); this.zoneMeshes.delete(id); }
   }
 
+  /**
+   * Grand Dohyo: a sumo ring stamped into the ground - a straw-bale rope ring on packed clay, a translucent sacred wall of
+   * light rising from it with a twisted rope band and zigzag paper streamers, and the four coloured corner tassels of the
+   * directions. The wall shimmers where it stands and flickers out over the last half second.
+   */
+  private dohyo(z: Zone, m0: THREE.Object3D | undefined, now: number) {
+    let m = m0;
+    if (!m) {
+      m = new THREE.Group();
+      const clay = new THREE.Mesh(new THREE.CircleGeometry(z.r, 64), new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        uniforms: { t: { value: 0 } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+        fragmentShader: `uniform float t; varying vec2 vUv;
+          void main(){ vec2 p=vUv-0.5; float r=length(p)*2.0; if(r>1.0) discard;
+            float lines=smoothstep(0.02,0.0,abs(p.x))*step(abs(p.y),0.06)*0.0 + smoothstep(0.012,0.0,abs(abs(p.x)-0.07))*step(abs(p.y),0.03);
+            vec3 c=mix(vec3(0.62,0.48,0.32),vec3(0.8,0.66,0.45),r); gl_FragColor=vec4(c+vec3(1.0,0.85,0.55)*lines, 0.55*(1.0-smoothstep(0.96,1.0,r))+lines*0.4); }`,
+      }));
+      clay.rotation.x = -Math.PI / 2; clay.position.y = 0.06; m.add(clay);
+      const tawara = new THREE.Mesh(new THREE.TorusGeometry(z.r, 0.16, 8, 72), new THREE.MeshStandardMaterial({ color: '#d8b26a', emissive: new THREE.Color('#6b4b1a'), emissiveIntensity: 0.4, roughness: 0.9 }));
+      tawara.rotation.x = -Math.PI / 2; tawara.position.y = 0.14; m.add(tawara);
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(z.r, z.r, RING_H, 72, 1, true), new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+        uniforms: { t: { value: 0 }, k: { value: 1 } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+        fragmentShader: `uniform float t; uniform float k; varying vec2 vUv;
+          void main(){ float y=vUv.y, a=vUv.x*72.0;
+            float base=0.22*(1.0-y)*(1.0-y)+0.05;                               // brightest at the ring, fading upward
+            float rope=smoothstep(0.035,0.0,abs(y-0.93))*(0.6+0.4*sin(a*6.0+y*40.0));      // twisted rope band
+            float z1=abs(fract(a*0.5)-0.5)*2.0;                                             // zigzag paper streamers
+            float shide=step(0.72,y)*step(y,0.9)*smoothstep(0.1,0.0,abs(z1-(0.9-y)*5.0))*step(fract(a/6.0),0.5);
+            float shimmer=0.08*sin(a*0.5+t*3.0+y*9.0);
+            vec3 c=mix(vec3(1.0,0.88,0.6),vec3(0.2,0.82,0.74),0.35+0.35*sin(a*0.2+t));
+            gl_FragColor=vec4(c*(base+rope*0.9+shide*0.8+shimmer)*k, (base+rope+shide)*k); }`,
+      }));
+      wall.position.y = RING_H / 2; wall.name = 'wall'; m.add(wall);
+      // the four tassels: green (east), red (south), white (west), black (north)
+      const tas = ['#2fd3b8', '#ff3b5c', '#f4f1e8', '#20202a'];
+      for (let k = 0; k < 4; k++) {
+        const a = Math.PI / 4 + k * Math.PI / 2;
+        const t = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 10), new THREE.MeshStandardMaterial({ color: tas[k], emissive: new THREE.Color(tas[k]), emissiveIntensity: 0.35 }));
+        t.position.set(Math.cos(a) * z.r, RING_H * 0.93 - 0.8, Math.sin(a) * z.r); t.rotation.x = Math.PI; m.add(t);
+      }
+      m.position.set(z.x, z.y, z.z);
+      this.group.add(m); this.zoneMeshes.set(z.id, m);
+    }
+    const left = z.until - now, grow = Math.min(1, (now - z.born) * 3);
+    const wall = m.getObjectByName('wall') as THREE.Mesh;
+    const sm = wall.material as THREE.ShaderMaterial;
+    sm.uniforms.t.value = now; sm.uniforms.k.value = grow * (left < 0.5 ? (Math.sin(now * 60) > 0 ? left * 2 : 0.2) : 1);
+    wall.scale.set(1, grow, 1); wall.position.y = RING_H * grow / 2;
+    ((m.children[0] as THREE.Mesh).material as THREE.ShaderMaterial).uniforms.t.value = now;
+    if (Math.random() < 0.5) { const a = Math.random() * Math.PI * 2; this.parts.emit({ x: z.x + Math.cos(a) * z.r, y: z.y + Math.random() * RING_H * 0.9, z: z.z + Math.sin(a) * z.r }, 1, new THREE.Color('#ffe6a8'), { speed: 0.3, life: 1, size: 0.3, up: 0.4 }); }
+  }
+
   private syncBeams(w: World, now: number) {
     const seen = new Set<number>();
     for (const a of w.actors) {
@@ -425,6 +510,21 @@ export class Fx {
       if (a.has('judgment', now) && Math.random() < 0.5 * k) this.parts.emit(c, 1, new THREE.Color('#8ad8ff'), { speed: 3, life: 0.2, size: 0.18, spread: a.radius * 2 });
       if (a.has('asura', now) && Math.random() < 0.6 * k) this.parts.emit(c, 1, new THREE.Color(Math.random() < 0.5 ? '#ff6a2a' : '#b026ff'), { speed: 1, life: 0.5, size: 0.4, up: 2.5, spread: a.radius * 1.5 });
       if (a.flying && Math.random() < 0.5 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z }, 1, new THREE.Color(a.def.glow), { speed: 0.6, life: 0.6, size: 0.22, spread: 0.8, grav: 1 });
+      // Mirei: light streams off the wingtips through a swoop, a superjump, a slingshot or fast flight (pulls the eye along
+      // the path, the way the cinematic teleport volume trails in its travel direction)
+      if (a.def.id === 'mirei') {
+        const sp = Math.hypot(a.vel.x, a.vel.y, a.vel.z);
+        const streak = a.has('swoop', now) || a.has('superjump', now) || a.has('slingshot', now) || (a.flying && sp > 6);
+        if (streak) {
+          const f = a.forward(), rx = -Math.cos(a.yaw), rz = Math.sin(a.yaw), y = a.pos.y + a.height * 0.72;
+          for (const s of [1, -1]) this.parts.emit({ x: a.pos.x + rx * s * 0.8 - f.x * 0.25, y, z: a.pos.z + rz * s * 0.8 - f.z * 0.25 }, 2, new THREE.Color(Math.random() < 0.5 ? '#fff4d6' : a.def.glow), { speed: 0.15, life: 0.55, size: 0.3, spread: 0.12 });
+          this.parts.emit(c, 1, new THREE.Color('#ffe9b0'), { speed: 0.2, life: 0.35, size: 0.45, spread: 0.3 });
+        }
+      }
+      // Gantetsu: flames on the ignited, dust and embers behind the rush, the Taiko Heartbeat's warm aura
+      if (a.has('burning', now) && Math.random() < 0.7 * k) this.parts.emit(c, 1, new THREE.Color(Math.random() < 0.6 ? '#ff8a3d' : '#ffd27a'), { speed: 0.8, life: 0.5, size: 0.32, up: 2.4, spread: a.radius * 1.2 });
+      if (a.has('tachiai', now) && a.grounded && Math.random() < 0.9 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + 0.2, z: a.pos.z }, 2, new THREE.Color('#9c8f7c'), { speed: 1.5, life: 0.6, size: 0.5, up: 1, spread: a.radius * 1.5 });
+      if (a.has('taiko', now) && Math.random() < 0.4 * k) this.parts.emit(c, 1, new THREE.Color('#ffb35c'), { speed: 0.6, life: 0.7, size: 0.28, up: 1.2, spread: a.radius * 1.8 });
       if (a.def.frame === 'mech' && a.forced && Math.random() < 0.8) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z }, 2, new THREE.Color('#ffb040'), { speed: 2, life: 0.3, size: 0.35, dir: { x: -a.vel.x * 0.1, y: -0.5, z: -a.vel.z * 0.1 } });
     }
   }

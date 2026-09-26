@@ -166,6 +166,13 @@
    "height": 15,
    "tris": 0,
    "bones": []
+  },
+  "gantetsu": {
+   "height": 2.4,
+   "tris": 50000,
+   "bones": [
+    "humanoid"
+   ]
   }
  },
  "props": {
@@ -216,6 +223,33 @@
   },
   "prop_training_target": {
    "height": 1
+  },
+  "prop_cloud_gondola": {
+   "height": 1
+  },
+  "prop_cloud_pagoda": {
+   "height": 1
+  },
+  "prop_cloud_teatree": {
+   "height": 1
+  },
+  "prop_hanabi_boat": {
+   "height": 1
+  },
+  "prop_hanabi_stall": {
+   "height": 1
+  },
+  "prop_hanabi_yagura": {
+   "height": 1
+  },
+  "prop_kagura_gate": {
+   "height": 1
+  },
+  "prop_kagura_lamp": {
+   "height": 1
+  },
+  "prop_kagura_mikoshi": {
+   "height": 1
   }
  },
  "textures": [
@@ -226,7 +260,10 @@
   "env/sky_c4_helios.webp",
   "env/sky_c5_citadel.webp",
   "env/sky_cathedral.webp",
+  "env/sky_cloudstep.webp",
+  "env/sky_hanabi.webp",
   "env/sky_hangar.webp",
+  "env/sky_kagura.webp",
   "env/sky_kurogane.webp",
   "env/sky_rift.webp",
   "env/sky_training.webp",
@@ -244,8 +281,17 @@
   "env/tex_c5_citadel_wall.webp",
   "env/tex_cathedral_ground.webp",
   "env/tex_cathedral_wall.webp",
+  "env/tex_cloudstep_ground.webp",
+  "env/tex_cloudstep_roof.webp",
+  "env/tex_cloudstep_wall.webp",
+  "env/tex_hanabi_ground.webp",
+  "env/tex_hanabi_roof.webp",
+  "env/tex_hanabi_wall.webp",
   "env/tex_hangar_ground.webp",
   "env/tex_hangar_wall.webp",
+  "env/tex_kagura_ground.webp",
+  "env/tex_kagura_roof.webp",
+  "env/tex_kagura_wall.webp",
   "env/tex_kurogane_ground.webp",
   "env/tex_kurogane_wall.webp",
   "env/tex_rift_ground.webp",

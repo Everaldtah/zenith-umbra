@@ -8,3 +8,4 @@ node_modules
 cinematic
 tests/e2e/shots
 *.log
+public/anim/mixamo.glb

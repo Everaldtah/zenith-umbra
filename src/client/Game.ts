@@ -1,5 +1,6 @@
 // The in-browser game: owns the renderer, runs the fixed-step World, drives views, camera, FX, audio and HUD.
 import * as THREE from 'three';
+import { FULL } from '../edition';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -34,10 +35,10 @@ import { PRESETS, IS_DESKTOP, type Settings } from './Settings';
 // physics rate: the desktop build simulates at 120 Hz (finer collisions, snappier input); the web build at 60 Hz
 const DT = 1 / (IS_DESKTOP ? 120 : 60);
 
-export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; }
+export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; skill?: number; }
 
 /** modes whose camera is fixed (Overwatch 2 style): Normal matches in first person, Stadium in third person */
-const FIXED_VIEW: Partial<Record<string, 'first' | 'third'>> = { skirmish: 'first', stadium: 'third' };
+const FIXED_VIEW: Partial<Record<string, 'first' | 'third'>> = { skirmish: 'first', stadium: 'third', quickplay: 'first', competitive: 'first', practice: 'first' };
 
 export class Game {
   renderer: THREE.WebGLRenderer;
@@ -149,12 +150,14 @@ export class Game {
     } else {
       this.match = o.mode === 'campaign'
         ? createCampaign(o.map, o.squad ?? [{ hero: o.hero ?? 'tenkai', netId: 'local' }], this.settings.difficulty)
-        : createMatch(o.map, o.mode, o.hero, this.settings.difficulty);
+        : createMatch(o.map, o.mode, o.hero, o.skill ?? this.settings.difficulty);
       if (o.net?.role === 'host') this.hostSync = new HostSync(this.match.world, o.net.coop);
     }
     this.bossCam = null;
     const w = this.match.world;
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
+    // bright daylight maps (pale plaster, white stone): only real highlights bloom, or sunlit walls glow white
+    if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55; }
     // image-based lighting so metallic / dark generated materials still catch light
     this.envTex ??= new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = this.envTex;
@@ -300,7 +303,7 @@ export class Game {
     }
     this.fpAim.yaw = this.camYaw; this.fpAim.pitch = this.camPitch;
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
-    this.mapScene.update(w.time, w.point, viewer.team);
+    this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null);
     this.updateCamera(dt, me);
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     // ---- render

@@ -2,6 +2,7 @@
 projection (facebake.py) paints faces from the concept, and a ~80 px face is too soft for a close-up.
 
     modal run assetgen/modal_upscale.py                      # every work/ow/pick/*.png -> work/ow/pick4x/*.png
+    modal run assetgen/modal_upscale.py --only gantetsu      # just these picks
 """
 import io, os, glob
 import modal
@@ -39,8 +40,9 @@ def up(name: str, png: bytes) -> bytes:
 
 
 @app.local_entrypoint()
-def main():
+def main(only: str = ""):
     os.makedirs(OUT, exist_ok=True)
-    jobs = [(os.path.basename(p)[:-4], open(p, "rb").read()) for p in sorted(glob.glob(os.path.join(PICK, "*.png")))]
+    keep = set(only.split(",")) if only else None
+    jobs = [(os.path.basename(p)[:-4], open(p, "rb").read()) for p in sorted(glob.glob(os.path.join(PICK, "*.png"))) if not keep or os.path.basename(p)[:-4] in keep]
     for (n, _), png in zip(jobs, up.starmap(jobs)):
         p = os.path.join(OUT, f"{n}.png"); open(p, "wb").write(png); print("saved", p)

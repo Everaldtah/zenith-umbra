@@ -2,7 +2,9 @@
 // states (treadmill locomotion so the foot IK and spring physics can be inspected) and the skins locker.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { HEROES, HERO, PILOTS, TEAM_NAME, isAbility, type HeroDef } from '../data/heroes';
+import { HERO, PILOTS, TEAM_NAME, isAbility, rosterFor, type HeroDef } from '../data/heroes';
+import { FULL } from '../edition';
+const HEROES = rosterFor(FULL);
 import { BOSSES, ENEMIES } from '../campaign/data';
 import { Actor } from '../game/Actor';
 import { CharacterView } from '../render/CharacterView';
@@ -21,7 +23,7 @@ const EXTRA: HeroDef[] = [
   ...Object.values(ENEMIES).map(e => ({ ...e, lore: `${e.title}: one of the Star-Forger's mass-produced robots in Operation Starfall.` })),
 ];
 const ALL: Record<string, HeroDef> = Object.fromEntries([...HEROES, ...EXTRA].map(h => [h.id, h]));
-type AnimMode = 'idle' | 'walk' | 'run' | 'strafe' | 'back' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
+type AnimMode = 'idle' | 'walk' | 'run' | 'strafe' | 'back' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit' | 'swoop' | 'descend' | 'superjump';
 
 export class HeroViewer {
   root: HTMLElement;
@@ -50,7 +52,7 @@ export class HeroViewer {
         <h3>PILOTS &amp; CAMPAIGN</h3><div class="vrow">${EXTRA.map(h => this.chip(h)).join('')}</div>
       </div>
       <div class="vstage"><div class="vname"></div>
-        <div class="vanims">${(['idle', 'walk', 'run', 'strafe', 'back', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
+        <div class="vanims">${(['idle', 'walk', 'run', 'strafe', 'back', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'swoop', 'descend', 'superjump', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
         <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div><div class="vhint vclip" style="bottom:auto;top:12px"></div></div>
       <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
     host.append(this.root);
@@ -164,12 +166,31 @@ export class HeroViewer {
     // strafe: sideways to the character's left; back: backpedal (the 8-way blend space)
     a.vel = m === 'strafe' ? { x: speed, y: 0, z: 0 } : m === 'back' ? { x: 0, y: 0, z: -speed } : { x: 0, y: 0, z: speed };
     a.pos.x += a.vel.x * dt; a.pos.z += a.vel.z * dt;
-    a.grounded = m !== 'jump' && m !== 'fly'; a.flying = m === 'fly' && (a.def.frame === 'flyer' || a.def.frame === 'drone' || !!a.def.jets);
+    a.grounded = m !== 'jump' && m !== 'fly' && m !== 'swoop' && m !== 'descend' && m !== 'superjump'; a.flying = m === 'fly' && (a.def.frame === 'flyer' || a.def.frame === 'drone' || !!a.def.jets);
+    // angelic flight previews (Mirei): a guardian-angel swoop that flares to a stop, the slow descent, a superjump into it
+    a.clear('swoop'); a.clear('swoopflare'); a.clear('angelglide'); a.clear('superjump');
+    if (m === 'swoop') {
+      const p = (T % 1.8) / 1.8;
+      a.pos.y = 1.2;
+      if (p < 0.8) { a.set('swoop', T, 0.1); a.sv.swoopProg = p / 0.8; a.vel = { x: 0, y: 0, z: 13 + p * 10 }; }
+      else { a.st.swoopflare = T + 0.4 - (p - 0.8) * 1.8; a.vel = { x: 0, y: 1, z: 4 }; }
+    } else if (m === 'descend') {
+      a.set('angelglide', T, 0.2); a.vel = { x: Math.sin(T * 0.7) * 1.2, y: -2.2, z: 1 }; a.pos.y = 1.4;
+    } else if (m === 'superjump') {
+      const p = (T % 2.2) / 2.2;
+      if (p < 0.35) { a.set('superjump', T, 0.2); a.vel = { x: 0, y: 17 * (1 - p / 0.35) + 2, z: 0 }; a.pos.y = 0.3 + p * 4; }
+      else { a.set('angelglide', T, 0.2); a.vel = { x: 0, y: -2.2, z: 0.6 }; a.pos.y = 1.7 - (p - 0.35) * 1.2; }
+    }
     if (m === 'jump') { const p = (T % 1.2) / 1.2; a.pos.y = Math.sin(p * Math.PI) * 1.4; a.vel.y = Math.cos(p * Math.PI) * 6; a.grounded = p > 0.97; if (p < 0.05) a.anim.jumpAt = T; if (p > 0.97) a.anim.landAt = T; }
     else if (m === 'fly') { a.pos.y = 1.2 + Math.sin(T * 1.5) * 0.2; a.vel.y = Math.cos(T * 1.5) * 0.3; }
     else a.pos.y = 0;
     const swingEvery = a.def.primary.sweep ? SWING_TIME + 0.1 : 0.6;
-    if (m === 'attack' && T % swingEvery < dt) { a.anim.attackAt = T; a.anim.attackKind = 'primary'; a.anim.attackSide = -a.anim.attackSide; }
+    if (a.def.dualGuns) {
+      const firing = m === 'attack' || m === 'alt';
+      a.sv.spin1 = Math.max(0, Math.min(1, (a.sv.spin1 ?? 0) + (m === 'attack' ? dt / 0.35 : -dt / 0.8)));
+      a.sv.spin2 = Math.max(0, Math.min(1, (a.sv.spin2 ?? 0) + (firing ? dt / 0.35 : -dt / 0.8)));
+      if (firing && T % (1 / 16) < dt) { if (m === 'attack') a.anim.fireL = T; a.anim.fireR = T; a.anim.attackAt = T; a.anim.attackKind = 'primary'; }
+    } else if (m === 'attack' && T % swingEvery < dt) { a.anim.attackAt = T; a.anim.attackKind = 'primary'; a.anim.attackSide = -a.anim.attackSide; }
     if (m === 'melee' && T % 0.9 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'punch'; }
     // abilities: plays the cast (Tenkai-Oh: Dawn Charge pose on SHIFT, the overhead Solar Shatter slam on E)
     if (m === 'shift') {
@@ -183,7 +204,10 @@ export class HeroViewer {
       if (a.def.ult.id === 'colossus') { a.set('titan', T, 9999); a.scale += (TITAN_SCALE - a.scale) * Math.min(1, dt * 2.6); }
       else if (T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ult.id; }
     }
-    if (m === 'alt' && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
+    if (m === 'alt' && !a.def.dualGuns && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
+    // SHIFT for Gantetsu: the Tachiai Rush (head down, guns tucked)
+    if (m === 'shift' && a.def.ability1.id === 'tachiai') { a.set('tachiai', T, 0.1); a.vel = { x: 0, y: 0, z: a.def.speed * 1.85 }; }
+    else a.clear('tachiai');
     if (m === 'hit' && T % 0.8 < dt) a.anim.hitAt = T;
     a.charging = false; a.beamOn = false;
     v.update(dt, T, { team: a.team, sees: () => true });
@@ -207,7 +231,7 @@ export class HeroViewer {
     const hb = v.anim.bones.head;
     if (hb) { hb.getWorldPosition(this.tmpV); headY = this.tmpV.y + H * 0.04 - v.group.position.y; }
     const body = Math.max(F.minY + vh * 0.31, (F.minY + F.maxY) / 2);
-    const focus = body * (1 - zk) + headY * zk + (m === 'fly' ? 1.2 : 0);
+    const focus = body * (1 - zk) + headY * zk + (m === 'fly' || m === 'swoop' || m === 'descend' || m === 'superjump' ? 1.2 : 0);
     this.camera.position.set(cx, focus + Math.sin(this.tilt) * r, cz);
     this.camera.lookAt(0, focus, 0);
     this.renderer.render(this.scene, this.camera);

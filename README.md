@@ -2,7 +2,19 @@
 
 *Ten heroes. Two oaths. One eclipse.*
 
-An original anime-inspired hero shooter for PC, playable in the browser and as a GPU-tuned Windows app.
+An original anime-inspired hero shooter for PC. **The full game is the Windows app**; the browser build is a light demo.
+
+## Editions
+One codebase, two editions (`src/edition.ts`):
+- **Full: Windows app** ([download](https://github.com/Everaldtah/zenith-umbra/releases/latest/download/ZenithUmbra-Setup.exe)). Includes:
+  - **Quick Play**, **Competitive** and **AI Quick Match**. You and four AI teammates play an AI team on best-of-3 **Control** or **Mikoshi Rush**, an original push mode where you escort a festival float through the enemy gate.
+  - **Role ranks**: Bronze → Champion with divisions 5 → 1. There are 5 placement matches, a hidden MMR, rank modifiers (win/loss streaks, expected, calibration, uphill/reversal, consolation) and 3 protected losses at the bottom of a division. **Career & Ranks** shows your record.
+  - The Overwatch 2-style **Tab screen**: E / A / D / DMG / H / MIT for everyone, plus your weapon accuracy, crit accuracy, objective time, streak, ults and hero stats.
+  - **8 maps built from buildings**: interiors, upper floors and walkable roofs, two-door spawn rooms, and small / large **health packs** inside and outside. That's the 5 rebuilt arenas plus **Hanabi Harbor**, **Cloudstep Terraces** and **Kagura Avenue**.
+  - **Gantetsu**, the Iron Yokozuna (tank, dual chainguns).
+  - Mirei's guardian-angel flight and **swoop**.
+  - The animation performance layer (see `ANIMATION_NOTES.md`), Stadium and the Starfall campaign.
+- **Lite: the website**. You play vs AI on the original five arenas with the original ten heroes, using procedural animation and legacy single-round rules. `npm run build` runs `scripts/lite-strip.mjs`, which removes everything desktop-only from `dist/`. The URL can't switch the site to the full edition. On the dev server, `?edition=lite` previews it.
 
 - **10 heroes**: the **Zenith Vanguard** (heroes) against the **Umbra Syndicate** (villains). Each side has one giant **piloted mecha tank** (Tenkai-Oh, piloted by Haruto Daimon; Gorgoth, piloted by Warlord Vorn), two supports (one of them flies), and two DPS.
 - **Rival counters**: every hero has a rival on the other team, and each of them carries an ability built to counter the other (Dawn Anchor vs Abyss Charge, Silence Aria vs Constellation Link, Warding Seal vs Severing Fang, Thunder Parry vs Chain of Oblivion, Revealing Dawn Arrow vs Stitched Decoy). The HUD calls out every counter as it happens.
@@ -12,12 +24,13 @@ An original anime-inspired hero shooter for PC, playable in the browser and as a
 - **Hero Viewer & Skins**: rotate and zoom any hero, villain, pilot or boss, preview animations, and equip one of 5 skins per hero (Classic → Legendary).
 
 ## Controls
-WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secondary · Shift / E abilities · Q ultimate · R reload · V first/third person (Normal is always first person, Stadium always third) · Tab scoreboard · Esc pause · H switch hero (training)
+WASD move · Space jump / hold to fly (Mirei, Nocturne) · F swoop to an ally (Mirei; Space mid-swoop = slingshot, Ctrl = superjump) · LMB fire · RMB secondary · Shift / E abilities · Q ultimate · R reload · V first/third person (Normal is always first person, Stadium always third) · Tab scoreboard / your stats · Esc pause · H switch hero (training)
 
 ## Play
 - Web: `npm i && npm run dev`, then open `/play.html`. The landing page with the animatic is `/`.
 - Windows app (Ultra graphics, 2K textures, 120 Hz physics): `cd desktop && npm i && node build.mjs --installer`
-- Tests: `npm test` (headless 5v5 simulations of every map + campaign levels beaten by an AI squad), `node tests/e2e/lab.mjs <url>` (AI Test Lab report: animation states, foot sliding, wall penetration, physics, effects, sounds, perf)
+- Screens: `node tests/e2e/ui_tour.mjs 5199` (menus, a live match, Tab screen, Mikoshi Rush, results, every map, the lite title), `node tests/e2e/lite_check.mjs 5199` (web edition)
+- Tests: `npm test` (map / Control / Mikoshi Rush / health pack / rank rules in `tests/unit/modes.test.ts`, hero kits in `kit.test.ts`, headless 5v5 simulations of every map + campaign levels beaten by an AI squad), `node tests/e2e/lab.mjs <url>` (AI Test Lab report: animation states, foot sliding, wall penetration, physics, effects, sounds, perf)
 
 ## Online
 `api/net.js` is a Node function on Vercel. It handles presence, squad listing and WebRTC signalling for the campaign co-op, for both the web build and the Windows app. Gameplay traffic goes peer-to-peer over WebRTC data channels, with a host-authoritative simulation and client-side prediction. If a direct connection can't be made, traffic is relayed through the Vercel node at a reduced rate. Lobby state lives in the function's memory, or in Upstash Redis when `KV_REST_API_URL` / `KV_REST_API_TOKEN` are set. If the node can't be reached, the client falls back to public MQTT brokers.

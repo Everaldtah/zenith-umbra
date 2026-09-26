@@ -5,11 +5,14 @@ import type { Actor } from '../game/Actor';
 import { Animator, type AnimState } from './Animator';
 import { heroModel } from './Assets';
 import { animLib, animLibrary } from './ClipLibrary';
-import { buildHammer, buildBlaster, type HammerProp } from './Hammer';
+import { buildHammer, buildBlaster, buildChaingun, type HammerProp, type ChaingunProp } from './Hammer';
 
 const BRIGHT_SUITS = new Set(['mirei']);
-const _jp = new THREE.Vector3();
+const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
+/** speed (m/s) above which fast moves smear (Davis GDC17: stretch the mesh along its motion - automated smear frames) */
+const SMEAR_FROM = 12;
 import { skinsFor, type Skin } from '../data/skins';
+import { FULL } from '../edition';
 
 const rimChunk = `
   float zuRim = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 2.5);
@@ -62,6 +65,7 @@ export function lookUniforms(rim: THREE.Color): LookUniforms {
     zuRemap: { value: 0 }, zuSrc1: { value: new THREE.Vector2(0, 0.5) }, zuSrc2: { value: new THREE.Vector2(0.5, 0.5) },
     zuDst1: { value: new THREE.Color('#ffffff') }, zuDst2: { value: new THREE.Color('#ffffff') }, zuNeutral: { value: new THREE.Color('#ffffff') },
     zuHas1: { value: 0 }, zuHas2: { value: 0 }, zuMetal: { value: 0 }, zuKeepSkin: { value: 1 }, zuHeadY: { value: 1e9 }, zuHeadBand: { value: 0.01 },
+    zuSmear: { value: new THREE.Vector3() },
   };
 }
 export function applySkin(u: LookUniforms, s: Skin) {
@@ -111,7 +115,10 @@ export function addLook(mat: THREE.Material, u: LookUniforms) {
   (m as any).__look = true;
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'varying vec3 zuWorld; varying float zuBindY;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nzuWorld = (modelMatrix * vec4(transformed, 1.0)).xyz; zuBindY = position.y;');
+    sh.vertexShader = 'uniform vec3 zuSmear;\nvarying vec3 zuWorld; varying float zuBindY;\n' + sh.vertexShader
+      // smear frames: surfaces facing away from the motion are dragged back along it (streaky, like drawn speed lines)
+      .replace('#include <skinning_vertex>', '#include <skinning_vertex>\n{ float zsl = length(zuSmear); if (zsl > 1e-4) { vec3 zsd = zuSmear / zsl; float zk = smoothstep(0.3, 0.95, dot(normalize(objectNormal), zsd)); transformed += zuSmear * zk * (0.75 + 0.25 * sin(position.y * 6.0 + position.x * 4.0)); } }')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nzuWorld = (modelMatrix * vec4(transformed, 1.0)).xyz; zuBindY = position.y;');
     sh.fragmentShader = 'uniform vec3 zuRimColor; uniform float zuRimStrength; uniform float zuHue; uniform float zuSat; uniform float zuVal; uniform vec3 zuTint; uniform float zuTintAmt; uniform float zuGlow; uniform float zuPattern; uniform vec3 zuPatternColor; uniform float zuTime;\n'
       + 'uniform float zuRemap; uniform vec2 zuSrc1; uniform vec2 zuSrc2; uniform vec3 zuDst1; uniform vec3 zuDst2; uniform vec3 zuNeutral; uniform float zuHas1; uniform float zuHas2; uniform float zuMetal; uniform float zuKeepSkin; uniform float zuHeadY; uniform float zuHeadBand;\nvarying vec3 zuWorld; varying float zuBindY;\nfloat zuAccentW = 0.0;\n'
       + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + skinChunk).replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + rimChunk)
@@ -196,6 +203,11 @@ export class CharacterView {
   /** the hero this view was built for: the World swaps defs (mech <-> pilot), and the view is rebuilt then */
   defId: string;
   jets: THREE.Mesh[] = [];
+  /** twin chaingun props [left, right] (heroes with dualGuns) */
+  guns: ChaingunProp[] = [];
+  /** first-person viewmodels don't smear (the camera rides the motion) */
+  noSmear = false;
+  private spinA = [0, 0];
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
@@ -212,6 +224,7 @@ export class CharacterView {
     this.anim = new Animator(this.model);
     this.hookStep();
     this.attachClips();
+    this.attachGuns(this.anim, this.model);
     this.collectMats();
     const sg = new THREE.SphereGeometry(1, 24, 16);
     this.shieldMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: actor.def.glow, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -240,6 +253,31 @@ export class CharacterView {
   setSkin(id: string) {
     const s = skinsFor(this.actor.def.id, this.actor.def.team).find(x => x.id === id);
     if (s) { this.skin = s; applySkin(this.look, s); }
+  }
+
+  /** twin chainguns: model-space props the animator lays along the forearms each frame */
+  private attachGuns(anim: Animator, root: THREE.Object3D) {
+    for (const g of this.guns) g.group.parent?.remove(g.group);
+    this.guns = [];
+    if (!this.actor.def.dualGuns || !anim.ok) { anim.guns = null; return; }
+    this.guns = [buildChaingun(anim.height, 'L'), buildChaingun(anim.height, 'R')];
+    for (const g of this.guns) g.group.scale.setScalar(1.25);          // concept-sized: they're half as long as he is tall
+    for (const g of this.guns) root.add(g.group);
+    anim.guns = [this.guns[0].group, this.guns[1].group];
+  }
+
+  /** barrels spin with each gun's spin-up, the muzzles flash on their own rounds, the cores glow hotter while firing */
+  updateGuns(dt: number, time: number) {
+    if (!this.guns.length) return;
+    const a = this.actor;
+    for (let i = 0; i < 2; i++) {
+      const g = this.guns[i], spin = (i === 0 ? a.sv.spin1 : a.sv.spin2) ?? 0, age = time - (i === 0 ? a.anim.fireL : a.anim.fireR);
+      this.spinA[i] += dt * spin * 38 * (i === 0 ? 1 : -1);
+      g.spin.rotation.z = this.spinA[i];
+      g.flash.visible = age < 0.045 && a.alive;
+      if (g.flash.visible) { g.flash.rotation.z = Math.random() * Math.PI; g.flash.scale.setScalar(0.7 + Math.random() * 0.6); }
+      g.core.emissiveIntensity = 2.2 + spin * 2.5 + (a.has('dohyo', time) ? 1.5 : 0);
+    }
   }
 
   /** Quaternius UAL / Mixamo clip library (public/anim): drives the body wherever it has a clip */
@@ -307,6 +345,7 @@ export class CharacterView {
       gun.scale.setScalar(1.5);
       anim.bones.hand_R.add(gun);
     }
+    this.attachGuns(anim, m);
     // foot thrusters (flight): additive flame cones placed under the feet while flying
     if (this.actor.def.jets && anim.ok) {
       for (let i = 0; i < 2; i++) {
@@ -358,13 +397,24 @@ export class CharacterView {
     }
   }
 
+  /** model-space direction to whoever hit us last (x = the character's left, z = front) */
+  private hitDir(): [number, number] | undefined {
+    const a = this.actor, b = a.lastHitBy;
+    if (!b) return undefined;
+    const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, l = Math.hypot(dx, dz);
+    if (l < 1e-3) return undefined;
+    const cy = Math.cos(a.yaw), sy = Math.sin(a.yaw);
+    return [(dx * cy - dz * sy) / l, (dx * sy + dz * cy) / l];
+  }
+
   /** gameplay state -> animation state */
   private animState(dt: number, time: number): AnimState {
     const a = this.actor, an = a.anim;
     const p = a.def.primary;
     return {
       dt, time, vel: new THREE.Vector3(a.vel.x, a.vel.y, a.vel.z), yaw: a.yaw, pitch: a.pitch,
-      grounded: a.grounded, flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
+      // a swoop skimming the floor is still flight (no running gait at 20 m/s)
+      grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
@@ -372,6 +422,11 @@ export class CharacterView {
       hammer: !!this.hammer, swingSide: an.attackSide,
       move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
+      hero: a.def.id,
+      hitDir: this.hitDir(), knocked: !!a.forced && (a.forced.kind === 'knock' || a.forced.kind === 'pull'),
+      swoop: a.has('swoop', time) ? a.sv.swoopProg ?? 0 : -1, swoopFlare: a.has('swoopflare', time) ? 0.4 - (a.st.swoopflare - time) : 9,
+      superjump: a.has('superjump', time), slingshot: a.has('slingshot', time), rush: a.has('tachiai', time),
+      dual: a.def.dualGuns ? { fireL: time - a.anim.fireL, fireR: time - a.anim.fireR } : undefined,
       reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
       attackTime: an.attackKind === 'primary' ? 1 / Math.max(0.1, p.rate) : 'rate' in a.def.secondary ? 1 / Math.max(0.1, a.def.secondary.rate) : 0.6,
     };
@@ -382,7 +437,8 @@ export class CharacterView {
     this.look.zuTime.value = time;
     this.group.position.set(a.pos.x, a.pos.y, a.pos.z);
     this.group.rotation.y = a.yaw;
-    this.inner.scale.setScalar(a.scale);
+    this.inner.scale.setScalar(a.scale); this.inner.quaternion.identity(); this.inner.position.set(0, 0, 0);
+    this.look.zuSmear.value.set(0, 0, 0);
     // death: a death clip when the library has one (the body crumples, then sinks), else tip over and sink
     if (!a.alive && this.anim.clipDeath) {
       const age = time - a.deathAt;
@@ -404,7 +460,6 @@ export class CharacterView {
       return;
     }
     this.group.visible = true;
-    this.inner.rotation.x = 0; this.inner.position.y = 0;
     // stealth: allies see a ghost, enemies a faint shimmer (or nothing)
     const stealth = a.has('stealth', time);
     const seen = viewer.sees(a);
@@ -438,6 +493,14 @@ export class CharacterView {
     }
     // animation
     this.anim.update(this.animState(dt, time));
+    // performance layer: squash & stretch (about the feet) and the whole-body tilt (about the hips)
+    const an2 = this.anim, piv = a.height * 0.55;
+    this.inner.scale.set(a.scale * an2.sqXZ, a.scale * an2.sqY, a.scale * an2.sqXZ);
+    this.inner.quaternion.setFromEuler(new THREE.Euler(an2.tilt.pitch, 0, an2.tilt.roll, 'XZY'));
+    _jp.set(0, piv, 0).applyQuaternion(this.inner.quaternion);
+    this.inner.position.set(-_jp.x, piv - _jp.y, -_jp.z);
+    this.smear();
+    this.updateGuns(dt, time);
     const an = a.anim;
     if (this.hammer) {
       // rocket thruster: roars through the swing, the sun cores flare on impact
@@ -460,6 +523,22 @@ export class CharacterView {
         f.scale.set(a.scale, k * 1.1, a.scale);
       }
     }
+  }
+
+  /** smear frames on fast moves: the trailing surfaces are dragged back along the velocity (mesh space) */
+  private smear() {
+    const a = this.actor, u = this.look.zuSmear.value as THREE.Vector3;
+    const sp = Math.hypot(a.vel.x, a.vel.y, a.vel.z);
+    if (!FULL || this.noSmear || sp < SMEAR_FROM || !a.alive) { u.set(0, 0, 0); return; }
+    let mesh: THREE.Object3D | null = null;
+    this.model.traverse(o => { if (!mesh && (o as THREE.SkinnedMesh).isSkinnedMesh) mesh = o; });
+    if (!mesh) { u.set(0, 0, 0); return; }
+    const amt = Math.min(0.28, (sp - SMEAR_FROM) / 14 * 0.28);          // metres of drag at the trailing edge (subtle: a hint, not a tear)
+    _sv.set(-a.vel.x, -a.vel.y, -a.vel.z).multiplyScalar(amt / sp);
+    // world -> mesh local (rotation and scale only)
+    (mesh as THREE.Object3D).updateWorldMatrix(true, false);
+    _m3.setFromMatrix4((mesh as THREE.Object3D).matrixWorld).invert();
+    u.copy(_sv.applyMatrix3(_m3));
   }
 
   dispose() {
