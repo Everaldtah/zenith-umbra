@@ -140,8 +140,8 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
 
 export function updateWeapons(w: World, a: Actor, dt: number) {
   const t = w.time, P = a.def.primary, inp = a.input;
-  if (a.reloadUntil && t >= a.reloadUntil) { a.reloadUntil = 0; a.ammo = P.ammo ?? 0; }
-  if (P.ammo && inp.reload && a.ammo < P.ammo && !a.reloadUntil && P.kind !== 'charge') { a.reloadUntil = t + (P.reload ?? 1.5); w.sfx('reload', a.pos, a); }
+  if (a.reloadUntil && t >= a.reloadUntil) { a.reloadUntil = 0; a.ammo = a.maxAmmo; }
+  if (P.ammo && inp.reload && a.ammo < a.maxAmmo && !a.reloadUntil && P.kind !== 'charge') { a.reloadUntil = t + a.reloadTime(P.reload ?? 1.5); w.sfx('reload', a.pos, a); }
   const S = a.def.secondary;
   // ---- secondary holds
   if (isAbility(S)) {
@@ -154,21 +154,21 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
   }
   const busy = a.barrier.up || (a.forced && a.forced.kind !== 'knock' && a.forced.kind !== 'pull');
   // ---- quick melee (interrupts a reload, not a wind-up already in flight)
-  if (inp.melee && !busy && t >= a.nextMelee && t >= a.nextShot - (1 / P.rate) * 0.5) { quickMelee(w, a); a.nextShot = Math.max(a.nextShot, t + 0.35); }
+  if (inp.melee && !busy && t >= a.nextMelee && t >= a.nextShot - (1 / a.rate(P.rate)) * 0.5) { quickMelee(w, a); a.nextShot = Math.max(a.nextShot, t + 0.35); }
   // ---- primary
   if (P.kind === 'charge') {
     if (inp.fire && !busy && t >= a.nextShot) { if (!a.charging) w.sfx('bowdraw', a.pos, a); a.charging = true; a.charge = Math.min(1, a.charge + dt / 0.9); }
     else if (a.charging) {
       a.charging = false;
       if (!busy) fire(w, a, P, 'primary', 0.3 + 0.7 * a.charge);
-      a.charge = 0; a.nextShot = t + 1 / P.rate * 0.6;
+      a.charge = 0; a.nextShot = t + 1 / a.rate(P.rate) * 0.6;
     }
   } else if (P.kind === 'beam') {
     const on = inp.fire && !busy;
     if (on && !a.flameOn) w.sfx('flamestart', a.pos, a);
     a.flameOn = on;
     if (on && t >= a.nextShot) {
-      a.nextShot = t + 1 / P.rate;
+      a.nextShot = t + 1 / a.rate(P.rate);
       a.anim.attackAt = t; a.anim.attackKind = 'primary';
       breakStealth(w, a);
       const range = P.range * (a.has('asura', t) ? 1.5 : 1) * a.scale;
@@ -186,8 +186,8 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
   } else if (inp.fire && !busy && t >= a.nextShot && !a.reloadUntil && P.damage > 0) {
     if (!P.ammo || a.ammo > 0) {
       fire(w, a, P, 'primary');
-      a.nextShot = t + 1 / P.rate;
-      if (P.ammo) { a.ammo--; if (a.ammo <= 0) { a.reloadUntil = t + (P.reload ?? 1.5); w.sfx('reload', a.pos, a); } }
+      a.nextShot = t + 1 / a.rate(P.rate);
+      if (P.ammo) { a.ammo--; if (a.ammo <= 0) { a.reloadUntil = t + a.reloadTime(P.reload ?? 1.5); w.sfx('reload', a.pos, a); } }
     }
   }
   // ---- secondary weapons
@@ -201,13 +201,13 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
         if (tg && !a.beamOn) w.sfx(S.sfx, a.pos, a);
         a.beamTarget = tg; a.beamOn = !!tg;
         if (tg && t >= a.nextAlt) {
-          a.nextAlt = t + 1 / S.rate;
+          a.nextAlt = t + 1 / a.rate(S.rate);
           a.anim.attackAt = t; a.anim.attackKind = 'secondary';
           w.heal(a, tg, S.damage / S.rate, true);
         }
       } else { a.beamOn = false; a.beamTarget = null; }
     } else if (inp.alt && !busy && t >= a.nextAlt) {
-      a.nextAlt = t + 1 / S.rate;
+      a.nextAlt = t + 1 / a.rate(S.rate);
       fire(w, a, S, 'secondary');
     }
   }

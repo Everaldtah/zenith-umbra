@@ -2,6 +2,68 @@
 
 For the next person or agent working on ZENITH//UMBRA animation. It covers the current state, the data behind the decisions, how to verify changes, and what's still open. Branch: `claude/jolly-volta-8xyujb` (commits `2faf268`, `13bc623`).
 
+## 0. Session 2 (2026-09-25, evening): what changed
+
+**Clip library is live** (`public/anim`): Quaternius UAL1 + UAL2 *Standard* (the free tier: 43 clips each) and 38 Mixamo
+clips exported through the user's logged-in session (`work/anim/mixamo/*.fbx`, packed to `mixamo.glb`, git-ignored:
+Mixamo terms forbid redistributing raw files, the game still deploys it from disk). 124 clips.
+- Gaits (measured from the feet): walk x4 (UAL forward + Mixamo back/strafes), jog x8 (Mixamo "Soccer" jog set: all 8
+  directions from one mocap session), run x4. UAL `Sprint_Loop` / `Jog_Fwd_Loop` are excluded: forward-only clips in a
+  gait make strafes mush. Measured speeds match the UAL root-motion pack within 5% (jog 6.41 vs 6.46 leg lengths/s).
+- `manifest.json` pins every slot (`slots`), per-hero overrides (`heroes`: Enra melees with his fists, Yuzu/Kagemaru
+  dodge), per-ability clips (`casts`, 17 abilities with their own gesture + in-game duration) and hand trims (`trim`).
+- **One-shots are trimmed** (`trimAction` in `ClipLibrary.ts`): gestures keep the rise into the key pose + <=0.25 s hold
+  (Mixamo casts carry 1-3 s of idle), player moves get ~2 frames of lead-in (no anticipation on a button press),
+  jumps start at the bottom of the crouch, deaths keep their end. Blend-out 0.2 s replaces the clip's walk back to idle.
+- Reload has a third-person slot (`Pistol_Reload`, time-scaled to the weapon's reload); casts / throws / punches / blocks
+  own the legs while standing still (`STANCE`).
+- Wrist: clip hand rotation is swing-only (twist about the forearm dropped, bend clamped to 40 deg). Mocap forearm roll
+  spun sleeves and held weapons around the arm.
+
+**Skin weights come from UniRig** (VAST-AI, MIT; `assetgen/modal_unirig.py` on a Modal A10G, ~1 min/hero): the neural
+model predicts weights for OUR skeleton (all rig_hero bone names and spring chains). The geodesic-voxel solve put ~21%
+of Kaien's body on the hand bones (sleeves) and robe panels on the hair chain; mocap tore them apart.
+`export_clean.py` (strip the importer's Icosphere bone shape - UniRig takes every mesh!) -> modal -> `apply_skin.py`
+(nearest-face transfer, rigger hard rules re-applied, `--keep-held` keeps weapons rigid on the hand).
+`python build_assets.py --unirig` does all of it after rigging (mechs keep rigid hard-surface weights).
+
+**First person (Overwatch rules)**
+- Arms-only viewmodel (`armsOnly` in `FirstPerson.ts`): only triangles skinned >=55% to upperarm/forearm/hand are drawn -
+  the equivalent of a dedicated first-person arms model. Collars, pauldrons and hair can't fill the screen.
+- `assetgen/blender/fp_choreo.py`: every hero's clip set as key poses + timing curves (snap / back / io / out), clip
+  lengths from gameplay (fire fits between shots, reload == reload time), off-hand reloads, reticle kept clear.
+  `fp_arms.py` samples it per frame, solves wrists in view space against the IK pose (per frame), bakes.
+  `python assetgen/bake_fp.py` bakes every hero. New clips: `fp_fire2` (alternating swings), `fp_beam` (held beams),
+  `fp_draw` (scrubbed by bow charge), `fp_inspect` (7 s idle), `fp_equip` (spawn).
+- Fixed in `fp_arms.py`: `view0` closed over `eye` and the rig offset was applied twice (every target ~0.14 m too
+  low/left, out of reach); the IK pole angle was a constant -90 deg (only right for one set of bone rolls - elbows
+  flipped up over the camera after any Blender round trip; now computed per rig); IK stretch baked a UNIFORM bone scale
+  (1.2-2.15x) - disabled.
+
+**Modes**: PLAY VS AI -> NORMAL (first person, V locked) or STADIUM (third person, V locked; `src/game/stadium.ts`):
+first to 4 round wins, round = fast control point (120 s), cash from damage / healing / eliminations / assists + round
+result (loser gets more), Armory between rounds (`src/client/Armory.ts`): 17 items in weapon / ability / survival x
+common / rare / epic, 6 slots, full-refund sell; 6 powers per hero built from its own kit, one pick on rounds 1/3/5/7.
+Stats flow through `Actor.mods` (zero outside Stadium). Tests: `tests/unit/stadium.test.ts`, `tests/e2e/modes.mjs`.
+
+**Art: the hero-shooter look** (see README "How the art was made")
+- Concepts restyled with Qwen-Image-Edit-2511 (Apache-2.0) on a Modal A100-80GB (`assetgen/modal_restyle.py`):
+  adult heroic proportions (the first pass came out chibi - the prompt now says "seven and a half heads, never
+  childlike"), clean bevelled forms, painted colour blocks, expressive faces. Style words only - no brand names, no
+  models trained on another studio's characters.
+- TRELLIS.2 at the 1536 cascade, native bf16, 4K texture, remeshed (`assetgen/modal_trellis2.py`, ~2-6 min/hero).
+- `ow_finish.py`: face projection from the 4x Real-ESRGAN concept (`modal_upscale.py`; brow-to-chin ellipse,
+  foreground-weighted) + `blender/owpaint.py` (baked AO, painted edge highlights as a multiplicative lift - a screen
+  blend turned black hair grey - and a head-to-toe value gradient).
+- Heroes are 45k tris (mechs 70k), 2K textures on the web, 4K on desktop.
+- Skins are palette recolours of the costume (primary / accent hue measured from each texture at load, neutrals
+  tinted, skin tones and the head above the chin line untouched; legendary accents turn metallic).
+- Tone mapping: Khronos PBR Neutral (ACES washed out / hue-shifted the painted colours).
+
+**Bug worth remembering**: a dangling `else` (`if (!frozen) for (...) if (alive) think(); else zeroInputs()`) bound to
+the inner `if` and wiped every actor's input whenever anyone was dead. Only the campaign sims caught it (squads kept
+wiping on bosses); the e2e run never had a death. Always brace nested for/if/else.
+
 ## 1. How it works
 
 ```
@@ -108,15 +170,15 @@ Targets were retuned so the wrists sit around −0.55…−0.9. Raijin needs `cl
 
 ## 5. Open work (priority order)
 
-1. **Get the real clips in.** itch.io is blocked by this environment's network policy, and Mixamo needs an Adobe login, so the user must download them: UAL1 and UAL2 (CC0) from quaternius.itch.io/universal-animation-library(-2), Mixamo as *FBX Binary, Without Skin, 30 fps, In Place*. Then run `anim_pack.py` (README "Animation library"), load the game, check the console line `[anim] N clips ... gaits ... slots ...`, and check the Hero Viewer's `clip:` readout per state. Expect to tune:
-   - `slotOf()` regexes in `ClipLibrary.ts` against the real UAL clip names (they were written against guessed names like `Jog_Fwd_Loop`, `Sword_Combo_1`, `Death01`). Use manifest `"slots"` / `"exclude"` for one-offs.
-   - `VARIANT` exclusions (weapon / crouch / injured locomotion).
-   - `CAST_SLOT` (ability → clip) and `TARGET` durations in `ClipLayer.ts`.
-   - Arm weight vs weapon guard: `wArm` in `Animator.ts` uses `(1 - readyW*0.8)`. Gun heroes keep a procedural ready stance over clip arms.
-2. **Tune the viewmodels on a real GPU.** Walk each hero through idle / fire / alt / melee / reload / abilities / ult in first person (V toggles view), adjusting `FP_STYLE` and mirroring the change in `fp_arms.py` (the test enforces the match). Then author per-hero clips with `fp_arms.py`; only Raijin has a set, and it's a test fixture, not shipped in `public/anim`.
-3. **Check Yuzu, Mirei and the mechs' arm rigs** (§3 table) and fix them with `fix_arms.py` if the joints are wrong.
-4. **Desktop HQ Raijin model:** apply the same fix (§3).
-5. Optional: stretch the viewmodel arms (bone scale) for short-armed heroes instead of relying only on the rig offset.
+1. **Hand-polish the first-person clips** in `work/fp/fp_<hero>.blend` (made by `assetgen/bake_fp.py`): the choreography in
+   `fp_choreo.py` is a strong first pass, per-hero wrist angles especially need eyes on a real GPU (`tests/e2e/fp_strip.mjs`).
+2. **Mixamo gap-fillers still worth getting**: turn-in-place steps are in the pack but unused (the procedural re-step
+   handles turning); crouch and sprint strafes would allow a sprint gait again.
+3. **Faces**: masked / helmeted heroes (Hex, Kagemaru, Enra) and the mechs keep their sculpted faces; a second face pass
+   could paint emissive eye slits on the masks.
+4. **Epic / legendary skins** are recolours + effects; bespoke legendary models would go through the same
+   restyle -> TRELLIS.2 -> finish -> rig pipeline with a themed prompt.
+5. Desktop HQ models now come from the same rigs (4K textures): rebuild them after any rig change with `build_assets.py`.
 
 ## 6. Pitfalls already hit (don't repeat)
 

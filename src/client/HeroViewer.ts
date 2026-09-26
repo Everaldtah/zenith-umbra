@@ -21,7 +21,7 @@ const EXTRA: HeroDef[] = [
   ...Object.values(ENEMIES).map(e => ({ ...e, lore: `${e.title}: one of the Star-Forger's mass-produced robots in Operation Starfall.` })),
 ];
 const ALL: Record<string, HeroDef> = Object.fromEntries([...HEROES, ...EXTRA].map(h => [h.id, h]));
-type AnimMode = 'idle' | 'walk' | 'run' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
+type AnimMode = 'idle' | 'walk' | 'run' | 'strafe' | 'back' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit';
 
 export class HeroViewer {
   root: HTMLElement;
@@ -50,7 +50,7 @@ export class HeroViewer {
         <h3>PILOTS &amp; CAMPAIGN</h3><div class="vrow">${EXTRA.map(h => this.chip(h)).join('')}</div>
       </div>
       <div class="vstage"><div class="vname"></div>
-        <div class="vanims">${(['idle', 'walk', 'run', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
+        <div class="vanims">${(['idle', 'walk', 'run', 'strafe', 'back', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
         <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div><div class="vhint vclip" style="bottom:auto;top:12px"></div></div>
       <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
     host.append(this.root);
@@ -58,7 +58,7 @@ export class HeroViewer {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMapping = THREE.NeutralToneMapping; this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.stage.prepend(this.renderer.domElement);
     this.buildStudio();
@@ -133,7 +133,7 @@ export class HeroViewer {
     if (!HERO[this.id]) { wrap.innerHTML = '<h4>SKINS</h4><p class="dim">Skins are available for the ten playable heroes.</p>'; return; }
     const eq = equippedSkin(this.id);
     const cur = this.view!.skin.id;
-    wrap.innerHTML = `<h4>SKINS</h4>` + skinsFor(this.id, def.team).map(s => `<button class="skin r-${s.rarity.toLowerCase()} ${s.id === cur ? 'sel' : ''}" data-s="${s.id}"><i style="background:linear-gradient(135deg, ${s.tintAmt ? s.tint : def.color}, ${s.pattern ? s.patternColor : '#222'})"></i><span>${s.name}<small>${s.rarity}${s.id === eq ? ' · EQUIPPED' : ''}</small></span></button>`).join('')
+    wrap.innerHTML = `<h4>SKINS</h4>` + skinsFor(this.id, def.team).map(s => `<button class="skin r-${s.rarity.toLowerCase()} ${s.id === cur ? 'sel' : ''}" data-s="${s.id}"><i style="background:linear-gradient(135deg, ${s.primary ?? def.color}, ${s.accent ?? (s.pattern ? s.patternColor : '#222')})"></i><span>${s.name}<small>${s.rarity}${s.id === eq ? ' · EQUIPPED' : ''}</small></span></button>`).join('')
       + `<button class="primary equip">EQUIP SELECTED</button>`;
     wrap.querySelectorAll<HTMLElement>('.skin').forEach(b => b.onclick = () => { this.view!.setSkin(b.dataset.s!); sfx.play('ui_click'); this.renderSkins(); });
     (wrap.querySelector('.equip') as HTMLElement).onclick = () => { equipSkin(this.id, this.view!.skin.id); sfx.play('capture'); this.renderSkins(); };
@@ -159,10 +159,11 @@ export class HeroViewer {
     if (this.auto) this.yaw += dt * 0.35;
     // drive the actor state for the chosen animation (treadmill: the actor walks, the stage keeps it centred)
     const m = this.mode, T = this.t;
-    const speed = m === 'walk' ? a.def.speed * 0.45 : m === 'run' || m === 'fly' ? a.def.speed : 0;
+    const speed = m === 'walk' ? a.def.speed * 0.45 : m === 'run' || m === 'fly' || m === 'strafe' || m === 'back' ? a.def.speed : 0;
     a.yaw = 0; a.input.yaw = 0; a.pitch = 0;
-    a.vel = { x: 0, y: 0, z: speed };
-    a.pos.z += speed * dt;
+    // strafe: sideways to the character's left; back: backpedal (the 8-way blend space)
+    a.vel = m === 'strafe' ? { x: speed, y: 0, z: 0 } : m === 'back' ? { x: 0, y: 0, z: -speed } : { x: 0, y: 0, z: speed };
+    a.pos.x += a.vel.x * dt; a.pos.z += a.vel.z * dt;
     a.grounded = m !== 'jump' && m !== 'fly'; a.flying = m === 'fly' && (a.def.frame === 'flyer' || a.def.frame === 'drone' || !!a.def.jets);
     if (m === 'jump') { const p = (T % 1.2) / 1.2; a.pos.y = Math.sin(p * Math.PI) * 1.4; a.vel.y = Math.cos(p * Math.PI) * 6; a.grounded = p > 0.97; if (p < 0.05) a.anim.jumpAt = T; if (p > 0.97) a.anim.landAt = T; }
     else if (m === 'fly') { a.pos.y = 1.2 + Math.sin(T * 1.5) * 0.2; a.vel.y = Math.cos(T * 1.5) * 0.3; }

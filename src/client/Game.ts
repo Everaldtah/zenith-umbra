@@ -20,6 +20,7 @@ import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
 import { FirstPersonArms } from '../render/FirstPerson';
+import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
 import { loadManifest } from '../render/Assets';
@@ -34,6 +35,9 @@ import { PRESETS, IS_DESKTOP, type Settings } from './Settings';
 const DT = 1 / (IS_DESKTOP ? 120 : 60);
 
 export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; }
+
+/** modes whose camera is fixed (Overwatch 2 style): Normal matches in first person, Stadium in third person */
+const FIXED_VIEW: Partial<Record<string, 'first' | 'third'>> = { skirmish: 'first', stadium: 'third' };
 
 export class Game {
   renderer: THREE.WebGLRenderer;
@@ -78,8 +82,10 @@ export class Game {
     const q = PRESETS[settings.preset];
     this.renderer = new THREE.WebGLRenderer({ antialias: q.antialias, powerPreference: 'high-performance', stencil: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    // Khronos PBR Neutral: keeps painted base colours true and saturated (ACES desaturates and hue-shifts the
+    // highlights) - the punchy, clean hero-shooter palette
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = q.shadows > 0;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     host.append(this.renderer.domElement);
@@ -92,7 +98,8 @@ export class Game {
     addEventListener('resize', () => this.resize());
     this.renderer.domElement.addEventListener('click', () => { sfx.unlock(); if (this.running && !this.paused && this.match?.player) this.input.lock(); });
     document.addEventListener('pointerlockchange', () => {
-      if (!document.pointerLockElement && this.running && this.match?.player && !this.match.world.winner) this.setPaused(true);
+      // losing the mouse pauses the match - except in the Stadium Armory, which frees the cursor on purpose
+      if (!document.pointerLockElement && this.running && this.match?.player && !this.match.world.winner && !this.armory?.open) this.setPaused(true);
     });
     (window as any).__zu = { ...(window as any).__zu, game: this };
     requestAnimationFrame(t => this.loop(t));
@@ -166,6 +173,24 @@ export class Game {
     if (this.match.player) this.input.lock();
   }
 
+  /** the camera for this match: fixed by the mode (Normal = first person, Stadium = third person), else the setting */
+  get view(): 'first' | 'third' { const m = this.match?.world.mode; return (m && FIXED_VIEW[m]) || this.settings.view; }
+
+  armory: Armory | null = null;
+  /** Stadium: open the Armory between rounds (cursor free), close and re-grab the mouse when the round starts */
+  private updateArmory(w: WorldCls, me: Actor | null) {
+    const S = w.stadium;
+    if (!S || !me || this.paused) { if (this.armory?.open) this.armory.hide(); return; }
+    this.armory ??= new Armory(this.host);
+    this.armory.onClose = () => { if (this.running && !this.paused) this.input.lock(); };
+    const want = S.phase === 'armory' && !S.ready.has(me.id);
+    if (want && !this.armory.open) { this.input.unlock(); this.armory.show(w, me); }
+    if (!want && this.armory.open) { this.armory.hide(); this.input.lock(); }
+    // shopping needs the cursor: a locked pointer would send every click to the canvas
+    if (this.armory.open && this.input.locked) this.input.unlock();
+    this.armory.update();
+  }
+
   private addView(a: Actor, viewerTeam: string) {
     const v = new CharacterView(a, viewerTeam, a.isPlayer ? equippedSkin(a.def.id) : 'classic');
     v.onStep = (act, _side, heavy) => {
@@ -179,6 +204,7 @@ export class Game {
 
   stop() {
     this.running = false;
+    this.armory?.hide();
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
     this.fp?.dispose(); this.fp = null;
@@ -191,7 +217,7 @@ export class Game {
 
   setPaused(p: boolean) {
     this.paused = p;
-    if (p) this.input.unlock(); else if (this.match?.player) this.input.lock();
+    if (p) this.input.unlock(); else if (this.match?.player && !this.armory?.open) this.input.lock();
     this.onPause?.(p);
   }
 
@@ -223,7 +249,9 @@ export class Game {
     const online = !!(this.clientSync || this.hostSync);
     // ---- input
     if (this.input.once('Escape') && me && !this.paused) this.setPaused(true);
-    if (this.input.once(KEYS.view)) { this.settings.view = this.settings.view === 'third' ? 'first' : 'third'; }
+    // Normal matches are first person and Stadium third person (as in Overwatch 2); elsewhere V toggles
+    if (this.input.once(KEYS.view) && !FIXED_VIEW[w.mode]) { this.settings.view = this.settings.view === 'third' ? 'first' : 'third'; }
+    this.updateArmory(w, me);
     if (w.mode === 'training' && me && !this.paused && this.input.once(KEYS.swap)) { this.paused = true; this.input.unlock(); (window as any).__zu.openSwap?.(); }
     if (!me && !online) this.spectatorKeys();
     // ---- simulate (a shared co-op world never pauses)
@@ -257,10 +285,10 @@ export class Game {
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);
-      if (a === me && this.settings.view === 'first') v.group.visible = false;
+      if (a === me && this.view === 'first') v.group.visible = false;
     }
     // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
-    const wantFp = !!me && me.alive && this.settings.view === 'first' && !me.sv.zoom && !this.bossCam;
+    const wantFp = !!me && me.alive && this.view === 'first' && !me.sv.zoom && !this.bossCam;
     if (this.fp && (!me || this.fp.actor !== me || this.fp.defId !== me.def.id)) { this.fp.dispose(); this.fp = null; }
     if (wantFp && !this.fp) this.fp = new FirstPersonArms(me!, equippedSkin(me!.def.id));
     if (this.fp && wantFp) {
@@ -344,7 +372,7 @@ export class Game {
 
   /** third person: find what the crosshair covers and aim the hero's eye at it (so shots land on the reticle) */
   private solveAim(me: Actor) {
-    if (this.settings.view === 'first') return { yaw: this.camYaw, pitch: this.camPitch };
+    if (this.view === 'first') return { yaw: this.camYaw, pitch: this.camPitch };
     const w = this.match!.world;
     const cp = this.cameraPose(me, this.camYaw, this.camPitch);
     const d = { x: Math.sin(this.camYaw) * Math.cos(this.camPitch), y: Math.sin(this.camPitch), z: Math.cos(this.camYaw) * Math.cos(this.camPitch) };
@@ -383,7 +411,7 @@ export class Game {
     const zoomFov = me?.sv.zoom ? 38 : this.settings.fov * 0.75;
     cam.fov += (zoomFov - cam.fov) * Math.min(1, dt * 12); cam.updateProjectionMatrix();
     if (me) {
-      if (this.settings.view === 'first' || !me.alive && false) {
+      if (this.view === 'first' || !me.alive && false) {
         const e = me.eye; cam.position.set(e.x, e.y, e.z);
       } else cam.position.copy(this.cameraPose(me, this.camYaw, this.camPitch));
       if (!me.alive) {

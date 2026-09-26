@@ -28,13 +28,16 @@ nose, el, er = np.array(pts['nose'][:2]), np.array(pts['ear_l'][:2]), np.array(p
 ear_d = float(np.linalg.norm(el - er))
 concept = Image.open(a.concept).convert('RGB')
 CW, CH = concept.size
-cx, cy = nose[0] * CW, (nose[1] - 0.15 * ear_d) * CH
-rx, ry = 0.62 * ear_d * CW * a.scale, 0.95 * ear_d * CH * a.scale
+# brow to chin: a taller ellipse reached the hairline / collar, where the TRELLIS silhouette and the concept disagree
+# (background grey on the scalp, neck skin on the collar)
+cx, cy = nose[0] * CW, (nose[1] - 0.06 * ear_d) * CH
+rx, ry = 0.56 * ear_d * CW * a.scale, 0.66 * ear_d * CH * a.scale
 print('face ellipse px', round(cx), round(cy), round(rx), round(ry))
 
 # ---- concept foreground bbox
 from rembg import remove, new_session
-alpha = np.asarray(remove(concept, session=new_session('isnet-general-use')).split()[-1]) > 40
+alpha_f = np.asarray(remove(concept, session=new_session('isnet-general-use')).split()[-1]).astype(np.float32) / 255
+alpha = alpha_f > 0.16
 ys, xs = np.where(alpha)
 bx0, bx1, by0, by1 = xs.min(), xs.max(), ys.min(), ys.max()
 
@@ -98,6 +101,9 @@ for f in sel:
     cv2.fillConvexPoly(mask, np.round(d - np.array([x0, y0])).astype(np.int32), 1)
     cv2.polylines(mask, [np.round(d - np.array([x0, y0])).astype(np.int32)], True, 1, 1)
     w = float(np.clip((1 - e[f]) / 0.35, 0, 1))      # full strength in the middle, fading over the outer third
+    # only where the concept is solid foreground (never paint the background onto the head)
+    cxi, cyi = np.clip(s.mean(0).astype(int), 0, [CW - 1, CH - 1])
+    w *= float(np.clip((alpha_f[cyi, cxi] - 0.5) * 4, 0, 1))
     m = mask.astype(np.float32) * w
     acc[y0:y1, x0:x1] += patch * m[..., None]; wacc[y0:y1, x0:x1] += m
 # grow the painted texels a few pixels into the atlas gutters, or bilinear sampling at island borders shows the old

@@ -109,6 +109,7 @@ const R: Record<string, Layer[]> = {
   counter: [{ w: 'square', f: 880, d: 0.08, v: 0.12 }, { w: 'square', f: 1320, d: 0.15, v: 0.12, dl: 0.08 }],
   ult_ready: [{ w: 'sine', f: 660, d: 0.15, v: 0.15 }, { w: 'sine', f: 990, d: 0.25, v: 0.15, dl: 0.12 }],
   ui_click: [{ w: 'triangle', f: 900, f1: 1200, d: 0.05, v: 0.1 }],
+  ui_buy: [{ w: 'sine', f: 1318, d: 0.08, v: 0.12 }, { w: 'sine', f: 1760, d: 0.18, v: 0.12, dl: 0.07 }],
   ui_hover: [{ w: 'sine', f: 1500, d: 0.03, v: 0.04 }],
   kill: [{ w: 'triangle', f: 1046, d: 0.08, v: 0.2 }, { w: 'triangle', f: 1568, d: 0.18, v: 0.2, dl: 0.07 }],
 };

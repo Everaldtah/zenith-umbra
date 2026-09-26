@@ -16,15 +16,17 @@ type V = [number, number, number];     // view space metres: right, up, forward 
 type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun';
 // push: eye forward past a bulky collar / coat (m); clip: cut viewmodel geometry closer than this to the camera (m) -
 // a high collar that would otherwise wrap the view (hands are always further out)
-interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; }
+// keep: how much hand weight a triangle needs to stay in the viewmodel (armsOnly; default 0.75) - raise it for heroes
+// whose sleeve cuffs flare over the hands
+interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; }
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
-  raijin: { grip: 'katana', R: [0.18, -0.12, 0.36], L: [0.06, -0.15, 0.34], recoil: 0, clip: 0.14 },
+  raijin: { grip: 'katana', R: [0.22, -0.17, 0.46], L: [0.08, -0.19, 0.44], recoil: 0, clip: 0.14, keep: 0.97 },
   yuzu: { grip: 'bow', R: [0.0, -0.13, 0.4], L: [-0.06, -0.13, 0.52], recoil: 0 },
-  kaien: { grip: 'caster', R: [0.15, -0.15, 0.37], L: [-0.14, -0.16, 0.34], recoil: 0.03 },
+  kaien: { grip: 'caster', R: [0.19, -0.19, 0.46], L: [-0.19, -0.2, 0.44], recoil: 0.03, keep: 0.97 },
   mirei: { grip: 'caster', R: [0.14, -0.14, 0.38], L: [-0.15, -0.15, 0.35], recoil: 0.02 },
-  nocturne: { grip: 'caster', R: [0.15, -0.14, 0.37], L: [-0.15, -0.16, 0.34], recoil: 0.02 },
+  nocturne: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.14, -0.11, 0.38], recoil: 0.02 },
   hex: { grip: 'caster', R: [0.13, -0.14, 0.38], L: [-0.13, -0.14, 0.38], recoil: 0.025 },
   kagemaru: { grip: 'kunai', R: [0.17, -0.15, 0.34], L: [-0.17, -0.18, 0.32], recoil: 0 },
   enra: { grip: 'fists', R: [0.16, -0.15, 0.36], L: [-0.16, -0.15, 0.36], recoil: 0, push: 0.05 },
@@ -34,7 +36,10 @@ export const FP_STYLE: Record<string, Style> = {
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
-const FP_CLIPS = ['fp_idle', 'fp_fire', 'fp_alt', 'fp_melee', 'fp_reload', 'fp_ability1', 'fp_ability2', 'fp_ult', 'fp_hit', 'fp_land'] as const;
+const FP_CLIPS = ['fp_idle', 'fp_fire', 'fp_fire2', 'fp_alt', 'fp_melee', 'fp_reload', 'fp_ability1', 'fp_ability2', 'fp_ult', 'fp_hit', 'fp_land',
+  'fp_beam', 'fp_draw', 'fp_inspect', 'fp_equip'] as const;
+/** seconds standing idle before the hero shows off (weapon inspect) */
+const INSPECT_AFTER = 7;
 const smooth = (u: number) => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
 const bump = (u: number) => (u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI));
 const lerp = (a: V, b: V, k: number): V => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
@@ -70,6 +75,31 @@ export function viewmodelOffset(an: { rest: Partial<Record<string, { p: THREE.Ve
   return o.clampLength(0, Math.max(0.5 * k, 2 * Math.max(0, ...arms.map(a => a.reach))));
 }
 
+/**
+ * Overwatch-style first-person model: keep only the triangles skinned (mostly) to the arm chain - hands, forearms,
+ * sleeves and whatever the hands carry (weapons are bound to the hand). Torso, collar, shoulder armour, hair and legs
+ * drop out of the viewmodel, so a high collar or a big pauldron can't fill the screen. The geometry is cloned: the
+ * world view of the same hero shares the loaded buffers.
+ */
+export function armsOnly(model: THREE.Object3D, keep = 0.75): { kept: number; total: number } {
+  let kept = 0, total = 0;
+  model.traverse(o => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh || (m.userData.fpArms as boolean)) return;
+    const arm = m.skeleton.bones.map(b => /^(upperarm|forearm|hand)_[LR]$/.test(b.name));
+    const g = m.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+    if (!si || !sw) return;
+    const n = si.count, w = new Float32Array(n);
+    for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < 4; j++) if (arm[si.getComponent(i, j)]) s += sw.getComponent(i, j); w[i] = s; }
+    const src = g.index ? g.index.array : Array.from({ length: n }, (_, i) => i);
+    const out: number[] = [];
+    for (let t = 0; t + 2 < src.length; t += 3) if (w[src[t]] + w[src[t + 1]] + w[src[t + 2]] >= keep * 3) out.push(src[t], src[t + 1], src[t + 2]);
+    total += src.length / 3; kept += out.length / 3;
+    const g2 = g.clone(); g2.setIndex(out); m.geometry = g2; m.userData.fpArms = true;
+  });
+  return { kept, total };
+}
+
 export interface FpInput { dt: number; time: number; yawRate: number; pitchRate: number; aspect: number; }
 
 export class FirstPersonArms {
@@ -86,6 +116,10 @@ export class FirstPersonArms {
   private prev = { attack: 9, cast: 9, hit: 9, land: 9 };
   private swings = 0;
   private oneShot: { name: string; until: number } | null = null;
+  /** last time the hero did anything (fired, cast, reloaded, moved): the inspect flourish waits for a quiet moment */
+  idleSince = 0;
+  private equipped = false;
+  private reloadRate = 1;
   /** the current action source: 'clip:fp_fire' or 'proc:fire' (tests / AI lab) */
   source = '';
 
@@ -114,6 +148,7 @@ export class FirstPersonArms {
       this.eye.copy(R.head!.p).add(new THREE.Vector3(0, H * 0.06, H * 0.05 + (this.style.push ?? 0) / Math.max(1e-6, this.view.scaleFit)));
       this.eye.sub(viewmodelOffset(an, this.eye, this.style, this.view.scaleFit));
     }
+    if (this.real) armsOnly(this.view.model, this.style.keep ?? 0.75);
     // near cut in camera space (the camera sits at the origin looking down +Z): drops a collar wrapped around the eye
     const plane = this.style.clip ? [new THREE.Plane(new THREE.Vector3(0, 0, 1), -this.style.clip)] : null;
     for (const m of this.view.mats) { m.clippingPlanes = plane; m.needsUpdate = true; }
@@ -131,12 +166,12 @@ export class FirstPersonArms {
     if (this.clips.size) this.mixer = new THREE.AnimationMixer(this.view.model);
   }
 
-  private play(name: string, loop: boolean) {
+  private play(name: string, loop: boolean, rate = 1) {
     const c = this.clips.get(name);
     if (!c || !this.mixer) return false;
     if (this.playing?.name === name) return true;
     const a = this.mixer.clipAction(c);
-    a.reset(); a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); a.clampWhenFinished = !loop;
+    a.reset(); a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); a.clampWhenFinished = !loop; a.timeScale = rate;
     if (this.playing) a.crossFadeFrom(this.playing.action, 0.08, false);
     a.play();
     this.playing = { name, action: a };
@@ -171,18 +206,30 @@ export class FirstPersonArms {
     this.view.group.position.set(-(this.eye.x + off.x) * k - bob[0], -(this.eye.y + off.y) * k + bob[1], -(this.eye.z + off.z) * k);
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
     this.view.inner.scale.setScalar(1);
-    // ---- 1. authored clips
+    // ---- 1. authored clips (Overwatch-style: gameplay owns the clock - see assetgen/blender/fp_choreo.py)
     if (this.mixer) {
-      // one-shots run their full clip (a new event restarts / replaces them); otherwise reload or the idle loop
       const kind = a.anim.attackKind;
-      const ev = newCast ? (a.anim.castId === a.def.ult.id ? 'fp_ult' : a.anim.castId === a.def.ability2.id ? 'fp_ability2' : 'fp_ability1')
-        : newAttack ? (kind === 'punch' ? 'fp_melee' : kind === 'secondary' ? 'fp_alt' : 'fp_fire') : newHit ? 'fp_hit' : newLand ? 'fp_land' : '';
+      const busy = newAttack || newCast || a.reloadUntil > t || a.charging || a.beamOn || a.flameOn || sp > 0.5 || !a.grounded;
+      if (busy || !this.equipped) this.idleSince = t;
+      // one-shots run their full clip (a new event restarts / replaces them); swings alternate between two authored cuts
+      const fire = this.swings % 2 === 0 && this.clips.has('fp_fire2') ? 'fp_fire2' : 'fp_fire';
+      let ev = newCast ? (a.anim.castId === a.def.ult.id ? 'fp_ult' : a.anim.castId === a.def.ability2.id ? 'fp_ability2' : 'fp_ability1')
+        : newAttack ? (kind === 'punch' ? 'fp_melee' : kind === 'secondary' ? 'fp_alt' : fire) : newHit ? 'fp_hit' : newLand ? 'fp_land' : '';
+      if (!this.equipped) { this.equipped = true; if (this.clips.has('fp_equip')) ev = 'fp_equip'; }
+      if (!ev && t - this.idleSince > INSPECT_AFTER && this.clips.has('fp_inspect') && !this.oneShot) { ev = 'fp_inspect'; this.idleSince = t; }
       if (ev && this.clips.has(ev) && (ev !== 'fp_hit' && ev !== 'fp_land' || !this.oneShot)) { this.oneShot = { name: ev, until: t + this.clips.get(ev)!.duration }; if (this.playing) this.playing = { ...this.playing, name: '' }; }
-      if (this.oneShot && t >= this.oneShot.until) this.oneShot = null;
-      let want = 'fp_idle', loop = true;
-      if (a.reloadUntil > t && this.clips.has('fp_reload')) { want = 'fp_reload'; loop = false; }
-      if (this.oneShot) { want = this.oneShot.name; loop = false; }
-      if (this.clips.has(want) && this.play(want, loop)) {
+      if (this.oneShot && (t >= this.oneShot.until || (this.oneShot.name === 'fp_inspect' && busy))) this.oneShot = null;
+      let want = 'fp_idle', loop = true, rate = 1, scrub = -1;
+      if ((a.beamOn || a.flameOn) && this.clips.has('fp_beam')) want = 'fp_beam';
+      if (a.charging && this.clips.has('fp_draw')) { want = 'fp_draw'; loop = false; scrub = Math.min(1, Math.max(0, a.charge)); }
+      if (a.reloadUntil > t && this.clips.has('fp_reload')) {
+        // the reload clip is authored at the weapon's reload time: stretch it to the reload actually running
+        if (this.playing?.name !== 'fp_reload') { const left = a.reloadUntil - t; this.reloadRate = Math.min(3, Math.max(0.3, this.clips.get('fp_reload')!.duration / Math.max(0.05, left))); }
+        want = 'fp_reload'; loop = false; rate = this.reloadRate;
+      }
+      if (this.oneShot && !(want === 'fp_reload' && this.oneShot.name === 'fp_inspect')) { want = this.oneShot.name; loop = false; rate = 1; scrub = -1; }
+      if (this.clips.has(want) && this.play(want, loop, rate)) {
+        if (scrub >= 0 && this.playing) { this.playing.action.time = scrub * this.clips.get(want)!.duration; this.playing.action.timeScale = 0; }
         this.mixer.update(dt);
         an.bones.head?.scale.setScalar(1e-3);
         if (an.prop) an.prop.visible = true;

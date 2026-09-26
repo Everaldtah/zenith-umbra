@@ -1,7 +1,17 @@
-// Hero skins: shader-driven recolours of each hero's own texture (hue/saturation/value, tint, glow, legendary pattern).
-export interface Skin { id: string; name: string; rarity: 'Classic' | 'Rare' | 'Epic' | 'Legendary'; hue: number; sat: number; val: number; tint: string; tintAmt: number; glow: number; pattern: number; patternColor: string; }
+// Hero skins: palette recolours of each hero's own painted texture, the way a hero shooter's rare / epic skins work -
+// the COSTUME changes colour (its dominant hue -> primary, its second hue -> accent, whites / blacks -> neutral tint)
+// while skin tones and hair stay the hero's own; epic and legendary skins add emissive trims and animated energy.
+// The costume hues are measured from each model's texture when it loads (CharacterView.analysePalette).
+export interface Skin {
+  id: string; name: string; rarity: 'Classic' | 'Rare' | 'Epic' | 'Legendary';
+  primary: string | null;    // costume's dominant hue -> this colour (null = unchanged)
+  accent: string | null;     // costume's second hue (trims, emblems) -> this colour
+  neutral: string;           // multiplies whites / greys / blacks (cloth, plates): '#ffffff' = unchanged
+  metal: number;             // extra metallic sheen on the accent colour (gold / chrome trims)
+  glow: number; pattern: number; patternColor: string;
+}
 
-const base: Omit<Skin, 'id' | 'name' | 'rarity'> = { hue: 0, sat: 1, val: 1, tint: '#ffffff', tintAmt: 0, glow: 0, pattern: 0, patternColor: '#ffffff' };
+const base: Omit<Skin, 'id' | 'name' | 'rarity'> = { primary: null, accent: null, neutral: '#ffffff', metal: 0, glow: 0, pattern: 0, patternColor: '#ffffff' };
 const S = (id: string, name: string, rarity: Skin['rarity'], o: Partial<Skin>): Skin => ({ ...base, id, name, rarity, ...o });
 
 const NAMES: Record<string, [string, string, string, string]> = {
@@ -15,6 +25,7 @@ const NAMES: Record<string, [string, string, string, string]> = {
   hex: ['Paper Doll', 'Bloom Puppeteer', 'Glitch Theater', 'Void Maestro'],
   kagemaru: ['Snow Fang', 'Falling Petal', 'Neon Shinobi', 'Oni Shadow'],
   enra: ['Ash Oni', 'Spirit Blossom', 'Acid Oni', 'Inferno Lord'],
+  haruto: ['Night Pilot', 'Blossom Ace', 'Arcade Ace', 'Sunforged Ace'],
 };
 
 export function skinsFor(heroId: string, team: 'zenith' | 'umbra'): Skin[] {
@@ -22,12 +33,19 @@ export function skinsFor(heroId: string, team: 'zenith' | 'umbra'): Skin[] {
   const zen = team === 'zenith';
   return [
     S('classic', 'Classic', 'Classic', {}),
-    S('eclipse', n[0], 'Rare', { hue: zen ? 200 : 170, sat: 0.9, val: 0.72, tint: zen ? '#3b4a8a' : '#d8dce8', tintAmt: 0.25 }),
-    S('sakura', n[1], 'Rare', { hue: 0, sat: 0.85, val: 1.08, tint: '#ff9ec4', tintAmt: 0.38 }),
-    S('neon', n[2], 'Epic', { hue: zen ? 130 : 95, sat: 1.45, val: 1, tint: zen ? '#20ffd2' : '#b6ff2a', tintAmt: 0.15, glow: 0.45, pattern: 0.4, patternColor: zen ? '#20ffd2' : '#b6ff2a' }),
+    // rare: a full colourway
+    S('eclipse', n[0], 'Rare', zen
+      ? { primary: '#1c2340', accent: '#9fb2ff', neutral: '#5a6384' }
+      : { primary: '#dfe3ee', accent: '#8f98b3', neutral: '#f4f6ff' }),
+    S('sakura', n[1], 'Rare', { primary: '#f3b8cf', accent: '#e0527f', neutral: '#fff1f6' }),
+    // epic: dark suit, neon trims that glow, a slow scanline
+    S('neon', n[2], 'Epic', zen
+      ? { primary: '#141a26', accent: '#20ffd2', neutral: '#3a4252', glow: 0.55, pattern: 0.4, patternColor: '#20ffd2' }
+      : { primary: '#17121f', accent: '#b6ff2a', neutral: '#3b3346', glow: 0.55, pattern: 0.4, patternColor: '#b6ff2a' }),
+    // legendary: regalia - gold / obsidian, metallic trims, flowing energy
     S('legend', n[3], 'Legendary', zen
-      ? { hue: 0, sat: 0.55, val: 1.08, tint: '#ffd76a', tintAmt: 0.45, glow: 0.3, pattern: 1, patternColor: '#ffe9a0' }
-      : { hue: 0, sat: 0.35, val: 0.45, tint: '#2a0a14', tintAmt: 0.3, glow: 0.2, pattern: 1, patternColor: '#ff2244' }),
+      ? { primary: '#f6efdc', accent: '#ffc83d', neutral: '#fff8e8', metal: 0.8, glow: 0.3, pattern: 1, patternColor: '#ffe9a0' }
+      : { primary: '#16070c', accent: '#ff2244', neutral: '#2a1a20', metal: 0.6, glow: 0.3, pattern: 1, patternColor: '#ff2244' }),
   ];
 }
 

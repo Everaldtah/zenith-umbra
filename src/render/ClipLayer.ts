@@ -19,6 +19,8 @@ export const CAST_SLOT: Record<string, Slot[]> = {
   spiritstep: ['flip', 'dash'], thousandcuts: ['dash', 'melee'], chain: ['throw', 'cast'], marionette: ['cast', 'throw'],
   reveal: ['shoot', 'cast'], hundredsuns: ['cast'], parry: ['block', 'cast'], veil: ['cast'], judgment: ['cast'], asura: ['cast'],
 };
+// upper-body moves that also own the legs while standing still (the stance of a swing, cast or throw)
+const STANCE: Set<Slot> = new Set(['melee', 'cast', 'throw', 'punch', 'block']);
 const FULL: Set<Slot> = new Set(['roll', 'dash', 'slide', 'vault', 'flip', 'jump_start', 'land', 'death', 'stun']);
 // seconds each one-shot should take in game (its clip is time-scaled into this, within limits)
 const TARGET: Partial<Record<Slot, number>> = { punch: 0.42, hit: 0.4, jump_start: 0.3, land: 0.35, roll: 0.55, dash: 0.35, slide: 0.45, flip: 0.7, vault: 0.6, cast: 0.6, throw: 0.55, shoot: 0.35, block: 1.2 };
@@ -43,13 +45,13 @@ export class ClipLayer {
   action: Action | null = null;
   combo = 0;
   private lastMelee = -9;
-  private prev = { attack: 9, cast: 9, hit: 9, jump: 9, land: 9 };
+  private prev = { attack: 9, cast: 9, hit: 9, jump: 9, land: 9, reload: 0 };
   private death: PoseClip | null = null;
   private out: LayerOut = { pose: this.base, legs: 0, torso: 0, armsLoco: 0, armsAction: 0, loco: 0, action: '', clipName: '' };
 
-  constructor(public lib: ClipLibrary, public seed = 0) {}
+  constructor(public lib: ClipLibrary, public seed = 0, public hero = '') {}
 
-  private pick(slot: Slot, i = this.seed): PoseClip | null { const l = this.lib.get(slot); return l.length ? l[((i % l.length) + l.length) % l.length] : null; }
+  private pick(slot: Slot, i = this.seed): PoseClip | null { const l = this.lib.get(slot, this.hero); return l.length ? l[((i % l.length) + l.length) % l.length] : null; }
 
   private start(slot: Slot, clip: PoseClip | null, target?: number, hold = false) {
     if (!clip) return;
@@ -61,6 +63,7 @@ export class ClipLayer {
   update(s: {
     dt: number; time: number; attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; jumpAge: number; landAge: number;
     melee?: boolean; hammer?: boolean; stunned: boolean; dead?: boolean; deathAge?: number; attackTime?: number; grounded: boolean;
+    reloadLeft?: number; reloadDur?: number;
   }, k: ClipInput): LayerOut | null {
     // real elapsed time (not the Animator's 50 ms clamp): the gait phase must keep up with the distance the body really
     // covered, or locked feet fall behind the clip on slow frames
@@ -80,7 +83,7 @@ export class ClipLayer {
     const P = this.prev;
     if (s.attackAge < P.attack - 1e-6) {
       if (s.attackKind === 'punch') this.start('punch', this.pick('punch', 0) ?? this.pick('melee', 0));
-      else if (s.melee && !s.hammer && this.lib.has('melee')) {
+      else if (s.melee && !s.hammer && this.lib.has('melee', this.hero)) {
         // melee combos: each swing plays the next hit of the combo, reset after a pause
         this.combo = s.time - this.lastMelee < 1.1 ? this.combo + 1 : 0;
         this.lastMelee = s.time;
@@ -89,13 +92,21 @@ export class ClipLayer {
       }
     }
     if (s.castAge < P.cast - 1e-6 && s.castId) {
-      const slots = CAST_SLOT[s.castId] ?? ['cast'];
-      const slot = slots.find(x => this.lib.has(x));
-      if (slot) this.start(slot, this.pick(slot, slot === 'melee' ? 0 : this.seed + Math.floor(s.time)));
+      const own = this.lib.casts.get(s.castId);
+      if (own) this.start('cast', own.clip, own.target);
+      else {
+        const slots = CAST_SLOT[s.castId] ?? ['cast'];
+        const slot = slots.find(x => this.lib.has(x, this.hero));
+        if (slot) this.start(slot, this.pick(slot, slot === 'melee' ? 0 : this.seed + Math.floor(s.time)));
+      }
     }
     if (s.hitAge < P.hit - 1e-6 && (!this.action || this.action.slot === 'hit')) this.start('hit', this.pick('hit', Math.floor(s.time * 7)));
     if (s.jumpAge < P.jump - 1e-6 && (!this.action || !this.action.full)) this.start('jump_start', this.pick('jump_start', 0));
     if (s.landAge < P.land - 1e-6 && s.jumpAge > 0.25 && (!this.action || this.action.slot === 'jump_start')) this.start('land', this.pick('land', 0));
+    // reload: upper body only, time-scaled to the weapon's reload (the rising edge of reloadLeft)
+    const rl = s.reloadLeft ?? 0;
+    if (rl > P.reload + 1e-3 && (!this.action || this.action.slot === 'shoot')) this.start('reload', this.pick('reload', 0), Math.max(0.4, (s.reloadDur ?? rl) * 0.95));
+    P.reload = rl;
     P.attack = s.attackAge; P.cast = s.castAge; P.hit = s.hitAge; P.jump = s.jumpAge; P.land = s.landAge;
     if (!k.eligible) { this.action = null; return null; }
     // ---- base: idle / locomotion / airborne / stunned
@@ -135,10 +146,12 @@ export class ClipLayer {
       const real = a.clip.duration / a.rate, tr = a.t / a.rate;
       if (a.t >= a.clip.duration && !a.hold) this.action = null;
       else {
-        a.w = Math.min(1, tr / 0.08, a.clip.loop ? 1 : Math.max(0, (real - tr) / 0.15));
+        // fast in (the pose answers the button within a few frames), eased out: trimmed gestures end on their key pose and
+        // blend back to the base over ~0.2 s instead of the clip's own walk back to idle
+        a.w = Math.min(1, tr / 0.06, a.clip.loop || a.hold ? 1 : Math.max(0, (real - tr) / 0.2));
         samplePose(a.clip, a.t, this.act);
         // full-body moves own the legs; melee owns them only while standing (you can swing on the run)
-        const legW = a.full ? a.w : a.slot === 'melee' ? a.w * (1 - k.moveBlend * 0.85) : 0;
+        const legW = a.full ? a.w : STANCE.has(a.slot) ? a.w * (1 - k.moveBlend * 0.85) : 0;
         for (let i = 0; i < RT.length; i++) {
           if (!this.act.w[i]) continue;
           const w = UPPER_I.has(i) ? a.w * (a.slot === 'hit' ? 0.65 : 1) : legW;

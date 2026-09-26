@@ -1,0 +1,206 @@
+{
+  "packs": [
+    "UAL1.glb",
+    "UAL2.glb",
+    "mixamo.glb"
+  ],
+  "credits": {
+    "quaternius": "Universal Animation Library 1 & 2 by Quaternius (CC0) - quaternius.com",
+    "mixamo": "Animations from Mixamo (Adobe) - mixamo.com"
+  },
+  "slots": {
+    "idle": [
+      "Idle_Loop"
+    ],
+    "jump_start": [
+      "Jump_Start"
+    ],
+    "jump_loop": [
+      "Jump_Loop"
+    ],
+    "land": [
+      "Jump_Land"
+    ],
+    "death": [
+      "Death01",
+      "MX_Death_Back",
+      "MX_Death_Knees"
+    ],
+    "hit": [
+      "Hit_Chest",
+      "Hit_Head",
+      "MX_Hit_React"
+    ],
+    "punch": [
+      "Punch_Jab",
+      "Punch_Cross",
+      "Melee_Hook"
+    ],
+    "melee": [
+      "Sword_Regular_A",
+      "Sword_Regular_B",
+      "Sword_Regular_C"
+    ],
+    "roll": [
+      "Roll",
+      "MX_Roll_Fwd"
+    ],
+    "dash": [
+      "Sword_Dash",
+      "Shield_Dash"
+    ],
+    "slide": [
+      "Slide_Start"
+    ],
+    "flip": [
+      "NinjaJump_Start",
+      "MX_FrontFlip",
+      "MX_Backflip"
+    ],
+    "cast": [
+      "Spell_Simple_Shoot",
+      "MX_Cast_1H_Fwd"
+    ],
+    "throw": [
+      "OverhandThrow",
+      "MX_Throw"
+    ],
+    "shoot": [
+      "Pistol_Shoot"
+    ],
+    "reload": [
+      "Pistol_Reload"
+    ],
+    "block": [
+      "Sword_Block",
+      "MX_Block"
+    ]
+  },
+  "exclude": [
+    "Walk_Formal_Loop",
+    "Walk_Carry_Loop",
+    "Zombie_Walk_Fwd_Loop",
+    "Crouch_Fwd_Loop",
+    "Sprint_Loop",
+    "Jog_Fwd_Loop",
+    "MX_Jog_BwdLeft"
+  ],
+  "heroes": {
+    "enra": {
+      "melee": [
+        "MX_Punch_Hook",
+        "MX_Punch_Uppercut",
+        "Punch_Cross"
+      ]
+    },
+    "kagemaru": {
+      "melee": [
+        "Sword_Regular_A",
+        "Sword_Regular_B"
+      ],
+      "dash": [
+        "MX_Dodge_Left",
+        "MX_Dodge_Right"
+      ]
+    },
+    "yuzu": {
+      "dash": [
+        "MX_Dodge_Left",
+        "MX_Dodge_Right",
+        "MX_Dodge_Back"
+      ]
+    }
+  },
+  "casts": {
+    "constellation": [
+      "MX_Cast_1H_Up",
+      0.8
+    ],
+    "wish": [
+      "MX_Cast_1H_Fwd",
+      0.6
+    ],
+    "nova": [
+      "MX_Cast_2H_PullUp",
+      1.2
+    ],
+    "seal": [
+      "MX_Cast_2H_Ground",
+      0.8
+    ],
+    "sanctuary": [
+      "MX_Cast_2H_PullUp",
+      1.2
+    ],
+    "judgment": [
+      "MX_Battlecry",
+      1.0
+    ],
+    "hundredsuns": [
+      "MX_Cast_1H_Up",
+      1.0
+    ],
+    "silence": [
+      "MX_Cast_2H_Fwd",
+      0.7
+    ],
+    "bloodpact": [
+      "MX_Cast_1H_Fwd",
+      0.6
+    ],
+    "requiem": [
+      "MX_Cast_2H_PullUp",
+      1.2
+    ],
+    "marionette": [
+      "MX_Cast_1H_Sweep",
+      0.7
+    ],
+    "grievous": [
+      "OverhandThrow",
+      0.6
+    ],
+    "theater": [
+      "MX_Cast_2H_Fwd",
+      1.1
+    ],
+    "chain": [
+      "MX_Throw",
+      0.6
+    ],
+    "brand": [
+      "MX_Cast_1H_Sweep",
+      0.6
+    ],
+    "asura": [
+      "MX_Roar",
+      1.4
+    ],
+    "callmech": [
+      "MX_Cast_1H_Up",
+      0.8
+    ]
+  },
+  "trim": {
+    "MX_Roar": [
+      0.7,
+      2.4
+    ],
+    "MX_Cast_2H_PullUp": [
+      0.25,
+      2.3
+    ]
+  },
+  "fp": {
+    "raijin": "fp_raijin.glb",
+    "yuzu": "fp_yuzu.glb",
+    "kaien": "fp_kaien.glb",
+    "mirei": "fp_mirei.glb",
+    "nocturne": "fp_nocturne.glb",
+    "hex": "fp_hex.glb",
+    "kagemaru": "fp_kagemaru.glb",
+    "enra": "fp_enra.glb",
+    "haruto": "fp_haruto.glb",
+    "gorgoth": "fp_gorgoth.glb"
+  }
+}

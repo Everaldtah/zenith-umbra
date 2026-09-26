@@ -42,7 +42,7 @@ export class Menu {
       ${mobile ? '<p class="warn">ZENITH//UMBRA needs a PC with a keyboard and mouse.</p>' : ''}
       <div class="btns">
         <button data-m="campaign" class="primary">CAMPAIGN · STARFALL</button>
-        <button data-m="skirmish">PLAY VS AI</button>
+        <button data-m="play">PLAY VS AI</button>
         <button data-m="training">TRAINING GROUNDS</button>
         <button data-m="spectate">WATCH AI VS AI</button>
         <button data-m="aitest">AI TEST LAB</button>
@@ -58,10 +58,29 @@ export class Menu {
       if (m === 'heroes') return this.viewer();
       if (m === 'quit') return window.close();
       if (m === 'campaign') return this.campaign();
+      if (m === 'play') return this.modeSelect();
       this.mode = m as Mode;
       if (m === 'spectate' || m === 'aitest') return this.mapSelect();
       this.heroSelect(false);
     });
+  }
+
+  /** PLAY VS AI: the two ways to play, as in Overwatch 2 - NORMAL (first person) and STADIUM (third person, rounds + Armory) */
+  modeSelect() {
+    this.show(`<div class="modes">
+      <h2>PLAY VS AI <small>5v5 against the Umbra Syndicate (or the Vanguard) on the capture point</small></h2>
+      <div class="mgrid2">
+        <div class="mode" data-mode="skirmish"><div class="bg" style="background-image:url(${BASE}img/map_kurogane.webp)"></div>
+          <b>NORMAL</b><span class="tag">FIRST PERSON</span>
+          <p>The classic match: take and hold the point. Your hero's own first-person arms, one life at a time, no shop.</p></div>
+        <div class="mode" data-mode="stadium"><div class="bg" style="background-image:url(${BASE}img/map_amatsu.webp)"></div>
+          <b>STADIUM</b><span class="tag">THIRD PERSON</span>
+          <p>First team to win 4 rounds. Earn cash in every round, then spend it in the Armory on weapon, ability and survival items -
+          and pick a hero power on rounds 1, 3, 5 and 7 that upgrades your kit.</p></div>
+      </div>
+      <div class="bar"><button class="back">BACK</button></div></div>`);
+    this.root.querySelectorAll<HTMLElement>('.mode').forEach(c => c.onclick = () => { this.mode = c.dataset.mode as Mode; this.heroSelect(false); });
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => this.title();
   }
 
   heroCard(d: HeroDef) {
@@ -101,7 +120,7 @@ export class Menu {
       <div class="bar">
         ${!swap && !browse && this.mode !== 'training' ? `<label>MAP <select class="mapsel">${PLAY_MAPS.map(m => `<option value="${m.id}" ${m.id === this.map ? 'selected' : ''}>${m.name}</option>`).join('')}</select></label>
         <label>AI <select class="diff"><option value="0.35">Cadet</option><option value="0.65">Vanguard</option><option value="0.9">Eclipse</option></select></label>` : ''}
-        <button class="back">BACK</button>${browse ? '' : `<button class="primary go">${swap ? 'SWITCH' : this.mode === 'training' ? 'ENTER TRAINING' : 'START MATCH'}</button>`}
+        <button class="back">BACK</button>${browse ? '' : `<button class="primary go">${swap ? 'SWITCH' : this.mode === 'training' ? 'ENTER TRAINING' : this.mode === 'stadium' ? 'ENTER STADIUM' : 'START MATCH'}</button>`}
       </div></div>`);
     const detail = this.root.querySelector('.detail')!;
     const pick = (id: string) => {
@@ -113,7 +132,7 @@ export class Menu {
     this.root.querySelectorAll<HTMLElement>('.hc').forEach(c => c.onclick = () => pick(c.dataset.h!));
     const diff = this.root.querySelector<HTMLSelectElement>('.diff');
     if (diff) diff.value = String([0.35, 0.65, 0.9].reduce((b, v) => Math.abs(v - this.game.settings.difficulty) < Math.abs(b - this.game.settings.difficulty) ? v : b, 0.65));
-    (this.root.querySelector('.back') as HTMLElement).onclick = () => { if (swap) { this.close(); this.game.setPaused(false); } else this.title(); };
+    (this.root.querySelector('.back') as HTMLElement).onclick = () => { if (swap) { this.close(); this.game.setPaused(false); } else if (this.mode === 'skirmish' || this.mode === 'stadium') this.modeSelect(); else this.title(); };
     const go = this.root.querySelector<HTMLElement>('.go');
     if (go) go.onclick = () => {
       if (swap) { this.game.swapHero(this.hero); this.close(); this.game.setPaused(false); return; }
@@ -256,10 +275,13 @@ export class Menu {
 
   results() {
     const w = this.game.match?.world;
-    this.show(`<div class="pause results"><h2 class="${w?.winner}">${w?.winner === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} WINS</h2>
+    const S = w?.stadium, me = this.game.match?.player;
+    // Stadium: the round score and what you built
+    const stadium = S ? `<p class="sres">STADIUM · ${S.wins.zenith} - ${S.wins.umbra} in rounds${me ? ` · ${me.items.length} items, ${me.powers.length} powers` : ''}</p>` : '';
+    this.show(`<div class="pause results"><h2 class="${w?.winner}">${w?.winner === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} WINS</h2>${stadium}
       <div class="btns"><button class="primary again">PLAY AGAIN</button><button class="hero">CHANGE HERO</button><button class="quit">MAIN MENU</button></div></div>`);
     (this.root.querySelector('.again') as HTMLElement).onclick = () => this.launch();
-    (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };
+    (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };   // keeps Normal / Stadium
     (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.game.stop(); this.title(); };
   }
 

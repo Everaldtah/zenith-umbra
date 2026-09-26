@@ -21,77 +21,77 @@
   },
   "tenkai": {
    "height": 3.3,
-   "tris": 33999,
+   "tris": 69999,
    "bones": [
     "humanoid"
    ]
   },
   "gorgoth": {
    "height": 3.4,
-   "tris": 33999,
+   "tris": 70000,
    "bones": [
     "humanoid"
    ]
   },
   "mirei": {
    "height": 1.7,
-   "tris": 40000,
+   "tris": 50000,
    "bones": [
     "humanoid"
    ]
   },
   "nocturne": {
    "height": 1.75,
-   "tris": 26000,
+   "tris": 50000,
    "bones": [
     "humanoid"
    ]
   },
   "kaien": {
    "height": 1.8,
-   "tris": 25999,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]
   },
   "raijin": {
    "height": 1.8,
-   "tris": 26000,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]
   },
   "yuzu": {
    "height": 1.62,
-   "tris": 25998,
+   "tris": 44999,
    "bones": [
     "humanoid"
    ]
   },
   "hex": {
    "height": 1.95,
-   "tris": 25999,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]
   },
   "kagemaru": {
    "height": 1.78,
-   "tris": 26000,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]
   },
   "enra": {
    "height": 2.05,
-   "tris": 26000,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]
   },
   "haruto": {
    "height": 1.75,
-   "tris": 25999,
+   "tris": 45000,
    "bones": [
     "humanoid"
    ]

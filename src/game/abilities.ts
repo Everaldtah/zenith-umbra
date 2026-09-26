@@ -631,7 +631,7 @@ export function castAbility(w: World, a: Actor, id: string, slot: 'a1' | 'a2' | 
   if (!ok) return false;
   const def = slot === 'a1' ? a.def.ability1 : slot === 'a2' ? a.def.ability2 : slot === 'ult' ? a.def.ult : (isAbility(a.def.secondary) ? a.def.secondary : null);
   if (slot === 'ult') a.ult = 0;
-  else if (def) a.cd[id] = t + def.cooldown;
+  else if (def) a.cd[id] = t + def.cooldown * (1 - a.mods.cdr) * (1 - (a.mods.cdrBy[id] ?? 0));   // Stadium cooldown items / powers
   a.anim.castAt = t; a.anim.castId = id;
   w.stats.casts[id] = (w.stats.casts[id] ?? 0) + 1;
   w.emit({ t: 'cast', actor: a, id, name: def?.name ?? id });

@@ -15,6 +15,8 @@ const rimChunk = `
   float zuRim = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 2.5);
   totalEmissiveRadiance += zuRimColor * zuRim * zuRimStrength;
   // legendary / epic skins: flowing energy lines across the body
+  // epic / legendary: the recoloured accent trims glow
+  totalEmissiveRadiance += zuDst2 * zuAccentW * zuGlow * 0.55;
   if (zuPattern > 0.0) {
     float band = sin(zuWorld.y * 7.0 - zuTime * 3.0 + sin(zuWorld.x * 3.0 + zuWorld.z * 2.0) * 1.5);
     float line = smoothstep(0.93, 1.0, band) * zuPattern;
@@ -22,17 +24,32 @@ const rimChunk = `
   }
 `;
 const skinChunk = `
-  // skin recolour of the painted texture: hue rotate, saturation/value, tint
-  {
+  // skin palette recolour: the costume's measured primary / accent hues -> the skin's colours, neutrals tinted; skin
+  // tones (warm, moderately saturated) and near-greys keep the hero's own paint, so faces never change colour
+  zuAccentW = 0.0;
+  if (zuRemap > 0.5) {
     vec3 c = diffuseColor.rgb;
     float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b)), d = mx - mn;
     float h = 0.0;
     if (d > 1e-4) { if (mx == c.r) h = mod((c.g - c.b) / d, 6.0); else if (mx == c.g) h = (c.b - c.r) / d + 2.0; else h = (c.r - c.g) / d + 4.0; h /= 6.0; }
     float s = mx > 0.0 ? d / mx : 0.0, v = mx;
-    h = fract(h + zuHue); s = clamp(s * zuSat, 0.0, 1.0); v = clamp(v * zuVal, 0.0, 1.0);
-    vec3 k = mod(vec3(5.0, 3.0, 1.0) + h * 6.0, 6.0);
-    vec3 rgb = v - v * s * clamp(min(k, 4.0 - k), 0.0, 1.0);
-    diffuseColor.rgb = mix(rgb, rgb * zuTint * 1.6, zuTintAmt);
+    float skinTone = smoothstep(0.0, 0.03, h) * (1.0 - smoothstep(0.09, 0.13, h)) * smoothstep(0.12, 0.2, s) * (1.0 - smoothstep(0.55, 0.7, s)) * smoothstep(0.25, 0.4, v) * zuKeepSkin;
+    float sat = smoothstep(0.12, 0.3, s);
+    float d1 = abs(h - zuSrc1.x); d1 = min(d1, 1.0 - d1);
+    float d2 = abs(h - zuSrc2.x); d2 = min(d2, 1.0 - d2);
+    float w1 = exp(-pow(d1 / 0.075, 2.0)) * sat * (1.0 - skinTone);
+    float w2 = exp(-pow(d2 / 0.075, 2.0)) * sat * (1.0 - skinTone) * (1.0 - w1);
+    float wn = (1.0 - sat) * (1.0 - skinTone);
+    // the head (hair, face) keeps its own colours: above the neck in the bind pose
+    float head = smoothstep(zuHeadY - zuHeadBand, zuHeadY + zuHeadBand, zuBindY);
+    w1 *= 1.0 - head; w2 *= 1.0 - head; wn *= 1.0 - head;
+    vec3 r1 = zuDst1 * clamp(v / max(0.05, zuSrc1.y), 0.25, 1.6);
+    vec3 r2 = zuDst2 * clamp(v / max(0.05, zuSrc2.y), 0.25, 1.6);
+    vec3 outc = mix(c, r1, w1 * zuHas1);
+    outc = mix(outc, r2, w2 * zuHas2);
+    outc = mix(outc, c * zuNeutral, wn);
+    zuAccentW = w2 * zuHas2;
+    diffuseColor.rgb = outc;
   }
 `;
 
@@ -42,12 +59,49 @@ export function lookUniforms(rim: THREE.Color): LookUniforms {
     zuRimColor: { value: rim }, zuRimStrength: { value: 0 }, zuHue: { value: 0 }, zuSat: { value: 1 }, zuVal: { value: 1 },
     zuTint: { value: new THREE.Color('#ffffff') }, zuTintAmt: { value: 0 }, zuGlow: { value: 0 }, zuPattern: { value: 0 },
     zuPatternColor: { value: new THREE.Color('#ffffff') }, zuTime: { value: 0 },
+    zuRemap: { value: 0 }, zuSrc1: { value: new THREE.Vector2(0, 0.5) }, zuSrc2: { value: new THREE.Vector2(0.5, 0.5) },
+    zuDst1: { value: new THREE.Color('#ffffff') }, zuDst2: { value: new THREE.Color('#ffffff') }, zuNeutral: { value: new THREE.Color('#ffffff') },
+    zuHas1: { value: 0 }, zuHas2: { value: 0 }, zuMetal: { value: 0 }, zuKeepSkin: { value: 1 }, zuHeadY: { value: 1e9 }, zuHeadBand: { value: 0.01 },
   };
 }
 export function applySkin(u: LookUniforms, s: Skin) {
-  u.zuHue.value = s.hue / 360; u.zuSat.value = s.sat; u.zuVal.value = s.val;
-  u.zuTint.value.set(s.tint); u.zuTintAmt.value = s.tintAmt; u.zuGlow.value = s.glow;
+  const on = !!(s.primary || s.accent || s.neutral.toLowerCase() !== '#ffffff');
+  u.zuRemap.value = on ? 1 : 0;
+  u.zuHas1.value = s.primary ? 1 : 0; u.zuHas2.value = s.accent ? 1 : 0;
+  u.zuDst1.value.set(s.primary ?? '#ffffff').convertSRGBToLinear(); u.zuDst2.value.set(s.accent ?? '#ffffff').convertSRGBToLinear();
+  u.zuNeutral.value.set(s.neutral).convertSRGBToLinear();
+  u.zuMetal.value = s.metal; u.zuGlow.value = s.glow;
   u.zuPattern.value = s.pattern; u.zuPatternColor.value.set(s.patternColor);
+}
+
+/**
+ * The costume's two dominant hues (and their mean brightness), measured from the base-colour texture so skins can
+ * remap them: saturated texels only, skin tones excluded. Returns [hue, value] pairs in 0..1 (linear value).
+ */
+export function analysePalette(tex: THREE.Texture | null): [[number, number], [number, number]] | null {
+  const img = tex?.image as (CanvasImageSource & { width: number; height: number }) | undefined;
+  if (!img || typeof document === 'undefined' || !img.width) return null;
+  const N = 96, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d', { willReadFrequently: true }); if (!g) return null;
+  try { g.drawImage(img, 0, 0, N, N); } catch { return null; }
+  const px = g.getImageData(0, 0, N, N).data;
+  const B = 36, wsum = new Float32Array(B), vsum = new Float32Array(B);
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i] / 255, gg = px[i + 1] / 255, b = px[i + 2] / 255, a = px[i + 3];
+    if (a < 128) continue;
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn, s = mx > 0 ? d / mx : 0;
+    if (s < 0.22 || mx < 0.12) continue;
+    let h = mx === r ? ((gg - b) / d + 6) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; h /= 6;
+    if (h > 0.0 && h < 0.11 && s < 0.6 && mx > 0.3) continue;     // skin tones
+    const k = Math.min(B - 1, Math.floor(h * B)), w = s * mx;
+    wsum[k] += w; vsum[k] += w * Math.pow(mx, 2.2);
+  }
+  const smooth = (k: number) => wsum[(k + B - 1) % B] * 0.5 + wsum[k] + wsum[(k + 1) % B] * 0.5;
+  let b1 = 0; for (let k = 1; k < B; k++) if (smooth(k) > smooth(b1)) b1 = k;
+  let b2 = -1; for (let k = 0; k < B; k++) { const dd = Math.min(Math.abs(k - b1), B - Math.abs(k - b1)); if (dd >= 4 && (b2 < 0 || smooth(k) > smooth(b2))) b2 = k; }
+  if (!wsum[b1]) return null;
+  const hv = (k: number): [number, number] => [(k + 0.5) / B, wsum[k] ? vsum[k] / wsum[k] : 0.5];
+  return [hv(b1), b2 >= 0 && wsum[b2] > wsum[b1] * 0.08 ? hv(b2) : hv((b1 + B / 2) % B)];
 }
 
 /** inject rim light + skin recolour into a (per-instance) standard material */
@@ -57,9 +111,12 @@ export function addLook(mat: THREE.Material, u: LookUniforms) {
   (m as any).__look = true;
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'varying vec3 zuWorld;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nzuWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'uniform vec3 zuRimColor; uniform float zuRimStrength; uniform float zuHue; uniform float zuSat; uniform float zuVal; uniform vec3 zuTint; uniform float zuTintAmt; uniform float zuGlow; uniform float zuPattern; uniform vec3 zuPatternColor; uniform float zuTime;\nvarying vec3 zuWorld;\n'
-      + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + skinChunk).replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + rimChunk);
+    sh.vertexShader = 'varying vec3 zuWorld; varying float zuBindY;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nzuWorld = (modelMatrix * vec4(transformed, 1.0)).xyz; zuBindY = position.y;');
+    sh.fragmentShader = 'uniform vec3 zuRimColor; uniform float zuRimStrength; uniform float zuHue; uniform float zuSat; uniform float zuVal; uniform vec3 zuTint; uniform float zuTintAmt; uniform float zuGlow; uniform float zuPattern; uniform vec3 zuPatternColor; uniform float zuTime;\n'
+      + 'uniform float zuRemap; uniform vec2 zuSrc1; uniform vec2 zuSrc2; uniform vec3 zuDst1; uniform vec3 zuDst2; uniform vec3 zuNeutral; uniform float zuHas1; uniform float zuHas2; uniform float zuMetal; uniform float zuKeepSkin; uniform float zuHeadY; uniform float zuHeadBand;\nvarying vec3 zuWorld; varying float zuBindY;\nfloat zuAccentW = 0.0;\n'
+      + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + skinChunk).replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + rimChunk)
+        // metallic trims on legendary accents
+        .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 1.0, zuMetal * zuAccentW); roughnessFactor = mix(roughnessFactor, 0.28, zuMetal * zuAccentW);');
   };
   m.customProgramCacheKey = () => 'zulook';
   m.needsUpdate = true;
@@ -187,9 +244,9 @@ export class CharacterView {
 
   /** Quaternius UAL / Mixamo clip library (public/anim): drives the body wherever it has a clip */
   private attachClips() {
-    if (animLib) { this.anim.useClips(animLib, this.actor.id); return; }
+    if (animLib) { this.anim.useClips(animLib, this.actor.id, this.defId); return; }
     const anim = this.anim;
-    animLibrary().then(l => { if (l && this.anim === anim) anim.useClips(l, this.actor.id); });
+    animLibrary().then(l => { if (l && this.anim === anim) anim.useClips(l, this.actor.id, this.defId); });
   }
 
   private hookStep() { this.anim.onStep = (side, heavy) => this.onStep?.(this.actor, side, heavy); }
@@ -260,6 +317,21 @@ export class CharacterView {
     }
     // materials: keep the concept colours, add rim + a hint of emission for readability in dark maps
     this.collectMats();
+    // the costume's own hues, for skin palette remaps
+    const map = (this.mats.find(mt => (mt as THREE.MeshStandardMaterial).map) as THREE.MeshStandardMaterial | undefined)?.map ?? null;
+    const pal = analysePalette(map);
+    if (pal) { this.look.zuSrc1.value.set(pal[0][0], pal[0][1]); this.look.zuSrc2.value.set(pal[1][0], pal[1][1]); }
+    // bind-pose neck line (mesh space): skins recolour the costume, never the hair or face (mechs: the whole frame)
+    if (this.actor.def.frame !== 'mech') {
+      let y0 = Infinity, y1 = -Infinity;
+      m.traverse(o => { const g = (o as THREE.Mesh).geometry; if ((o as THREE.Mesh).isMesh && g) { g.computeBoundingBox(); y0 = Math.min(y0, g.boundingBox!.min.y); y1 = Math.max(y1, g.boundingBox!.max.y); } });
+      // the chin sits about halfway between the neck and head joints (tall hair makes a bounding-box ratio useless)
+      const nk = anim.rest.neck?.p.y, hd = anim.rest.head?.p.y;
+      if (Number.isFinite(y0)) {
+        this.look.zuHeadY.value = nk !== undefined && hd !== undefined ? nk + (hd - nk) * 0.35 : y0 + (y1 - y0) * 0.8;
+        this.look.zuHeadBand.value = (y1 - y0) * 0.012;
+      }
+    }
     for (const mt of this.mats) {
       const sm = mt as THREE.MeshStandardMaterial;
       if (sm.isMeshStandardMaterial) {
@@ -300,6 +372,7 @@ export class CharacterView {
       hammer: !!this.hammer, swingSide: an.attackSide,
       move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
+      reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
       attackTime: an.attackKind === 'primary' ? 1 / Math.max(0.1, p.rate) : 'rate' in a.def.secondary ? 1 / Math.max(0.1, a.def.secondary.rate) : 0.6,
     };
   }

@@ -113,7 +113,8 @@ def pack_file(path, fname):
 
 def pack_mixamo(folder):
     reset()
-    files = sorted(glob.glob(os.path.join(folder, "*.fbx")) + glob.glob(os.path.join(folder, "*.FBX")))
+    # (Windows globs are case-insensitive: *.fbx and *.FBX list the same files, so de-duplicate)
+    files = sorted({os.path.normcase(f): f for f in glob.glob(os.path.join(folder, "*.fbx")) + glob.glob(os.path.join(folder, "*.FBX"))}.values())
     if not files: raise SystemExit(f"no FBX files in {folder}")
     arm, acts = None, []
     for f in files:

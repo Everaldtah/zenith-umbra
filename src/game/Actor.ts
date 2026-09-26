@@ -1,5 +1,6 @@
 import type { HeroDef, TeamId } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
+import { noMods, type Mods } from './stadium';
 
 export interface Input {
   mx: number; mz: number;          // local move: right / forward, -1..1
@@ -36,6 +37,9 @@ export class Actor {
   beamTarget: Actor | null = null; beamOn = false; flameOn = false;
   lastDamagedAt = -99; lastHitBy: Actor | null = null; lastHitAt = -99;
   scale = 1;
+  // Stadium: cash, owned items / powers and the stat mods they add up to (all zero in every other mode)
+  cash = 0; items: string[] = []; powers: string[] = [];
+  mods: Mods = noMods();
   // stats
   kills = 0; deaths = 0; dmgDone = 0; healDone = 0; assists = 0;
   // animation cues read by the renderer
@@ -85,5 +89,11 @@ export class Actor {
   }
   clear(s: string) { delete this.st[s]; delete this.sv[s]; delete this.src[s]; }
   ready(id: string, t: number) { return (this.cd[id] ?? 0) <= t; }
+  /** magazine size with Stadium ammo items */
+  get maxAmmo() { const P = this.def.primary; return 'ammo' in P && P.ammo ? Math.max(1, Math.round(P.ammo * (1 + this.mods.ammo))) : 0; }
+  /** a fire rate with Stadium attack speed */
+  rate(r: number) { return r * (1 + this.mods.atkspd); }
+  /** a reload time with Stadium reload speed */
+  reloadTime(r: number) { return r / (1 + this.mods.reload); }
   cdLeft(id: string, t: number) { return Math.max(0, (this.cd[id] ?? 0) - t); }
 }

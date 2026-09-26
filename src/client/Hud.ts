@@ -101,7 +101,7 @@ export class Hud {
       if (ready && !this.ultWasReady) this.onUltReady?.();
       this.ultWasReady = ready;
       const P = me.def.primary;
-      this.ammo.innerHTML = P.kind === 'charge' ? `<b>${me.charging ? Math.round(me.charge * 100) + '%' : 'DRAW'}</b>` : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${P.ammo}</small>`) : '<b>∞</b>';
+      this.ammo.innerHTML = P.kind === 'charge' ? `<b>${me.charging ? Math.round(me.charge * 100) + '%' : 'DRAW'}</b>` : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${me.maxAmmo}</small>`) : '<b>∞</b>';
       const flies = me.def.frame === 'flyer' || !!me.def.jets;
       this.flight.style.display = flies ? '' : 'none';
       if (flies) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>`;
@@ -127,6 +127,16 @@ export class Hud {
       this.obj.innerHTML = b
         ? `<div class="bossbar" style="--c:${b.def.glow}"><b>${b.def.name}</b><small>${b.def.title}</small><div><i style="width:${(b.health / b.maxHp * 100).toFixed(1)}%"></i></div><em>Weak point: ${dir.boss.def.weak ?? ''}</em></div>`
         : `<div class="mid">${dir.level.name.toUpperCase()}<small>${dir.objective}</small></div>`;
+    } else if (w.stadium) {
+      // Stadium: round pips (first to 4), the point, the round clock, cash
+      const S = w.stadium, P = w.point, my = me?.team ?? 'zenith', them = my === 'zenith' ? 'umbra' : 'zenith';
+      const pips = (n: number, cls: string) => Array.from({ length: 4 }, (_, i) => `<i class="${i < n ? cls : ''}"></i>`).join('');
+      const unlock = Math.max(0, P.unlockAt - t);
+      const capTxt = S.phase === 'armory' ? `ARMORY ${Math.max(0, Math.ceil(S.phaseEnd - t))}s` : P.contested ? 'CONTESTED' : P.capTeam ? `${P.capTeam === my ? 'CAPTURING' : 'LOSING'} ${P.capture.toFixed(0)}%` : P.owner ? (P.owner === my ? 'HOLDING' : 'ENEMY HOLDS') : unlock > 0 ? `POINT OPENS ${unlock.toFixed(0)}` : 'NEUTRAL';
+      const mine = P.progress[my], theirs = P.progress[them];
+      this.obj.innerHTML = `<div class="pips us">${pips(S.wins[my], 'z')}</div><div class="side us"><i style="width:${mine}%"></i><b>${mine.toFixed(0)}%</b></div>
+        <div class="mid ${P.owner ? (P.owner === my ? 'us' : 'them') : ''}">STADIUM · ROUND ${S.round}<small>${capTxt}${S.phase === 'fight' ? ` · ${fmtTime(Math.max(0, 120 - (t - S.roundStart)))}` : ''}${me ? ` · $${me.cash.toLocaleString('en-US')}` : ''}</small></div>
+        <div class="side them"><i style="width:${theirs}%"></i><b>${theirs.toFixed(0)}%</b></div><div class="pips them">${pips(S.wins[them], 'u')}</div>`;
     } else if (w.mode !== 'training') {
       const P = w.point, my = me?.team ?? 'zenith';
       const unlock = Math.max(0, P.unlockAt - t);

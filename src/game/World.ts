@@ -7,12 +7,13 @@ import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
 import { castAbility, tickAbilities } from './abilities';
 import { updateWeapons } from './weapons';
+import { Stadium } from './stadium';
 
 /** Tenkai-Oh's ult: 3.3m x 2.2 = 7.3m, four times an average hero's height */
 export const TITAN_SCALE = 2.2;
 
 export const G = 24;
-export type Mode = 'training' | 'skirmish' | 'spectate' | 'aitest' | 'campaign' | 'gallery';
+export type Mode = 'training' | 'skirmish' | 'stadium' | 'spectate' | 'aitest' | 'campaign' | 'gallery';
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
@@ -52,6 +53,8 @@ export class World {
   /** campaign hooks: enemy/boss definitions and the encounter director */
   extraDefs: Record<string, HeroDef> = {};
   director: { update(dt: number): void; onKill?(a: Actor, src: Actor | null): void } | null = null;
+  /** Stadium mode: rounds, the Armory, cash (null in every other mode) */
+  stadium: Stadium | null = null;
   stats = { counters: 0, casts: {} as Record<string, number>, sfx: {} as Record<string, number>, fx: {} as Record<string, number> };
 
   constructor(mapId: string | MapDef, public mode: Mode) {
@@ -83,10 +86,10 @@ export class World {
     if (a.isRobot) a.yaw = -Math.PI / 2;
     a.pitch = 0;
     a.def = a.baseDef;
-    a.hp = a.def.hp; a.maxArmor = a.def.armor; a.armor = a.def.armor; a.scale = 1;
+    a.hp = a.def.hp; a.maxArmor = a.def.armor + a.mods.armor; a.armor = a.maxArmor; a.scale = 1;
     a.shields = []; a.st = {}; a.sv = {}; a.src = {}; a.forced = null;
     a.alive = true; a.respawnAt = 0; a.flight = 100; a.flying = false;
-    a.ammo = 'ammo' in a.def.primary && a.def.primary.ammo ? a.def.primary.ammo : 0; a.reloadUntil = 0;
+    a.ammo = a.maxAmmo; a.reloadUntil = 0;
     if (a.barrier.max) a.barrier = { hp: a.barrier.max, max: a.barrier.max, up: false, regenAt: 0, brokenUntil: 0 };
     a.set('spawnprot', this.time, first ? 0 : 2);
     this.emit({ t: 'fx', kind: 'spawn', pos: { ...a.pos }, color: a.def.glow, actor: a });
@@ -189,6 +192,8 @@ export class World {
       return 0;
     }
     let dmg = amount;
+    // Stadium: weapon / ability power
+    if (src) dmg *= 1 + (o.kind === 'ability' || o.kind === 'dot' ? src.mods.ability : src.mods.weapon);
     if (src?.has('dmgamp', t)) dmg *= 1.3;
     if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
@@ -229,11 +234,11 @@ export class World {
       let m = this.attackers.get(tgt.id); if (!m) this.attackers.set(tgt.id, m = new Map());
       m.set(src.id, t);
       src.dmgDone += dealt;
-      src.ult = Math.min(src.def.ult.charge, src.ult + dealt);
+      src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
       if (!o.noLifesteal) {
-        let ls = src.has('lifesteal', t) ? (src.sv.lifesteal ?? 0.3) : 0;
+        let ls = (src.has('lifesteal', t) ? (src.sv.lifesteal ?? 0.3) : 0) + src.mods.lifesteal;
         if (src.has('asura', t)) ls += 0.3;
         if (ls > 0) this.heal(src, src, dealt * ls, true);
         if (src.def.id === 'nocturne') {
@@ -249,14 +254,16 @@ export class World {
 
   heal(src: Actor, tgt: Actor, amount: number, quiet = false): number {
     if (!tgt.alive || amount <= 0 || tgt.team !== src.team) return 0;
-    let amt = amount;
+    let amt = amount * (1 + src.mods.healing);
     if (tgt.has('antiheal', this.time)) amt *= 0.2;
     const room = tgt.def.hp - tgt.hp;
-    const h = Math.min(room, amt);
+    let h = Math.min(room, amt);
+    tgt.hp += Math.max(0, h);
+    // Stadium: healing past full health restores bought armor
+    if (this.stadium && amt > h && tgt.armor < tgt.maxArmor) { const ar = Math.min(tgt.maxArmor - tgt.armor, amt - Math.max(0, h)); tgt.armor += ar; h = Math.max(0, h) + ar; }
     if (h <= 0) return 0;
-    tgt.hp += h;
     if (src !== tgt) {
-      src.healDone += h; src.ult = Math.min(src.def.ult.charge, src.ult + h);
+      src.healDone += h; src.ult = Math.min(src.def.ult.charge, src.ult + h * (1 + src.mods.ultgain));
       if (src.def.id === 'kaien' && src.hp < src.def.hp) src.hp = Math.min(src.def.hp, src.hp + h * 0.25);
     }
     if (!quiet || h > 20) this.emit({ t: 'dmg', src, tgt, amt: h, crit: false, heal: true, pos: tgt.center });
@@ -447,13 +454,19 @@ export class World {
       this.timers = this.timers.filter(x => x.at > t);
       for (const d of due) d.fn();
     }
-    for (const a of this.actors) if (a.alive && a.controller) a.controller.think(dt);
+    // Stadium Armory: everyone waits at spawn while the teams shop
+    if (!this.stadium?.frozen) {
+      for (const a of this.actors) if (a.alive && a.controller) a.controller.think(dt);
+    } else {
+      for (const a of this.actors) { const i = a.input; i.mx = i.mz = 0; i.fire = i.alt = i.a1 = i.a2 = i.ult = i.jump = i.jumpHeld = i.melee = i.reload = false; }
+    }
     for (const a of this.actors) this.updateActor(a, dt);
     this.separate();
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
     this.zones = this.zones.filter(z => z.until > t);
     if (this.director) this.director.update(dt);
+    else if (this.stadium) this.stadium.update(dt);
     else if (this.mode !== 'training') this.updatePoint(dt);
   }
 
@@ -527,7 +540,7 @@ export class World {
       else { a.vel = { x: f.vx, y: f.ignoreGravity ? f.vy : a.vel.y - G * dt, z: f.vz }; }
     }
     if (!a.forced) {
-      let spd = d.speed;
+      let spd = d.speed * (1 + a.mods.speed);
       if (a.has('slow', t)) spd *= 0.8;
       if (a.has('speed', t)) spd *= a.sv.speed ?? 1.25;
       if (a.has('titan', t)) spd *= 1.2;

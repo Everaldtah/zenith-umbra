@@ -37,6 +37,8 @@ export interface AnimState {
   dead?: boolean;           // clip layer: play a death clip (CharacterView only keeps animating the dead if one exists)
   deathAge?: number;
   attackTime?: number;      // seconds between primary attacks (melee combo hits are time-scaled to it)
+  reloadLeft?: number;      // seconds of reload remaining (0 = not reloading)
+  reloadDur?: number;       // the weapon's full reload time (the reload clip is time-scaled into it)
   scale: number;            // world metres per model unit
   pos: THREE.Vector3;       // actor world position (feet)
 }
@@ -44,6 +46,8 @@ export interface AnimState {
 interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion(), _q5 = new THREE.Quaternion();
+const WRIST_MAX = 0.7;       // radians of wrist bend a clip may add on top of the forearm (~40 deg)
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAxisAngle(axis, a);
 
@@ -120,7 +124,7 @@ export class Animator {
   private cerr = [new THREE.Vector3(), new THREE.Vector3()];
   private cLegs = 0;
   /** drive this rig from an animation library (null: back to fully procedural) */
-  useClips(lib: ClipLibrary | null, seed = 0) { this.layer = lib && this.ok ? new ClipLayer(lib, seed) : null; }
+  useClips(lib: ClipLibrary | null, seed = 0, hero = '') { this.layer = lib && this.ok ? new ClipLayer(lib, seed, hero) : null; }
   /** a death clip is available: the view keeps animating the body instead of tipping it over */
   get clipDeath() { return !!this.layer?.lib.has('death'); }
   private swingFrom: (THREE.Vector3 | null)[] = [null, null];
@@ -685,7 +689,21 @@ export class Animator {
       if (this.bones[hn]) {
         const Qh = (this.modelQ.get(this.bones[fa]!) ?? new THREE.Quaternion()).clone().multiply(_q2.copy(R[fa].q).invert()).multiply(R[hn].q);
         const ch = cq(hn as RtBone);
-        if (ch && wArm > 0) Qh.slerp(ch.clone().multiply(R[hn].q), wArm);
+        if (ch && wArm > 0) {
+          // clip wrist: bend only. Auto-rigged meshes weight sleeve cuffs, gauntlets and held weapons to the hand, so the
+          // mocap's forearm roll (palms turning in) spins a sleeve or a blade around the arm; swing-twist split about
+          // the forearm axis, twist dropped, bend clamped to a natural wrist range
+          const fq = this.modelQ.get(this.bones[fa]!) ?? _q3.identity();
+          const axis = _v3.copy(R[fa].dir).applyQuaternion(_q2.copy(fq).multiply(_q4.copy(R[fa].q).invert())).normalize();
+          const rel = _q5.copy(ch).multiply(R[hn].q).multiply(_q2.copy(Qh).invert());
+          const d = rel.x * axis.x + rel.y * axis.y + rel.z * axis.z;
+          const tw = _q2.set(axis.x * d, axis.y * d, axis.z * d, rel.w);
+          if (tw.lengthSq() < 1e-9) tw.identity(); else tw.normalize();
+          const sw = rel.multiply(tw.invert());
+          const ang = 2 * Math.acos(Math.min(1, Math.abs(sw.w)));
+          if (ang > WRIST_MAX) sw.slerp(_q4.identity(), 1 - WRIST_MAX / ang);
+          Qh.premultiply(_q4.identity().slerp(sw, wArm));
+        }
         this.setModelQ(hn, Qh);
       }
     }

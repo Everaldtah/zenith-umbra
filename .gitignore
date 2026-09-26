@@ -26,3 +26,8 @@ tests/e2e/fixtures/anim/mixamo_test.glb
 tests/e2e/fixtures/anim/manifest.json
 .venvgpu/
 __pycache__/
+
+# pipeline scratch (concepts, meshes, rigs, Mixamo FBX downloads)
+work/
+# Mixamo clips may ship inside the game but not be redistributed as raw files: deployed from disk, never committed
+public/anim/mixamo.glb

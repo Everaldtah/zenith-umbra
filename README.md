@@ -7,12 +7,12 @@ An original anime-inspired hero shooter for PC, playable in the browser and as a
 - **10 heroes**: the **Zenith Vanguard** (heroes) against the **Umbra Syndicate** (villains). Each side has one giant **piloted mecha tank** (Tenkai-Oh, piloted by Haruto Daimon; Gorgoth, piloted by Warlord Vorn), two supports (one of them flies), and two DPS.
 - **Rival counters**: every hero has a rival on the other team, and each of them carries an ability built to counter the other (Dawn Anchor vs Abyss Charge, Silence Aria vs Constellation Link, Warding Seal vs Severing Fang, Thunder Parry vs Chain of Oblivion, Revealing Dawn Arrow vs Stitched Decoy). The HUD calls out every counter as it happens.
 - **5 story maps + Training Grounds**: Amatsu Sky Shrine, Neo-Kurogane Rainport, Hangar Zero, Crimson Moon Cathedral, Eclipse Rift. The Zenith Academy Proving Grounds adds training dummies, sentry walkers and aerial drones.
-- **Modes**: 5v5 vs AI (capture point), Training, Watch AI vs AI, **AI Test Lab**, and the **Operation Starfall** campaign.
+- **Modes**: **Play vs AI** in two flavours, as in Overwatch 2: **Normal** (first person, 5v5 on the capture point) and **Stadium** (third person, first to 4 round wins, with an **Armory** between rounds where you spend the cash you earned on weapon / ability / survival items and pick a hero **power** on rounds 1, 3, 5 and 7). Also Training, Watch AI vs AI, the **AI Test Lab**, and the **Operation Starfall** campaign.
 - **Campaign**: third person, 5 levels, 5 giant space-robot bosses, and the alien scientist **Archon Qel'Varis** as the final boss. Storyboard cinematics. Play solo with AI wingmates, or **online co-op for up to 4**.
 - **Hero Viewer & Skins**: rotate and zoom any hero, villain, pilot or boss, preview animations, and equip one of 5 skins per hero (Classic → Legendary).
 
 ## Controls
-WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secondary · Shift / E abilities · Q ultimate · R reload · V first/third person · Tab scoreboard · Esc pause · H switch hero (training)
+WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secondary · Shift / E abilities · Q ultimate · R reload · V first/third person (Normal is always first person, Stadium always third) · Tab scoreboard · Esc pause · H switch hero (training)
 
 ## Play
 - Web: `npm i && npm run dev`, then open `/play.html`. The landing page with the animatic is `/`.
@@ -35,7 +35,18 @@ WASD move · Space jump / hold to fly (Mirei, Nocturne) · LMB fire · RMB secon
    - **clips** (optional, `public/anim/`): Quaternius **Universal Animation Library 1 & 2** (CC0) and **Mixamo** gap-fillers, retargeted on load onto every hero (see *Animation library* below): 8-way idle/walk/jog/sprint blend space, jumps, deaths, hit reactions, melee combos one hit per swing, punches, rolls, parkour
    - **procedural**, always on top: two-bone IK legs with feet locked in world space (no sliding), aim-driven spine, recoil and flinch, Tenkai-Oh's hammer, flyers and mechs, wing flaps, verlet spring physics for hair and cloth. With no clip library the game is fully procedural, as before
    - **first-person arms** (`src/render/FirstPerson.ts`): each hero's own model as a viewmodel, with Blender-authored per-hero clips where they exist and a procedural personality per hero otherwise
-5. `build_assets.py` / `publish_2d.py` produce the web tier (1K textures, Draco, WebP) and the desktop tier (2K textures).
+5. `build_assets.py` / `publish_2d.py` produce the web tier (Draco, WebP) and the desktop tier.
+
+**The hero-shooter rebuild (current heroes)**: every hero was rebuilt for a polished stylized team-shooter look - adult
+heroic proportions, clean bevelled shapes, painted colour blocks, expressive faces:
+1. `modal_restyle.py` re-renders each hero's concept with **Qwen-Image-Edit-2511** (Apache-2.0) on a Modal A100: same
+   character, outfit, colours and weapon, in a clean A-pose for rigging (`--seeds N` candidates, picks go in `work/ow/pick`).
+2. `modal_trellis2.py`: **TRELLIS.2** at its highest setting (1536 cascade, bf16, 4K PBR bake, remeshed) on a Modal A100.
+3. `ow_finish.py`: the face from the 4x Real-ESRGAN concept (`modal_upscale.py`) projected onto the head (`facebake.py`),
+   then `blender/owpaint.py` bakes occlusion, painted edge highlights and a head-to-toe value gradient into the albedo.
+4. `build_assets.py --unirig`: MediaPipe rig (`rig_hero.py`, 45k tris / mechs 70k), then **UniRig** (MIT) skin weights
+   predicted for that skeleton on Modal (`modal_unirig.py` -> `blender/apply_skin.py`), then web (2K) / desktop (4K) GLBs.
+5. `bake_fp.py`: every hero's Overwatch-style first-person clip set (`blender/fp_choreo.py` -> `blender/fp_arms.py`).
 
 ## Animation library
 Handoff notes, including measured data, open work and pitfalls: [`ANIMATION_NOTES.md`](ANIMATION_NOTES.md).
@@ -54,4 +65,4 @@ Tests: `npm test` covers retargeting accuracy across rig styles, clip analysis, 
 
 Sound is fully procedural WebAudio. No audio files are used.
 
-Third-party models used in the pipeline: SDXL (CreativeML Open RAIL++-M), TRELLIS / TRELLIS.2 (MIT), MediaPipe Pose (Apache-2.0), rembg isnet-anime (MIT), DINOv3 via timm (DINOv3 License).
+Third-party models used in the pipeline: SDXL (CreativeML Open RAIL++-M), Qwen-Image-Edit-2511 (Apache-2.0), TRELLIS / TRELLIS.2 (MIT), UniRig (MIT), Real-ESRGAN (BSD-3), BiRefNet via rembg (MIT), MediaPipe Pose (Apache-2.0), rembg isnet-anime (MIT), DINOv3 via timm (DINOv3 License).

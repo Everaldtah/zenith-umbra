@@ -3,6 +3,7 @@ import { HEROES } from '../data/heroes';
 import { Nav } from '../ai/Nav';
 import { Bot } from '../ai/Bot';
 import { World, type Mode } from './World';
+import { Stadium } from './stadium';
 import type { Actor } from './Actor';
 import { Director } from '../campaign/Director';
 import { LEVEL, CAMPAIGN_HEROES } from '../campaign/data';
@@ -39,10 +40,11 @@ export function createMatch(mapId: string, mode: Mode, playerHero: string | null
   }
   for (const h of HEROES) {
     const a = world.addHero(h.id);
-    if (h.id === playerHero && mode === 'skirmish') { a.isPlayer = true; player = a; continue; }
+    if (h.id === playerHero && (mode === 'skirmish' || mode === 'stadium')) { a.isPlayer = true; player = a; continue; }
     const b = new Bot(world, a, nav, skill);
     a.controller = b; bots.push(b);
   }
+  if (mode === 'stadium') world.stadium = new Stadium(world);
   return { world, nav, player, bots };
 }
 
