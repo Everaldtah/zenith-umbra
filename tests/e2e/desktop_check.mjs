@@ -4,7 +4,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 const exe = path.join(process.env.LOCALAPPDATA, 'Programs', 'ZenithUmbra', 'ZenithUmbra.exe');
 const proc = spawn(exe, ['--remote-debugging-port=9333'], { detached: false, stdio: 'ignore' });
-await new Promise(r => setTimeout(r, 7000));
+for (let i = 0; i < 40; i++) { try { await (await fetch('http://127.0.0.1:9333/json/version')).json(); break; } catch { await new Promise(r => setTimeout(r, 1000)); } }
+await new Promise(r => setTimeout(r, 3000));
 const b = await puppeteer.connect({ browserURL: 'http://127.0.0.1:9333', defaultViewport: null });
 const [p] = (await b.pages()).filter(x => x.url().includes('play.html'));
 const errs = []; p.on('pageerror', e => errs.push(e.message));
@@ -19,6 +20,9 @@ await new Promise(r => setTimeout(r, 5000));
 const info = await p.evaluate(f0 => { const g = window.__zu.game; const c = g.renderer.getContext(); const e = c.getExtension('WEBGL_debug_renderer_info');
   return { fps: (g.framesRendered - f0) / 5, preset: g.settings.preset, pixelRatio: g.renderer.getPixelRatio(), size: [innerWidth, innerHeight], gpu: e ? c.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?', shadows: g.renderer.shadowMap.enabled, url: location.href }; }, f0);
 console.log(JSON.stringify(info, null, 1));
+// the recorded sound bank decodes in the packaged app; Hibiki and Gantetsu are on the roster with their portraits
+console.log('sound', await p.evaluate(async () => { const s = window.__zu.sfx; const img = async id => (await fetch(`img/portrait_${id}.webp`)).ok;
+  return JSON.stringify({ clips: !!(await window.__zu.anim), ctx: s.ctx?.state, bank: s.bank.ready, sfx: Object.keys(s.bank.info?.sfx ?? {}).length, voices: Object.keys(s.bank.info?.vo ?? {}).length, hibiki: await img('hibiki'), gantetsu: await img('gantetsu') }); }));
 console.log('match', JSON.stringify(await p.evaluate(() => { const w = window.__zu.game.match.world; return { map: w.map.id, rules: w.rules, packs: w.packs.length, me: w.actors.find(a => a === window.__zu.game.match.player)?.def.id }; })), 'errors', errs.slice(0, 3));
 const ft = await p.evaluate(() => new Promise(res => { const d = []; let last = performance.now(); const f = t => { d.push(t - last); last = t; if (d.length < 300) requestAnimationFrame(f); else res(d); }; requestAnimationFrame(f); }));
 ft.sort((a, b) => a - b);
