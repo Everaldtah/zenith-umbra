@@ -18,6 +18,15 @@ One codebase, two editions (`src/edition.ts`):
     - **RMB** Scratch Wave is a knockback cone.
     - **Mag-Grind** rides walls while you hold SPACE; five seconds of grinding empowers his next Scratch Wave.
     - **Q** Bass Drop gives nearby allies 750 decaying overhealth.
+    - Mag-Grind also **climbs buildings**: look up while riding a wall to run up it, and he mantles onto the roof. **LMB** is his grind/accelerate button by default (rebindable).
+  - **Tomoe**, the Crescent Empress (tank): a white-and-gold battle queen with a scattergun, a throwing blade and a great axe. Her rival is Gantetsu.
+    - **LMB** Crownfire Scattergun (10 pellets).
+    - **RMB** Crescent Fang: throw a jagged blade that sticks in whatever it hits. Press RMB again to recall it. It drags a stuck enemy toward you (and pulls flyers out of the sky) and cuts everyone on its way back.
+    - **SHIFT** Horagai War Call: 200 temporary health for her, 100 for allies within 15m, +30% speed.
+    - **E** Crescent Reaping: a wide axe cleave, with 1s off the cooldown per enemy cut.
+    - **Q** Crescent Warpath: an unstoppable 20m charge that wounds and anti-heals everyone in the lane.
+    - Passive **Blood Tide**: her wounds heal her for 150% of their damage. Wounds bleed straight through armor, which is her counter to Gantetsu.
+  - **Options like Overwatch 2's**: VIDEO / SOUND / CONTROLS / GAMEPLAY / ACCESSIBILITY tabs (see *Options* below).
   - **Recorded sound and voice** (see *Sound* below), plus travelling tracer rounds, muzzle flashes, impact sparks, scorch marks and brass casings.
   - Mirei's guardian-angel flight and **swoop**.
   - The animation performance layer (see `ANIMATION_NOTES.md`), Stadium and the Starfall campaign.
@@ -30,13 +39,44 @@ One codebase, two editions (`src/edition.ts`):
 - **Campaign**: third person, 5 levels, 5 giant space-robot bosses, and the alien scientist **Archon Qel'Varis** as the final boss. Storyboard cinematics. Play solo with AI wingmates, or **online co-op for up to 4**.
 - **Hero Viewer & Skins**: rotate and zoom any hero, villain, pilot or boss, preview animations, and equip one of 5 skins per hero (Classic → Legendary).
 
+## Options
+Settings opens an Overwatch 2-style Options screen. Every change applies live and is saved; each tab has RESTORE DEFAULTS.
+- **Video**:
+  - Display mode, FOV, frame-rate cap, render scale, dynamic render scale.
+  - Brightness, contrast, gamma, image sharpening.
+  - The Graphics Quality preset, which fills in texture quality, texture filtering (1x-16x), fog, dynamic reflections, shadows, model, effects and lighting detail, antialiasing (FXAA / MSAA), refraction/glow quality, ambient occlusion (GTAO), local reflections and bloom.
+  - Damage FX, and performance stats (F8: simple / advanced).
+- **Sound**:
+  - Master, effects, music, voice, announcer, ambience, interface and hit-marker volumes.
+  - Mix presets: default / headphones (3D) / speakers / night mode.
+  - Menu music, sound in background, audio latency.
+- **Controls**:
+  - Rebind any action to any key, mouse button or wheel notch. There are two bindings per action; a key moves off whatever action had it.
+  - **Per-hero control sets and sensitivity**. For example, Hibiki grinds on LMB by default.
+  - Invert Y, zoomed sensitivity, and Tenkai-Oh's barrier free-look options.
+  - A **reticle designer** with live preview: type, colour, thickness, length, gap, opacity, outline, centre dot.
+- **Gameplay**:
+  - AI difficulty and hints.
+  - Counter callouts and kill feed.
+  - Damage numbers and hit markers.
+  - HUD scale and opacity, and objective waypoint opacity.
+  - Enemy / friendly health bars and name tags.
+- **Accessibility**:
+  - Subtitles for voice lines (off / critical / conversations / all), with size and background controls.
+  - Colour-blind correction filters with a strength slider, and enemy / friendly UI colours.
+  - Camera and screen shake, and flash reduction.
+
+The ability bar shows the keys you actually bound.
+
 ## Controls
 WASD move · Space jump / hold to fly (Mirei, Nocturne) · F swoop to an ally (Mirei; Space mid-swoop = slingshot, Ctrl = superjump) · LMB fire · RMB secondary · Shift / E abilities · Q ultimate · R reload · V first/third person (Normal is always first person, Stadium always third) · Tab scoreboard / your stats · Esc pause · H switch hero (training)
 
 ## Play
 - Web: `npm i && npm run dev`, then open `/play.html`. The landing page with the animatic is `/`.
 - Windows app (Ultra graphics, 2K textures, 120 Hz physics): `cd desktop && npm i && node build.mjs --installer`
-- Sound and effects: `node tests/e2e/audio_check.mjs 5199 gantetsu hanabi` (bank loaded, which ids play recorded vs synth, threat mix), `node tests/e2e/vfx_wall.mjs 5199 gantetsu`, `node tests/e2e/hibiki_play.mjs 5199`
+- Sound and effects: `node tests/e2e/audio_check.mjs 5199 gantetsu hanabi` (bank loaded, which ids play recorded vs synth, threat mix), `node tests/e2e/audio_glitch.mjs 5199 hibiki kagura 25` (the output meter counts clipped samples and clicks in a live match; it self-checks by injecting a click), `node tests/e2e/vfx_wall.mjs 5199 gantetsu`, `node tests/e2e/hibiki_play.mjs 5199`, `node tests/e2e/tomoe_play.mjs 5199`
+- Options: `node tests/e2e/settings_ui.mjs 5199`. It covers every tab, real key/mouse rebinding through input capture, per-hero overrides, the live-applied video/sound/accessibility options, persistence and restore defaults.
+- Hero close-ups: `node tests/e2e/hero_look.mjs tomoe e 0.25,0.45 30` (large viewer shots at chosen moments of a state)
 - Screens: `node tests/e2e/ui_tour.mjs 5199` (menus, a live match, Tab screen, Mikoshi Rush, results, every map, the lite title), `node tests/e2e/lite_check.mjs 5199` (web edition)
 - Tests: `npm test` (map / Control / Mikoshi Rush / health pack / rank rules in `tests/unit/modes.test.ts`, hero kits in `kit.test.ts`, headless 5v5 simulations of every map + campaign levels beaten by an AI squad), `node tests/e2e/lab.mjs <url>` (AI Test Lab report: animation states, foot sliding, wall penetration, physics, effects, sounds, perf)
 
@@ -58,11 +98,20 @@ The Windows app plays a recorded bank (`public/sfx`, about 11 MB): 132 sound eff
 - **Chatter**: the hero's team.
 - **Exert** (jump/land grunts): only the player.
 
-Lines also follow priority, cooldown and interrupt rules. Mech pilots speak over cockpit radio, and an announcer calls the objective.
+Lines also follow priority, cooldown and interrupt rules. Mech pilots speak over cockpit radio, and an announcer calls the objective. With subtitles on, lines show on screen with the speaker's name.
+
+**Glitch safeguards.** No crackles, no scratchy audio:
+- The mix runs at 48 kHz through a glue compressor and a brickwall true-peak limiter.
+- An AudioWorklet meter on the final output counts clipped samples and clicks.
+- Every one-shot gets a 2 ms fade-in; loops start and stop on fades; loops ship as sample-exact FLAC.
+- Per-category voice caps, plus a load watchdog that sheds HRTF and reflections before the audio thread underruns.
+- Every asset passes `assetgen/audio_qa.py`, which checks clipping, true peak, saturation, LPC click detection, edges, dropouts, DC and loop seams.
+- The few sounds still synthesised at runtime use sine and triangle waves only.
 
 How it was made:
 - **Sound effects**: MOSS-SoundEffect (Apache 2.0) on Modal. The takes are ranked by LAION-CLAP, then trimmed, given back their high end, looped and loudness-matched (`assetgen/modal_sfx.py`, `audio/sfx_list.py`, `audio_finish.py`).
-- **Voices**: each character's timbre comes from Kokoro-82M (Apache 2.0) and is performed by Chatterbox (MIT). Whisper transcribes every take so the best one per line is picked (`assetgen/modal_voice.py`, `audio/voice_lines.py`).
+- **Voices**: each character's timbre comes from Kokoro-82M (Apache 2.0) and is performed by Chatterbox (MIT). Whisper transcribes every take so the best one per line is picked (`assetgen/modal_voice.py`, `audio/voice_lines.py`). Newer heroes run the same pipeline on Kaggle (`kagglevoice`).
+- **Tomoe's sounds**: MMAudio (MIT) text-to-audio on Kaggle GPUs, with the same CLAP ranking (`assetgen/kagglesfx/kagglesfx.py`).
 - **Web edition**: keeps the small synthesised recipes in `src/audio/Sfx.ts`.
 
 ## How the art was made (all original, generated for this project)

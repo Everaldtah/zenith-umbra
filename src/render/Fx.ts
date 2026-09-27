@@ -6,10 +6,13 @@ import type { V3 } from '../engine/Physics';
 import type { Actor } from '../game/Actor';
 import { WeaponFx } from './WeaponFx';
 import { FULL } from '../edition';
+import { fangPos } from '../game/abilities';
+import { buildFang } from './TomoeProps';
 
 const FXCOL: Record<string, string> = {
   sun: '#ffd76a', star: '#bfe8ff', talisman: '#ffe28a', bolt: '#8ad8ff', void: '#ff2244', blood: '#ff2d55', hex: '#c77dff',
   shadow: '#9d7bff', flame: '#ff6a2a', fist: '#ffd76a', reveal: '#fff2b0', hexbomb: '#c77dff', chain: '#ff6a2a', sonic: '#7dfcff',
+  tide: '#5ff2e0', crescent: '#5ff2e0',
 };
 
 class Particles {
@@ -78,11 +81,17 @@ export class Fx {
   zoneMeshes = new Map<number, THREE.Object3D>();
   beamMeshes = new Map<number, THREE.Mesh>();
   flameMeshes = new Map<number, THREE.Mesh>();
+  /** Tomoe's Crescent Fang while it's out of her hand (stuck in a wall, riding an enemy, flying home), per owner id */
+  fangMeshes = new Map<number, THREE.Group>();
   flash: THREE.PointLight;
   flashUntil = 0;
   shake = 0;
   private sphere = new THREE.SphereGeometry(1, 12, 8);
 
+  /** Settings > Video: particle density (Effects Detail), how much damage FX fill the screen, and flash reduction */
+  lodScale = 1; damageScale = 1; flashScale = 1;
+  /** the hero seen from their own eyes: their status particles would burst on the camera (the HUD shows statuses) */
+  fpActor: Actor | null = null;
   /** desktop edition: travelling tracers, muzzle flashes, sparks, scorch marks, brass (WeaponFx.ts) */
   wfx: WeaponFx | null = null;
   /** Game: where the local player's rounds leave the gun in first person (the viewmodel's muzzle, not the body's) */
@@ -117,14 +126,15 @@ export class Fx {
     m.scale.set(w, w, l);
   }
   private light(p: V3, color: string, intensity: number, now: number, dur = 0.12) {
-    this.flash.position.set(p.x, p.y + 0.5, p.z); this.flash.color.set(color); this.flash.intensity = intensity; this.flashUntil = now + dur;
+    this.flash.position.set(p.x, p.y + 0.5, p.z); this.flash.color.set(color); this.flash.intensity = intensity * this.flashScale; this.flashUntil = now + dur;
   }
 
   onEvent(e: GameEvent, now: number, camPos: THREE.Vector3) {
     if (e.t !== 'fx') return;
     const c = new THREE.Color(e.color ?? '#ffffff'), p = e.pos, P = this.parts;
     const near = camPos.distanceTo(new THREE.Vector3(p.x, p.y, p.z));
-    const lod = near > 60 ? 0.35 : near > 30 ? 0.7 : 1;
+    const dmgFx = ['hit', 'impact', 'slash', 'wound', 'burst'].includes(e.kind) ? this.damageScale : 1;
+    const lod = (near > 60 ? 0.35 : near > 30 ? 0.7 : 1) * this.lodScale * dmgFx;
     const n = (k: number) => Math.max(1, Math.round(k * lod));
     switch (e.kind) {
       case 'hit': P.emit(p, n(8), c, { speed: 5, life: 0.25, size: 0.18 }); if (this.wfx) this.wfx.impact(p, undefined, e.color ?? '#fff', now); break;
@@ -252,6 +262,33 @@ export class Fx {
       case 'healthpack': this.ring({ x: p.x, y: p.y - 0.45, z: p.z }, (e.r ?? 1) * 1.6, '#29f0a0', now, 0.45); P.emit(p, n(26), new THREE.Color('#7dffb0'), { speed: 2.5, life: 0.7, size: 0.28, up: 3, spread: 0.6 }); this.light(p, '#29f0a0', 18, now); break;
       // Hibiki: track swap (a ring sweeping out to the aura edge in the new track's colour), Max Volume (rings pumping out),
       // Scratch Wave (a cone of sound rings), Bass Drop (a stadium-wide shockwave), the drop's shield on each ally
+      // ---- Tomoe
+      case 'wound': P.emit(p, n(10), new THREE.Color('#ff2d55'), { speed: 2.5, life: 0.5, size: 0.16, grav: 7 }); P.emit(p, n(4), new THREE.Color('#ffd0d8'), { speed: 4, life: 0.18, size: 0.12 }); break;
+      case 'warcall': {
+        // the conch's blast: a gold ring rolling out through the team, a column of spray and a bright bloom
+        const g = { x: p.x, y: p.y - (e.actor ? e.actor.height * 0.5 : 1), z: p.z };
+        this.ring(g, e.r ?? 15, '#ffd98a', now, 0.8); this.ring(g, (e.r ?? 15) * 0.6, e.color ?? '#5ff2e0', now, 0.6);
+        this.ring(p, 2.2, '#ffd98a', now, 0.45, false);
+        P.emit(p, n(40), new THREE.Color('#ffe7a8'), { speed: 4, life: 0.7, size: 0.3, up: 3, spread: 0.6 });
+        P.emit(p, n(20), c, { speed: 6, life: 0.5, size: 0.24 });
+        this.light(p, '#ffd98a', 40, now, 0.25);
+        break;
+      }
+      case 'warcallally': this.ring({ x: p.x, y: p.y - (e.actor ? e.actor.height * 0.5 : 1), z: p.z }, 1.3, '#ffd98a', now, 0.45); P.emit(p, n(14), new THREE.Color('#ffe7a8'), { speed: 1.5, life: 0.6, size: 0.24, up: 1.8, spread: 0.5 }); break;
+      case 'reaping': if (e.actor) {
+        // the cleave's arc: a wide crescent of light sweeping across the front on the diagonal, sparks thrown off its edge
+        const a = e.actor, f = a.forward(), R = (e.r ?? 5.5) * 0.8;
+        const arc = new THREE.Mesh(new THREE.RingGeometry(R * 0.55, R, 40, 1, -1.15, 2.3), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+        arc.position.set(a.pos.x, a.pos.y + a.height * 0.5, a.pos.z);
+        arc.rotation.order = 'YXZ'; arc.rotation.y = a.yaw - Math.PI / 2; arc.rotation.x = -Math.PI / 2 + 0.45; arc.rotation.z = 0.35;
+        this.add(arc, 'fade', now, 0.28);
+        for (let i = 0; i < 9; i++) {
+          const ang = -1.1 + i * 0.275, ca = Math.cos(ang), sa = Math.sin(ang);
+          const q = { x: a.pos.x + (f.x * ca - f.z * sa) * R * 0.85, y: a.pos.y + a.height * (0.75 - i * 0.05), z: a.pos.z + (f.z * ca + f.x * sa) * R * 0.85 };
+          P.emit(q, n(3), i % 2 ? c : new THREE.Color('#ffe7a8'), { speed: 3, life: 0.35, size: 0.22 });
+        }
+        this.shake = Math.max(this.shake, 0.1 / (1 + near / 10));
+      } break;
       case 'crossmix': this.ring(p, e.r ?? 12, e.color ?? '#7dffcf', now, 0.55); P.emit(p, n(24), c, { speed: 4, life: 0.5, size: 0.25, up: 1 }); break;
       case 'amp': for (let i = 0; i < 3; i++) this.ring({ x: p.x, y: p.y - 0.8 + i * 0.5, z: p.z }, (e.r ?? 12) * (0.5 + i * 0.25), e.color ?? '#7dffcf', now, 0.5 + i * 0.12); P.emit(p, n(40), c, { speed: 6, life: 0.6, size: 0.3 }); this.light(p, e.color ?? '#7dffcf', 30, now); break;
       case 'scratchwave': if (e.actor) {
@@ -327,6 +364,7 @@ export class Fx {
       return true;
     });
     this.syncProjectiles(w.projs, now);
+    this.syncFangs(w, now);
     this.syncZones(w.zones, now);
     this.syncBeams(w, now);
     this.statusFx(w, now, dt);
@@ -338,6 +376,11 @@ export class Fx {
       seen.add(p.id);
       let m = this.projMeshes.get(p.id);
       const col = new THREE.Color(FXCOL[p.fx] ?? '#ffffff');
+      if (!m && p.fx === 'crescent') {
+        m = new THREE.Group();
+        const blade = buildFang(1.25); blade.name = 'spin'; m.add(blade);
+        this.group.add(m); this.projMeshes.set(p.id, m);
+      }
       if (!m) {
         m = new THREE.Group();
         const core = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color('#ffffff'), 0.5) }));
@@ -355,6 +398,7 @@ export class Fx {
       }
       m.position.set(p.pos.x, p.pos.y, p.pos.z);
       if (p.fx === 'sonic') { const rg = m.getObjectByName('ring'); if (rg) rg.scale.setScalar(0.2 + 0.08 * Math.sin(now * 60 + p.id)); }
+      if (p.fx === 'crescent') { const b = m.getObjectByName('spin'); if (b) b.rotation.x = -now * 26; }
       const v = new THREE.Vector3(p.vel.x, p.vel.y, p.vel.z);
       if (v.lengthSq() > 0.01) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), v.normalize());
       if (Math.random() < 0.6) this.parts.emit(p.pos, 1, col, { speed: 0.5, life: 0.25, size: p.splash ? 0.3 : 0.14 });
@@ -370,6 +414,40 @@ export class Fx {
       this.group.remove(m); this.projMeshes.delete(id);
       const line = this.beamMeshes.get(-id); if (line) { this.group.remove(line); this.beamMeshes.delete(-id); }
     }
+    void now;
+  }
+
+  /** the Crescent Fang out of her hand: buried in a wall, riding an enemy (blade in, grip out), or whirling home */
+  private syncFangs(w: World, now: number) {
+    const seen = new Set<number>();
+    for (const a of w.actors) {
+      const st = a.def.id === 'tomoe' ? a.sv.fang ?? 0 : 0;
+      if (st < 2) continue;
+      const at = fangPos(w, a);
+      if (!at) continue;
+      seen.add(a.id);
+      let m = this.fangMeshes.get(a.id);
+      if (!m) { m = new THREE.Group(); const b = buildFang(1.25); b.name = 'spin'; m.add(b); this.group.add(m); this.fangMeshes.set(a.id, m); }
+      const b = m.getObjectByName('spin')!;
+      if (st === 4) {
+        // whirling home, edge first
+        m.position.set(at.x, at.y, at.z);
+        const v = new THREE.Vector3(a.pos.x - at.x, a.pos.y + a.height * 0.6 - at.y, a.pos.z - at.z);
+        if (v.lengthSq() > 1e-4) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), v.normalize());
+        b.rotation.x = -now * 30;
+        if (Math.random() < 0.8) this.parts.emit(at, 1, new THREE.Color('#5ff2e0'), { speed: 0.4, life: 0.25, size: 0.18 });
+      } else {
+        // buried: the blade points back the way it came in (from its owner), the grip sticking out
+        const tgt = st === 3 ? w.actors.find(o => o.id === a.sv.fangTgt) : null;
+        const from = new THREE.Vector3(a.pos.x, a.pos.y + a.height * 0.6, a.pos.z), to = new THREE.Vector3(at.x, at.y, at.z);
+        const d = to.clone().sub(from); d.y = 0; if (d.lengthSq() < 1e-4) d.set(0, 0, 1); d.normalize();
+        m.position.copy(to).addScaledVector(d, tgt ? -(tgt.radius + 0.05) : -0.12);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+        b.rotation.x = 0.35;
+        if (Math.random() < 0.15) this.parts.emit(m.position, 1, new THREE.Color('#5ff2e0'), { speed: 0.2, life: 0.5, size: 0.14, up: 0.6 });
+      }
+    }
+    for (const [id, m] of this.fangMeshes) if (!seen.has(id)) { this.group.remove(m); this.fangMeshes.delete(id); }
     void now;
   }
 
@@ -539,7 +617,7 @@ export class Fx {
   private statusFx(w: World, now: number, dt: number) {
     const k = Math.min(1, dt * 60);
     for (const a of w.actors) {
-      if (!a.alive) continue;
+      if (!a.alive || a === this.fpActor) continue;
       const c = a.center;
       if (a.has('brand', now) && Math.random() < 0.3 * k) this.parts.emit(c, 1, new THREE.Color('#ff6a2a'), { speed: 0.8, life: 0.6, size: 0.25, up: 1.5, spread: a.radius });
       if (a.has('bleed', now) && Math.random() < 0.3 * k) this.parts.emit(c, 1, new THREE.Color('#ff1744'), { speed: 0.8, life: 0.6, size: 0.2, grav: 4, spread: a.radius });
@@ -576,6 +654,10 @@ export class Fx {
         const nx = a.sv.grindNx ?? 0, nz = a.sv.grindNz ?? 0;
         this.parts.emit({ x: a.pos.x - nx * a.radius, y: a.pos.y + 0.15, z: a.pos.z - nz * a.radius }, 2, new THREE.Color(Math.random() < 0.5 ? '#bffcff' : '#ffffff'), { speed: 2.5, life: 0.25, size: 0.14, grav: 8, dir: { x: -a.vel.x * 0.15, y: 0.4, z: -a.vel.z * 0.15 } });
       }
+      // Tomoe: open wounds drip, the war call's warriors trail gold motes, the tide throws spray and dust
+      if (a.wounds.length && Math.random() < Math.min(0.9, 0.25 * a.wounds.length) * k) this.parts.emit({ x: c.x, y: c.y + 0.2, z: c.z }, 1, new THREE.Color(Math.random() < 0.7 ? '#ff2d55' : '#9e0f2b'), { speed: 0.4, life: 0.7, size: 0.16, grav: 6, spread: a.radius * 0.9 });
+      if (a.has('warcall', now) && Math.random() < 0.35 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + 0.15, z: a.pos.z }, 1, new THREE.Color('#ffd98a'), { speed: 0.3, life: 0.6, size: 0.22, up: 1.6, spread: a.radius * 1.4 });
+      if (a.has('tideult', now) && Math.random() < 0.9 * k) { this.parts.emit({ x: a.pos.x, y: a.pos.y + 0.2, z: a.pos.z }, 2, new THREE.Color('#9c8f7c'), { speed: 1.5, life: 0.6, size: 0.5, up: 1, spread: a.radius * 1.5 }); this.parts.emit(c, 2, new THREE.Color('#5ff2e0'), { speed: 1.2, life: 0.35, size: 0.3, spread: a.radius * 1.4 }); }
       if (a.has('pumped', now) && Math.random() < 0.25 * k) this.parts.emit(c, 1, new THREE.Color('#ffd23f'), { speed: 0.5, life: 0.5, size: 0.2, up: 1, spread: a.radius });
       if (a.def.frame === 'mech' && a.forced && Math.random() < 0.8) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z }, 2, new THREE.Color('#ffb040'), { speed: 2, life: 0.3, size: 0.35, dir: { x: -a.vel.x * 0.1, y: -0.5, z: -a.vel.z * 0.1 } });
     }

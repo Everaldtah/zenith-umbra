@@ -10,7 +10,9 @@ import path from 'node:path';
 
 const DIST = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'dist');
 const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura'];
-const FULL_HEROES = ['gantetsu', 'hibiki'];
+const FULL_HEROES = ['gantetsu', 'hibiki', 'tomoe'];
+// generated weapon props of desktop-only heroes
+const HERO_PROPS = ['prop_tomoe_'];
 const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_' };
 
 let bytes = 0, files = 0;
@@ -24,7 +26,7 @@ const each = (dir, test) => { const d = path.join(DIST, dir); if (fs.existsSync(
 
 rm(path.join(DIST, 'anim'));
 rm(path.join(DIST, 'sfx'));
-each('models', f => FULL_HEROES.some(h => f.startsWith(h + '.') || f.startsWith(h + '_')) || Object.values(PROP_PREFIX).some(p => f.startsWith(p)));
+each('models', f => FULL_HEROES.some(h => f.startsWith(h + '.') || f.startsWith(h + '_')) || [...Object.values(PROP_PREFIX), ...HERO_PROPS].some(p => f.startsWith(p)));
 each('env', f => FULL_MAPS.some(m => f.includes(`_${m}`)));
 each('img', f => FULL_MAPS.some(m => f === `map_${m}.webp`) || FULL_HEROES.some(h => f.includes(h)));
 
@@ -32,7 +34,7 @@ each('img', f => FULL_MAPS.some(m => f === `map_${m}.webp`) || FULL_HEROES.some(
 const man = path.join(DIST, 'models', 'manifest.json');
 if (fs.existsSync(man)) {
   const j = JSON.parse(fs.readFileSync(man, 'utf8'));
-  const gone = k => FULL_HEROES.includes(k) || Object.values(PROP_PREFIX).some(p => k.startsWith(p));
+  const gone = k => FULL_HEROES.includes(k) || [...Object.values(PROP_PREFIX), ...HERO_PROPS].some(p => k.startsWith(p));
   for (const sect of Object.values(j)) if (sect && typeof sect === 'object' && !Array.isArray(sect)) for (const k of Object.keys(sect)) if (gone(k)) delete sect[k];
   if (Array.isArray(j.textures)) j.textures = j.textures.filter(t => !FULL_MAPS.some(m => t.includes(`_${m}`)));
   fs.writeFileSync(man, JSON.stringify(j, null, 2));

@@ -15,6 +15,8 @@ type Layer = {
   d: number; v?: number; a?: number; dl?: number; // duration, volume, attack, delay
   lp?: number; lp1?: number; hp?: number; q?: number; bp?: number;
 };
+// desktop-played recipes (sounds with no recorded sample: UI stings, counter / victory cues) use sine and triangle only:
+// square and sawtooth edges read as clicks on the output meter and as harshness on headphones
 const R: Record<string, Layer[]> = {
   // ---------------- weapons
   cannon: [{ w: 'square', f: 180, f1: 60, d: 0.18, v: 0.35, lp: 1400 }, { n: true, d: 0.2, v: 0.4, lp: 2200, lp1: 300 }],
@@ -70,8 +72,8 @@ const R: Record<string, Layer[]> = {
   barrierbreak: [{ n: true, d: 0.6, v: 0.5, hp: 1500 }, { w: 'triangle', f: 900, f1: 100, d: 0.5, v: 0.25 }],
   healhit: [{ w: 'sine', f: 1046, f1: 1318, d: 0.18, v: 0.12 }],
   healthpack: [{ w: 'sine', f: 523, f1: 1046, d: 0.25, v: 0.22 }, { w: 'sine', f: 784, f1: 1568, d: 0.3, v: 0.14, dl: 0.06 }, { n: true, d: 0.15, v: 0.08, hp: 4000 }],
-  interrupt: [{ w: 'square', f: 300, f1: 150, d: 0.2, v: 0.2 }, { n: true, d: 0.15, v: 0.2, bp: 2000, q: 2 }],
-  denied: [{ w: 'square', f: 200, d: 0.08, v: 0.15 }, { w: 'square', f: 150, d: 0.1, v: 0.15, dl: 0.1 }],
+  interrupt: [{ w: 'triangle', f: 300, f1: 150, d: 0.2, v: 0.2 }, { n: true, d: 0.15, v: 0.2, bp: 2000, q: 2 }],
+  denied: [{ w: 'triangle', f: 200, d: 0.08, v: 0.15 }, { w: 'triangle', f: 150, d: 0.1, v: 0.15, dl: 0.1 }],
   zonebreak: [{ n: true, d: 0.4, v: 0.35, hp: 2500 }, { w: 'triangle', f: 1600, f1: 200, d: 0.35, v: 0.18 }],
   // ---------------- abilities
   rocketfist: [{ n: true, d: 0.5, v: 0.35, lp: 1000, lp1: 3000 }, { w: 'sawtooth', f: 120, f1: 60, d: 0.4, v: 0.15, lp: 600 }],
@@ -124,8 +126,8 @@ const R: Record<string, Layer[]> = {
   // ---------------- UI / announcer stingers
   announce: [{ w: 'triangle', f: 523, d: 0.2, v: 0.2 }, { w: 'triangle', f: 784, d: 0.35, v: 0.2, dl: 0.18 }],
   capture: [{ w: 'triangle', f: 659, d: 0.2, v: 0.2 }, { w: 'triangle', f: 880, d: 0.2, v: 0.2, dl: 0.15 }, { w: 'triangle', f: 1046, d: 0.4, v: 0.2, dl: 0.3 }],
-  victory: [{ w: 'sawtooth', f: 523, d: 0.3, v: 0.12, lp: 3000 }, { w: 'sawtooth', f: 659, d: 0.3, v: 0.12, lp: 3000, dl: 0.25 }, { w: 'sawtooth', f: 784, d: 0.3, v: 0.12, lp: 3000, dl: 0.5 }, { w: 'sawtooth', f: 1046, d: 1.2, v: 0.14, lp: 3000, dl: 0.75 }],
-  counter: [{ w: 'square', f: 880, d: 0.08, v: 0.12 }, { w: 'square', f: 1320, d: 0.15, v: 0.12, dl: 0.08 }],
+  victory: [{ w: 'triangle', f: 523, d: 0.3, v: 0.12, lp: 3000 }, { w: 'triangle', f: 659, d: 0.3, v: 0.12, lp: 3000, dl: 0.25 }, { w: 'triangle', f: 784, d: 0.3, v: 0.12, lp: 3000, dl: 0.5 }, { w: 'triangle', f: 1046, d: 1.2, v: 0.14, lp: 3000, dl: 0.75 }],
+  counter: [{ w: 'triangle', f: 880, d: 0.08, v: 0.12 }, { w: 'triangle', f: 1320, d: 0.15, v: 0.12, dl: 0.08 }],
   ult_ready: [{ w: 'sine', f: 660, d: 0.15, v: 0.15 }, { w: 'sine', f: 990, d: 0.25, v: 0.15, dl: 0.12 }],
   ui_click: [{ w: 'triangle', f: 900, f1: 1200, d: 0.05, v: 0.1 }],
   ui_buy: [{ w: 'sine', f: 1318, d: 0.08, v: 0.12 }, { w: 'sine', f: 1760, d: 0.18, v: 0.12, dl: 0.07 }],
@@ -145,6 +147,38 @@ export interface PlayOpts {
   rate?: number;
 }
 interface Loop { src: AudioBufferSourceNode; g: GainNode; lp: BiquadFilterNode; pan: PannerNode | null; id: string; seen: number }
+interface Live { src: AudioBufferSourceNode; g: GainNode; t0: number; id: string }
+
+/** simultaneous instances of one sound per category (the oldest fades out to make room) */
+const CAP: Record<string, number> = { weapon: 5, impact: 4, step: 6, move: 3, ability: 4, feedback: 3, loop: 2, amb: 1, voice: 3 };
+const MAX_LIVE = 48;
+
+/** output meter (AudioWorklet on the final mix): peak, clipped samples, isolated clicks - the glitch detector the audio
+ *  tests read, and the advanced performance overlay shows */
+const METER_SRC = `
+class ZuMeter extends AudioWorkletProcessor {
+  constructor() { super(); this.peak = 0; this.clips = 0; this.clicks = 0; this.frames = 0; this.p1 = 0; this.p2 = 0; this.avg = 1e-4; this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0];
+    if (ch && ch.length) {
+      const x = ch[0];
+      for (let i = 0; i < x.length; i++) {
+        const v = x[i], a = Math.abs(v);
+        if (a > this.peak) this.peak = a;
+        if (a >= 0.999) this.clips++;
+        // a click: the waveform's curvature jumps far above its running level (and above an absolute floor)
+        const c = Math.abs(v - 2 * this.p1 + this.p2);
+        if (c > 0.35 && c > this.avg * 40) this.clicks++;
+        this.avg += (c - this.avg) * 0.002;
+        this.p2 = this.p1; this.p1 = v;
+      }
+      this.frames += x.length;
+    }
+    if (++this.n % 24 === 0) { this.port.postMessage({ peak: this.peak, clips: this.clips, clicks: this.clicks, frames: this.frames }); this.peak = 0; }
+    return true;
+  }
+}
+registerProcessor('zu-meter', ZuMeter);`;
 
 // category -> bus + reference distance + reverb send + pitch variation
 const CATS: Record<string, { ref: number; send: number; quad: number; pv: number }> = {
@@ -184,25 +218,43 @@ export class Sfx {
   threat = new Map<number, number>();
   private loops = new Map<string, Loop>();
   private frame = 0;
+  // ---- quality safeguards
+  private live: Live[] = [];
+  private uiBus!: GainNode; private announcerBus!: GainNode; private limiter!: DynamicsCompressorNode; private glue!: DynamicsCompressorNode;
+  /** output meter totals since unlock (clipped samples, clicks) and the last window's peak */
+  meter = { peak: 0, clips: 0, clicks: 0, frames: 0 };
+  /** the audio thread's load (AudioRenderCapacity, where the runtime has it): degrades gracefully instead of crackling */
+  load = { avg: 0, peak: 0, underruns: 0 };
+  private degraded = false; private calmSince = 0;
+  /** mix settings (Settings > Sound) */
+  mix = { sfx: 1, voice: 1, announcer: 1, ambience: 0.8, ui: 0.8, hitmarker: 1, music: 0.6, preset: 'default' as 'default' | 'headphones' | 'speakers' | 'night', background: false };
+  latencyHint: AudioContextLatencyCategory = 'interactive';
 
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
-    this.ctx = new AC();
+    // 48 kHz: the rate the bank is mastered at (no resampling on the way out); the latency the player chose
+    try { this.ctx = FULL ? new AC({ latencyHint: this.latencyHint, sampleRate: 48000 }) : new AC(); } catch { this.ctx = new AC(); }
     this.master = this.ctx.createGain(); this.master.gain.value = this.volume;
     const comp = this.ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
     this.bus = this.ctx.createGain(); this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.35;
     if (FULL) {
       // bus -> duck -> limiter; voice rides on top; reverb and reflections return after the ducks
       const C = this.ctx;
-      comp.threshold.value = -10; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      // glue: a gentle bus compressor (holds the mix together without pumping); the brick-wall limiter sits after the
+      // master volume so nothing the mix does can clip the output (clipping = crackle)
+      comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.25;
+      this.glue = comp;
+      this.limiter = C.createDynamicsCompressor();
+      this.limiter.threshold.value = -1.5; this.limiter.knee.value = 0; this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.1;
       this.sfxDuck = C.createGain(); this.ambDuck = C.createGain(); this.musicDuck = C.createGain();
-      this.voiceBus = C.createGain(); this.ambBus = C.createGain(); this.ambBus.gain.value = 0.9;
+      this.voiceBus = C.createGain(); this.ambBus = C.createGain(); this.uiBus = C.createGain(); this.announcerBus = C.createGain();
+      this.bus.gain.value = 0.8;                          // headroom: a dense fight sums many sounds
       this.bus.connect(this.sfxDuck); this.sfxDuck.connect(comp);
       this.musicBus.connect(this.musicDuck); this.musicDuck.connect(comp);
       this.ambBus.connect(this.ambDuck); this.ambDuck.connect(comp);
-      this.voiceBus.connect(comp);
+      this.voiceBus.connect(comp); this.announcerBus.connect(comp); this.uiBus.connect(comp);
       this.revIn = C.createGain(); this.roomIn = C.createGain(); this.revOut = C.createGain(); this.revOut.gain.value = 1;
       this.outdoor = C.createConvolver(); this.room = C.createConvolver();
       this.revIn.connect(this.outdoor); this.roomIn.connect(this.room);
@@ -213,13 +265,78 @@ export class Sfx {
     } else {
       this.bus.connect(comp); this.musicBus.connect(comp);
     }
-    comp.connect(this.master); this.master.connect(this.ctx.destination);
+    comp.connect(this.master);
+    if (FULL) {
+      this.master.connect(this.limiter); this.limiter.connect(this.ctx.destination);
+      this.applyMix();
+      void this.startMeter();
+      this.watchLoad();
+      document.addEventListener('visibilitychange', () => this.focusMute());
+      addEventListener('blur', () => this.focusMute()); addEventListener('focus', () => this.focusMute());
+    } else this.master.connect(this.ctx.destination);
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   }
 
-  setVolume(v: number) { this.volume = v; if (this.ctx) this.master.gain.value = v; }
+  setVolume(v: number) { this.volume = v; if (this.ctx) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
+
+  // ---------------------------------------------------------------- mix & safeguards (desktop)
+  /** Settings > Sound: category volumes, mix preset (headphones = HRTF 3D, speakers = plain panning, night = narrow
+   *  dynamic range), background audio */
+  applyMix() {
+    if (!FULL || !this.ctx) return;
+    const t = this.ctx.currentTime, m = this.mix, r = (g: GainNode, v: number) => g.gain.setTargetAtTime(v, t, 0.03);
+    r(this.bus, 0.8 * m.sfx); r(this.voiceBus, m.voice); r(this.announcerBus, m.announcer); r(this.ambBus, 0.9 * m.ambience); r(this.uiBus, m.ui);
+    r(this.musicBus, 0.35 * m.music / 0.6);
+    const night = m.preset === 'night';
+    this.glue.threshold.setTargetAtTime(night ? -30 : -18, t, 0.05); this.glue.ratio.setTargetAtTime(night ? 6 : 3, t, 0.05);
+    this.focusMute();
+  }
+  private focusMute() {
+    if (!this.ctx || !FULL) return;
+    const away = !this.mix.background && (document.hidden || !document.hasFocus());
+    this.master.gain.setTargetAtTime(away ? 0 : this.volume, this.ctx.currentTime, 0.05);
+  }
+  private async startMeter() {
+    const C = this.ctx!;
+    try {
+      const url = URL.createObjectURL(new Blob([METER_SRC], { type: 'application/javascript' }));
+      await C.audioWorklet.addModule(url);
+      const node = new AudioWorkletNode(C, 'zu-meter', { numberOfOutputs: 1 });
+      const silent = C.createGain(); silent.gain.value = 0;
+      this.limiter.connect(node); node.connect(silent); silent.connect(C.destination);
+      node.port.onmessage = e => { const d = e.data; this.meter.peak = d.peak; this.meter.clips = d.clips; this.meter.clicks = d.clicks; this.meter.frames = d.frames; };
+    } catch { /* no worklet support: the safeguards still run */ }
+  }
+  /** Chromium's AudioRenderCapacity: under load, shed HRTF, reflections and voices before the audio thread underruns */
+  private watchLoad() {
+    const rc = (this.ctx as any).renderCapacity;
+    if (!rc?.start) return;
+    try {
+      rc.addEventListener('update', (e: any) => {
+        this.load.avg = e.averageLoad; this.load.peak = e.peakLoad; if (e.underrunRatio > 0) this.load.underruns++;
+        const now = performance.now();
+        if (e.underrunRatio > 0 || e.peakLoad > 0.85) { this.degraded = true; this.calmSince = now; }
+        else if (this.degraded && e.peakLoad < 0.5 && now - this.calmSince > 8000) this.degraded = false;
+      });
+      rc.start({ updateInterval: 1 });
+    } catch { /* not available */ }
+  }
+  /** make room: per-sound caps, then the global voice budget - the oldest fades out in 12 ms (never a hard cut) */
+  private admit(id: string, cat: string) {
+    const ctx = this.ctx!, t = ctx.currentTime;
+    this.live = this.live.filter(l => l.t0 + (l.src.buffer?.duration ?? 0) / Math.max(0.1, l.src.playbackRate.value) > t);
+    const cap = this.degraded ? Math.max(1, Math.floor((CAP[cat] ?? 4) / 2)) : CAP[cat] ?? 4;
+    const same = this.live.filter(l => l.id === id);
+    const budget = this.degraded ? 32 : MAX_LIVE;
+    const drop = same.length >= cap ? same[0] : this.live.length >= budget ? this.live[0] : null;
+    if (drop) {
+      drop.g.gain.cancelScheduledValues(t); drop.g.gain.setTargetAtTime(0, t, 0.004);
+      try { drop.src.stop(t + 0.03); } catch { /* already stopping */ }
+      this.live = this.live.filter(l => l !== drop);
+    }
+  }
 
   setListener(pos: THREE.Vector3, fwd: THREE.Vector3) {
     this.listener.copy(pos); this.listenerF.copy(fwd);
@@ -331,7 +448,8 @@ export class Sfx {
 
   private makePanner(ctx: AudioContext, pos: P3, ref: number, near: boolean) {
     const p = ctx.createPanner();
-    const hrtf = near && this.hrtfLive < 10;
+    // HRTF (3D over headphones) for the closest few; plain panning for the rest, for speakers, or under load
+    const hrtf = near && this.hrtfLive < 6 && !this.degraded && this.mix.preset !== 'speakers';
     p.panningModel = hrtf ? 'HRTF' : 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref; p.rolloffFactor = 1.15; p.maxDistance = 140;
     if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else (p as any).setPosition(pos.x, pos.y, pos.z);
     return { p, hrtf };
@@ -345,13 +463,17 @@ export class Sfx {
     if (now - last < (cat === 'weapon' ? 0.03 : 0.02)) return;
     this.throttle.set(id, now);
     if (pos && o.rel !== 'self' && Math.hypot(pos.x - this.listener.x, pos.y - this.listener.y, pos.z - this.listener.z) > 110) return;
-    if (this.voices >= 64) return;
     const buf = this.bank.sfx(id); if (!buf) return;
     const S = this.spatial(pos, cat, o);
     if (S.gain < 0.05) return;           // culled by the threat mix
+    this.admit(id, cat);
     const src = ctx.createBufferSource(); src.buffer = buf;
-    src.playbackRate.value = (o.rate ?? 1) * (1 + (Math.random() - 0.5) * 2 * S.C.pv);
-    const g = ctx.createGain(); g.gain.value = vol * S.gain * (o.rel === 'self' ? 0.9 : 1);
+    // pitch spread kept small (resampling a transient far off its rate smears it)
+    src.playbackRate.value = (o.rate ?? 1) * (1 + (Math.random() - 0.5) * 2 * Math.min(0.03, S.C.pv));
+    const g = ctx.createGain();
+    const v = vol * S.gain * (o.rel === 'self' ? 0.9 : 1) * (id.startsWith('ui_') ? this.mix.ui : id === 'hit' || id === 'crit' || id === 'kill' ? this.mix.hitmarker : 1);
+    // a 2 ms fade-in: whatever the first sample is, the sound never starts with a click
+    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(v, now + 0.002);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = S.cutoff; lp.Q.value = 0.5;
     src.connect(lp); lp.connect(g);
     let hrtf = false;
@@ -362,27 +484,30 @@ export class Sfx {
     // space: more reverb with distance (the far layer of a gunshot is mostly tail), reflections for close weapons
     const send = (o.send ?? S.C.send) * (1 + Math.min(1.2, S.dist / 45)) * (1 + S.occ * 0.6);
     if (send > 0.01) { const r = ctx.createGain(); r.gain.value = send; g.connect(r); r.connect(this.revIn); r.connect(this.roomIn); }
-    if (this.quad && S.C.quad && S.dist < 40) { const q = ctx.createGain(); q.gain.value = S.C.quad * (1 - S.dist / 40); g.connect(q); q.connect(this.quad.input); }
+    if (this.quad && S.C.quad && S.dist < 40 && !this.degraded) { const q = ctx.createGain(); q.gain.value = S.C.quad * (1 - S.dist / 40); g.connect(q); q.connect(this.quad.input); }
     this.voices++; if (hrtf) this.hrtfLive++;
+    this.live.push({ src, g, t0: now, id });
     src.onended = () => { this.voices--; if (hrtf) this.hrtfLive--; src.disconnect(); g.disconnect(); };
-    src.start();
+    src.start(now);
   }
 
   /** a voice line on the voice bus (the director decides who hears what); returns its duration */
-  playLine(buf: AudioBuffer, pos: P3 | null, vol: number, o: PlayOpts & { radio?: boolean; ult?: boolean }, onEnd?: () => void): { stop: () => void; dur: number } | null {
+  playLine(buf: AudioBuffer, pos: P3 | null, vol: number, o: PlayOpts & { radio?: boolean; ult?: boolean; announcer?: boolean }, onEnd?: () => void): { stop: () => void; dur: number } | null {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return null;
     const S = this.spatial(pos ?? undefined, 'voice', { ...o, actor: null });
     const src = ctx.createBufferSource(); src.buffer = buf;
     const g = ctx.createGain();
     // enemy ult warnings stay loud wherever they come from (you have to hear them to react)
-    g.gain.value = vol * (o.ult ? Math.max(0.85, S.gain) : S.gain);
+    const gv = vol * (o.ult ? Math.max(0.85, S.gain) : S.gain);
+    g.gain.setValueAtTime(0, ctx.currentTime); g.gain.linearRampToValueAtTime(gv, ctx.currentTime + 0.004);
     let node: AudioNode = src;
     if (o.radio) {
       // a mech pilot speaks over the cockpit comms: band-limited with a little grit
       const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 320;
       const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 3600;
-      const sh = ctx.createWaveShaper(); const c = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 2.2); } sh.curve = c;
+      // gentle drive, oversampled: a hard curve at the native rate aliases into fizz
+      const sh = ctx.createWaveShaper(); const c = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; c[i] = Math.tanh(x * 1.3) / Math.tanh(1.3); } sh.curve = c; sh.oversample = '4x';
       node.connect(hp); hp.connect(bp); bp.connect(sh); node = sh;
     }
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.ult ? 20000 : S.cutoff;
@@ -390,7 +515,7 @@ export class Sfx {
     if (pos && o.rel !== 'self') {
       const { p } = this.makePanner(ctx, pos, o.ult ? 30 : 6, false);
       g.connect(p); p.connect(this.voiceBus);
-    } else g.connect(this.voiceBus);
+    } else g.connect(o.announcer ? this.announcerBus : this.voiceBus);
     const r = ctx.createGain(); r.gain.value = 0.1; g.connect(r); r.connect(this.revIn); r.connect(this.roomIn);
     src.onended = () => { src.disconnect(); g.disconnect(); onEnd?.(); };
     src.start();

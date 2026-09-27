@@ -894,6 +894,50 @@
   "loop": true
  },
  {
+  "id": "scattergun",
+  "prompt": "a heavy pump-action shotgun blast, huge punchy boom with a bright metallic ring and a pump action rack, close",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "warcall",
+  "prompt": "a huge conch shell war horn blown hard, a deep resonant bellowing horn call echoing across a battlefield",
+  "secs": 1.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "reapwind",
+  "prompt": "a heavy battle axe heaved back over the shoulder, a deep metallic whoosh building up",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "reaping",
+  "prompt": "a giant battle axe cleaving hard through the air, a heavy whoosh into a sharp ringing metallic slash",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "fangreturn",
+  "prompt": "a spinning throwing blade whirring back through the air, a fast rhythmic metallic whoosh",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "fangcatch",
+  "prompt": "a heavy knife caught in a gloved hand, a short metallic clink and leather grip",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
   "id": "amb_amatsu",
   "prompt": "a mountain shrine at dawn, gentle wind, wind chimes and distant birds",
   "secs": 8.0,

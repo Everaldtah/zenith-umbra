@@ -104,6 +104,60 @@ describe('Hibiki', () => {
     expect(h2.has('pumped', w2.time)).toBe(true);
   });
 
+  it('Mag-Grind climbs: looking up rides up the wall, and at a rooftop he mantles over the edge and stays on top', () => {
+    // the 3m block on the training grounds (x 20..28, z -4..4): ride its west face looking up, pop onto its roof
+    const w = arena();
+    const h = w.addHero('hibiki', 'zenith'); h.clear('spawnprot');
+    const hit = w.level.ray({ x: 14, y: 1.2, z: -3.2 }, { x: 1, y: 0, z: 0 }, 12)!;
+    const face = 14 + hit.t;
+    h.pos = { x: face - h.radius - 0.3, y: 0.9, z: -3.2 }; h.vel = { x: 0, y: 1, z: 6 }; h.grounded = false; h.lastGroundedAt = -9;
+    h.yaw = h.input.yaw = 0; h.pitch = h.input.pitch = 0.6; h.input.grind = true; h.input.mz = 1;
+    let maxY = 0, mantled = false;
+    run(w, 2.5, () => { maxY = Math.max(maxY, h.pos.y); if ((h.stats.mantles ?? 0) > 0 && !mantled) { mantled = true; h.input.mz = 0; h.input.grind = false; } });
+    expect(mantled).toBe(true);
+    expect(h.pos.y).toBeGreaterThan(2.9);                      // standing on the roof
+    expect(h.pos.x).toBeGreaterThan(face);                      // over the edge, not hanging off the wall
+    h.input.grind = false; h.input.mz = 0; run(w, 1);
+    expect(h.grounded).toBe(true); expect(h.pos.y).toBeGreaterThan(2.9);
+  });
+
+  it('Mag-Grind climbs a tall wall head-on while looking up, and a wall jump off it goes higher when looking up', () => {
+    const w = arena();
+    const h = w.addHero('hibiki', 'zenith'); h.clear('spawnprot');
+    const hit = w.level.ray({ x: -30, y: 2, z: 20 }, { x: 0, y: 0, z: 1 }, 20)!;
+    const face = 20 + hit.t;
+    // standing at the 10m border wall, facing it, looking up: skates up the wall
+    h.pos = { x: -30, y: 0, z: face - h.radius - 0.4 }; h.vel = { x: 0, y: 0, z: 3 };
+    h.yaw = h.input.yaw = 0; h.pitch = h.input.pitch = 0.7; h.input.grind = true; h.input.mz = 1;
+    let maxY = 0;
+    run(w, 1.0, () => { maxY = Math.max(maxY, h.pos.y); });
+    expect(h.has('grinding', w.time)).toBe(true);
+    expect(maxY).toBeGreaterThan(3.5);
+    // let go: kicked up and away
+    h.input.grind = false; run(w, DT);
+    expect(h.vel.y).toBeGreaterThan(8);
+    expect(h.vel.z).toBeLessThan(-2);
+    // however long he rides, the 10m arena wall can't be topped out of bounds
+    const w2 = arena(); const h2 = w2.addHero('hibiki', 'zenith'); h2.clear('spawnprot');
+    h2.pos = { x: -30, y: 0, z: face - h2.radius - 0.4 }; h2.vel = { x: 0, y: 0, z: 3 };
+    h2.yaw = h2.input.yaw = 0; h2.pitch = h2.input.pitch = 0.7; h2.input.grind = true; h2.input.mz = 1;
+    run(w2, 4);
+    expect(h2.pos.z).toBeLessThan(face);
+    expect(h2.pos.y).toBeLessThan(9);
+  });
+
+  it('skates like Lucio: glides when you let go instead of stopping dead', () => {
+    const w = arena();
+    const h = place(w, 'hibiki', 'zenith', 0, 0, 0), r = place(w, 'raijin', 'zenith', 4, 0, 0);
+    for (const a of [h, r]) { a.input.mz = 1; }
+    run(w, 1.5);
+    for (const a of [h, r]) { a.input.mz = 0; }
+    const z0h = h.pos.z, z0r = r.pos.z;
+    run(w, 0.6);
+    expect(h.pos.z - z0h).toBeGreaterThan(1.5);                  // still rolling
+    expect(r.pos.z - z0r).toBeLessThan(0.8);                     // a runner stops
+  });
+
   it('Bass Drop: leap, land, and every ally within 30m gets 750 temporary health that fades out', () => {
     const w = arena();
     const h = place(w, 'hibiki', 'zenith', 0, 0), ally = place(w, 'raijin', 'zenith', 5, 10), far = place(w, 'yuzu', 'zenith', 20, 22);

@@ -180,6 +180,13 @@
    "bones": [
     "humanoid"
    ]
+  },
+  "tomoe": {
+   "height": 2.0,
+   "tris": 50000,
+   "bones": [
+    "humanoid"
+   ]
   }
  },
  "props": {
@@ -256,6 +263,9 @@
    "height": 1
   },
   "prop_kagura_mikoshi": {
+   "height": 1
+  },
+  "prop_tomoe_axe": {
    "height": 1
   }
  },

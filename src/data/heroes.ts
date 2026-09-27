@@ -76,7 +76,7 @@ export const HEROES: HeroDef[] = [
   {
     id: 'tenkai', name: 'Tenkai-Oh', title: 'The Dawn Colossus', team: 'zenith', role: 'tank', frame: 'mech', rival: 'gorgoth',
     hp: 400, armor: 250, speed: 5.0, height: 3.3, radius: 0.95, color: '#f4d35e', glow: '#ffd76a',
-    primary: { kind: 'melee', name: 'Dawnbreaker Rocket Hammer', damage: 85, rate: 1.1, range: 5, sweep: true, delay: 0.24, sfx: 'hammer', fx: 'sun' },
+    primary: { kind: 'melee', name: 'Dawnbreaker Rocket Hammer', damage: 85, rate: 1.04, range: 5, sweep: true, delay: 0.24, sfx: 'hammer', fx: 'sun' },
     secondary: { id: 'bulwark', name: 'Solar Bulwark', key: 'RMB', cooldown: 0, hold: true, desc: 'Raise a 1400 HP sun-shield in front of you. Regenerates when lowered.' },
     ability1: { id: 'dawncharge', name: 'Dawn Charge', key: 'SHIFT', cooldown: 8, desc: 'Rocket forward (steer with the mouse). The first enemy hit is pinned and carried; drive them into a wall for 250 damage and a stun. Others in the way are knocked aside. SHIFT again to stop.', counter: "Meets Gorgoth's Abyss Charge head-on: it breaks and Gorgoth is stunned." },
     ability2: { id: 'shatter', name: 'Solar Shatter', key: 'E', cooldown: 12, desc: 'Slam the hammer into the ground: a 16m shockwave knocks down every grounded enemy in front of you (90 dmg, 1.6s stun). Enemy barriers block it.' },
@@ -233,6 +233,19 @@ export const HEROES: HeroDef[] = [
     lore: "Hibiki ran pirate radio out of a flooded subway car under Neo-Kurogane - the Night Frequency, the only station the Syndicate could never find or silence. When the Eclipse cut the city's power he wired his decks to a stolen Zenith reactor cell and discovered that the right bassline could knit bone and put wings on a tired runner's feet. Now the Vanguard's street team has a DJ, and every fight has a soundtrack.",
     inspiration: 'Street DJs, jet-set rollerblade culture, pirate radio and the healers of shonen team battles who fight with rhythm.',
     voice: [150, 0.55], full: true,
+  },
+  {
+    id: 'tomoe', name: 'Tomoe', title: 'The Crescent Empress', team: 'zenith', role: 'tank', frame: 'human', rival: 'gantetsu',
+    hp: 525, armor: 0, speed: 5.6, height: 2.0, radius: 0.5, color: '#e9c46a', glow: '#5ff2e0',
+    primary: { kind: 'hitscan', name: 'Crownfire Scattergun', damage: 8, pellets: 10, spread: 0.07, rate: 1.25, range: 24, ammo: 6, reload: 1.6, sfx: 'scattergun', fx: 'tide' },
+    secondary: { id: 'crescent', name: 'Crescent Fang', key: 'RMB', cooldown: 6, desc: 'Throw your jagged blade: 55 damage and a wound (30 over 3s). It sticks in whatever it hits - press RMB again to recall it. Stuck in an enemy, it drags them toward you; flying back, it cuts everyone in its path. Recalled out of a flyer, it drags them down and grounds them for 1.5s. The cooldown starts when it is back in your hand.' },
+    ability1: { id: 'warcall', name: 'Horagai War Call', key: 'SHIFT', cooldown: 14, desc: 'Sound the war conch: you gain 200 and every ally within 15m you can see gains 100 temporary health for 3s, and all of you move 30% faster.' },
+    ability2: { id: 'reaping', name: 'Crescent Reaping', key: 'E', cooldown: 8, desc: 'Heave the great axe round in a cleave (5.5m, wide): 90 damage and a wound (40 over 3s). Every enemy it cuts takes 1s off the cooldown.', counter: "Her wounds bleed straight through Gantetsu's armor plating - no reduction, and his Taiko Heartbeat lifesteal can't outpace a Warpath's anti-heal." },
+    ult: { id: 'tide', name: 'Crescent Warpath', key: 'Q', cooldown: 0, charge: 2200, desc: 'Charge 20m forward, unstoppable, the axe out in front. Every enemy in your path is cut for 40, wounded (90 over 3s) and cannot be healed for 4.5s. Crescent Reaping and the Crescent Fang are ready again when it ends.' },
+    passive: { name: 'Blood Tide', desc: 'Heal for 150% of the damage your wounds deal. Quick melee with the Crescent Fang in hand wounds too (15 over 3s).' },
+    lore: "Tomoe held the Salt Gate - the last harbour gate of Neo-Kurogane the Syndicate never breached - for eleven nights with a shotgun, an axe and a blade she could call back to her hand. The dock clans crowned her on the twelfth morning with a circlet cut from the gate's own brass horns. She never asked for a throne; she asked for a fight worth the crown. The Vanguard gave her one.",
+    inspiration: 'Onna-musha of the war chronicles, harbour warlords, and the battle-queens of shonen arcs who lead from the front and heal from the fight itself.',
+    voice: [120, 0.7], full: true,
   },
 ];
 

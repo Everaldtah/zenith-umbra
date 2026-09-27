@@ -15,6 +15,8 @@ import argparse, glob, json, os, re, subprocess, sys
 import numpy as np
 import soundfile as sf
 from scipy.signal import butter, sosfilt, resample_poly
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from audio_lpc import find_clicks
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -27,7 +29,8 @@ CAT = {
     "weapon": -15, "impact": -17, "ability": -16, "move": -21, "step": -22, "loop": -21, "amb": -27, "feedback": -17, "voice": -17,
 }
 WEAPONS = {"chaingun", "chaingun2", "cannon", "blaster", "shotgun", "sonic", "star", "talisman", "katana", "thunder", "bow", "note",
-           "needle", "kunai", "fang", "punch", "hammer", "flamestart", "whiff", "cut", "spinup", "spindown", "reload", "bowdraw"}
+           "needle", "kunai", "fang", "punch", "hammer", "flamestart", "whiff", "cut", "spinup", "spindown", "reload", "bowdraw",
+           "scattergun", "reaping", "reapwind"}
 IMPACTS = {"impact_stone", "impact_metal", "impact_wood", "impact_body", "boom", "barrierhit", "barrierbreak", "slam", "implode",
            "anchorhit", "arrowhit", "chainhit", "pin", "body_slam", "mechdown", "down", "botdown", "casing"}
 FEEDBACK = {"hit", "crit", "kill", "healhit", "healthpack", "barrierup"}
@@ -88,21 +91,58 @@ def single_step(a, sr):
     return b
 
 
-def add_hf(a, sr, level=0.22):
-    """a 7-16 kHz transient crack on the onset (the part a 24 kHz model can't make)"""
-    e = env(a, sr, 2); i = int(np.argmax(e[: int(0.15 * sr)])) if len(a) > int(0.15 * sr) else int(np.argmax(e))
-    n = np.random.default_rng(7).standard_normal(int(0.06 * sr))
-    n = sosfilt(butter(4, [7000, 16000], "bandpass", fs=sr, output="sos"), n)
-    t = np.arange(len(n)) / sr
-    n *= np.exp(-t / 0.010) * np.minimum(1, t / 0.0008)
-    n /= (np.abs(n).max() + 1e-9)
-    out = a.copy(); j = min(len(out), i + len(n))
-    out[i:j] += n[: j - i] * np.abs(a).max() * level
-    return out
+def add_hf(a, sr, gain_db=3.0):
+    """brighten the top end with a gentle high shelf (+3 dB above ~6 kHz). An earlier version added a synthesised
+    7-16 kHz noise 'crack' on the onset: its sub-millisecond attack was an impulse - it read as scratchy / crackly."""
+    hi = sosfilt(butter(2, 6000, "highpass", fs=sr, output="sos"), a)
+    return a + hi * (10 ** (gain_db / 20) - 1)
 
 
-def make_loop(a, sr, x=0.25):
-    """seamless loop: the tail crossfades into the head (equal power)"""
+def deharsh(a, sr, limit=0.25):
+    """fizz control: if more than `limit` of the energy sits above 9 kHz, shelve the top down until it doesn't"""
+    for _ in range(4):
+        spec = np.abs(np.fft.rfft(a)) ** 2; f = np.fft.rfftfreq(len(a), 1 / sr)
+        if spec[f > 9000].sum() / max(spec.sum(), 1e-12) <= limit: break
+        hi = sosfilt(butter(2, 8000, "highpass", fs=sr, output="sos"), a)
+        a = a - hi * (1 - 10 ** (-4 / 20))
+    return a
+
+
+def declick(a, sr, passes=2):
+    """repair clicks found by linear prediction (audio_lpc.find_clicks): each ~1.2 ms around a click is rebuilt as a smooth
+    bridge between the good samples either side, blended with the low band of the original so the body stays"""
+    n = 0
+    for _ in range(passes):
+        cl = find_clicks(a, sr)
+        if not len(cl): break
+        a = a.copy(); half = max(4, int(sr * 0.0006))
+        lo = sosfilt(butter(2, 2500, "lowpass", fs=sr, output="sos"), a)
+        for i in cl:
+            i0, i1 = max(1, i - half), min(len(a) - 2, i + half + 1)
+            t = np.linspace(0, 1, i1 - i0)
+            bridge = a[i0 - 1] * (1 - t) + a[i1 + 1] * t
+            a[i0:i1] = bridge * 0.6 + lo[i0:i1] * 0.4
+            n += 1
+    return a, n
+
+
+def fades(a, sr, fin=0.003, fout=0.02):
+    """every one-shot starts and ends exactly at zero (no click as the sound starts or is cut)"""
+    a = a.copy()
+    i, o = min(len(a) // 4, int(fin * sr)), min(len(a) // 3, int(fout * sr))
+    if i > 0: a[:i] *= np.sin(np.linspace(0, np.pi / 2, i)) ** 2
+    if o > 0: a[-o:] *= np.cos(np.linspace(0, np.pi / 2, o)) ** 2
+    a[0] = 0.0; a[-1] = 0.0
+    return a
+
+
+def make_loop(a, sr, x=0.4):
+    """seamless loop: cut at upward zero crossings, then crossfade the tail into the head (equal power)"""
+    zc = np.flatnonzero((a[:-1] <= 0) & (a[1:] > 0))
+    if len(zc) > 4:
+        s0 = zc[zc > int(0.02 * sr)][0] + 1 if np.any(zc > int(0.02 * sr)) else 0
+        e0 = zc[zc < len(a) - int(0.02 * sr)][-1] + 1
+        a = a[s0:e0]
     n = int(x * sr)
     if len(a) < 3 * n: return a
     head, body, tail = a[:n], a[n:-n], a[-n:]
@@ -111,15 +151,20 @@ def make_loop(a, sr, x=0.25):
     return np.concatenate([body, mix])
 
 
-def level(a, sr, target_db, peak_db=-1.0):
+def true_peak(a):
+    return float(np.abs(resample_poly(a, 4, 1)).max()) if len(a) else 0.0
+
+
+def level(a, sr, target_db, tp_db=-1.5):
+    """loudness to the category target by GAIN ONLY - never saturation - with the 4x-oversampled true peak held under
+    -1.5 dBFS (room for the Vorbis encode and for the mix; clipped / soft-clipped transients crackle)"""
     e = env(a, sr, 50); act = e[e > e.max() * 0.1]
     rms = np.sqrt(np.mean(act ** 2)) if len(act) else np.sqrt(np.mean(a ** 2))
     g = 10 ** ((target_db - db(rms)) / 20)
-    a = a * g
-    pk = np.abs(a).max(); lim = 10 ** (peak_db / 20)
-    if pk > lim:   # soft-knee limiting instead of a hard scale-down (keeps the body loud)
-        a = np.tanh(a / lim * 0.9) * lim / np.tanh(0.9)
-    return a
+    tp = true_peak(a) * g
+    lim = 10 ** (tp_db / 20)
+    if tp > lim: g *= lim / tp
+    return a * g
 
 
 def compress(a, sr, thr_db=-24, ratio=3.0):
@@ -130,7 +175,34 @@ def compress(a, sr, thr_db=-24, ratio=3.0):
     return a * g
 
 
-def encode(a, sr, out, q=5):
+def measure(path, loop=False):
+    """what the game will actually decode: true peak (dBFS), clicks, loop seam"""
+    x, r = sf.read(path); x = x if x.ndim == 1 else x.mean(1)
+    tp = 20 * np.log10(max(true_peak(x), 1e-9))
+    seam = float(abs(x[0] - x[-1]) / (np.percentile(np.abs(np.diff(x)), 99.5) + 1e-6)) if loop else 0.0
+    return {"tp": tp, "clicks": 0 if loop else len(find_clicks(x, r)), "seam": seam}
+
+
+def encode_checked(a, sr, out, q=6, loop=False, tries=4):
+    """encode, decode and re-measure; fix and re-encode until it's clean (lossy encoding adds overs and can re-sharpen a
+    repaired click): too hot -> less gain, clicks -> declick harder, bad loop seam -> a different crossfade point"""
+    m = None
+    for k in range(tries):
+        encode(a, sr, out, q)
+        m = measure(out, loop)
+        ok = m["tp"] <= -1.0 and m["clicks"] <= 2 and (not loop or m["seam"] <= 1.5)
+        if ok: break
+        if m["tp"] > -1.0: a = a * 10 ** ((-1.3 - m["tp"]) / 20)
+        if m["clicks"] > 2: a, _ = declick(a, sr, passes=3)
+        if loop and m["seam"] > 1.5: a = make_loop(np.roll(a, int(sr * 0.05 * (k + 1))), sr, 0.3 + 0.1 * k)
+    return m
+
+
+def encode(a, sr, out, q=6):
+    if out.endswith(".flac"):
+        # loops: lossless, so the loop point is sample-exact (a lossy encoder's block edges pop at the seam)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        sf.write(out, np.clip(a, -1, 1).astype(np.float32), sr, format="FLAC", subtype="PCM_24"); return
     os.makedirs(os.path.dirname(out), exist_ok=True)
     tmp = out[:-4] + ".tmp.wav"
     sf.write(tmp, np.clip(a, -1, 1).astype(np.float32), sr)
@@ -140,6 +212,10 @@ def encode(a, sr, out, q=5):
 
 def finish_sfx(bank):
     jobs = {j["id"]: j for j in json.load(open(os.path.join(HERE, "audio", "sfx_list.json"), encoding="utf-8"))}
+    # a clean slate: no stale variations or formats left beside the new ones
+    import shutil
+    for d in glob.glob(os.path.join(PUB, "*")):
+        if os.path.isdir(d) and os.path.basename(d) != "vo": shutil.rmtree(d, ignore_errors=True)
     n = 0
     for sid, j in jobs.items():
         if sid in SKIP: continue
@@ -157,12 +233,15 @@ def finish_sfx(bank):
             a = load(p, sr)
             a = trim(a, sr, j["secs"], loop=bool(j.get("loop")))
             if sid.startswith("step") or sid in ("mechstep", "casing", "taikobeat"): a = single_step(a, sr)
+            a, _ = declick(a, sr)
             if j.get("hf"): a = add_hf(a, sr)
             a = sosfilt(butter(2, 28, "highpass", fs=sr, output="sos"), a)   # DC / sub rumble
-            if j.get("loop"): a = make_loop(a, sr)
+            a = make_loop(a, sr) if j.get("loop") else fades(a, sr)
+            a = deharsh(a, sr)
             a = level(a, sr, CAT[c])
-            encode(a, sr, os.path.join(PUB, sid, f"{k}.ogg"), q=4 if c in ("amb", "loop") else 5)
-        bank["sfx"][sid] = {"n": len(pick), "cat": c, **({"loop": True} if j.get("loop") else {})}
+            ext = "flac" if j.get("loop") else "ogg"
+            encode_checked(a, sr, os.path.join(PUB, sid, f"{k}.{ext}"), q=6, loop=bool(j.get("loop")))
+        bank["sfx"][sid] = {"n": len(pick), "cat": c, **({"loop": True, "ext": "flac"} if j.get("loop") else {})}
         n += 1
     print("sfx:", n, "sounds")
 
@@ -186,15 +265,23 @@ def synth_sonic(bank):
         a = sub + zap + click
         a *= np.minimum(1, t / 0.0015)
         tail = sosfilt(butter(2, 900, "lowpass", fs=sr, output="sos"), np.random.default_rng(10 + k).standard_normal(n)) * np.exp(-t / 0.09) * 0.08
-        a = add_hf(a + tail, sr, 0.15)
+        a = fades(add_hf(a + tail, sr, 2.0), sr, 0.001, 0.01)
         a = level(a, sr, CAT["weapon"])
-        encode(a, sr, os.path.join(PUB, "sonic", f"{k}.ogg"))
+        encode_checked(a, sr, os.path.join(PUB, "sonic", f"{k}.ogg"))
     bank["sfx"]["sonic"] = {"n": 3, "cat": "weapon"}
+
+
+def max_len(key, text):
+    """the longest a take of this line may run (seconds, before trimming)"""
+    if key.startswith(("pain", "jump", "land")): return 1.2
+    if key.startswith(("death", "burn")): return 2.8
+    return 1.6 + len(text.split()) * 0.55
 
 
 def finish_voice(bank):
     from voice_lines import LINES, BANK_OF
     bank["banks"] = BANK_OF
+    import shutil; shutil.rmtree(os.path.join(PUB, "vo"), ignore_errors=True)
     n = 0
     for v in LINES:
         d = os.path.join(WORK, "voice", v)
@@ -204,22 +291,41 @@ def finish_voice(bank):
             m = re.match(r"(.+)_(\d+)_(\d+)_([\d.]+)\.wav$", os.path.basename(p))
             if not m: continue
             key = (m.group(1), int(m.group(2))); sc = float(m.group(4))
-            if key not in best or sc > best[key][0]: best[key] = (sc, p)
+            # a take that runs long is the model rambling (noise, breaths, crackle): never pick it
+            text = LINES[v].get(key[0], [("", "")])[key[1]][0] if key[1] < len(LINES[v].get(key[0], [])) else ""
+            if sf.info(p).duration > max_len(key[0], text): continue
+            x, r = sf.read(p); x = x if x.ndim == 1 else x.mean(1)
+            sc -= 0.06 * len(find_clicks(x, r))          # a take that crackles loses to a clean one
+            best.setdefault(key, []).append((sc, p))
         vb = bank["vo"].setdefault(v, {})
-        for (key, i), (sc, p) in sorted(best.items()):
+        for (key, i), takes in sorted(best.items()):
+            takes.sort(reverse=True)
+            sc, p = takes[0]
             words = len(LINES[v][key][i][0].split())
             # one- and two-word shouts ("Two.", "Hakkeyoi!") are hard for ASR to spell back: a lower bar for them
-            if sc < (0.25 if words <= 2 else 0.5) and not key.startswith(("pain", "death", "jump", "land", "burn")):
+            if sc < (0.2 if words <= 2 else 0.42) and not key.startswith(("pain", "death", "jump", "land", "burn")):
                 print("  low-confidence line kept out:", v, key, i, sc); continue
             sr = 24000
-            a = load(p, sr)
-            a = trim(a, sr, 6.0)
-            a = sosfilt(butter(2, 90, "highpass", fs=sr, output="sos"), a)
-            a = compress(a, sr)
-            a = level(a, sr, CAT["voice"] + (2 if key in ("ult", "death") else 0))
-            encode(a, sr, os.path.join(PUB, "vo", v, f"{key}_{i}.ogg"), q=4)
+            out = os.path.join(PUB, "vo", v, f"{key}_{i}.ogg")
+            # the best take that comes out clean; if none does, the cleanest of them
+            best_m = None
+            for tsc, tp in takes[:3]:
+                if tsc < sc - 0.25: break
+                a = load(tp, sr)
+                a = trim(a, sr, 6.0)
+                a, _ = declick(a, sr)
+                a = sosfilt(butter(2, 90, "highpass", fs=sr, output="sos"), a)
+                a = compress(a, sr)
+                a = fades(a, sr, 0.004, 0.03)
+                a = level(a, sr, CAT["voice"] + (2 if key in ("ult", "death") else 0))
+                m = encode_checked(a, sr, out, q=5)
+                if best_m is None or m["clicks"] < best_m[0]["clicks"]: best_m = (m, a)
+                if m["clicks"] <= 2 and m["tp"] <= -1.0: best_m = None; break
+            if best_m is not None: encode_checked(best_m[1], sr, out, q=5)
             vb[key] = max(vb.get(key, 0), i + 1)
             n += 1
+    # subtitles: the words of every published take, by voice / key / take index
+    bank["subs"] = {v: {k: [t for t, *_ in LINES[v][k]] for k in keys} for v, keys in bank["vo"].items() if v in LINES}
     print("voice:", n, "lines")
 
 

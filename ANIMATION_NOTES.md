@@ -40,6 +40,22 @@ Pitfalls from this session:
   - Pitfall: a Mesh with a custom `InstancedBufferGeometry` and a ShaderMaterial drew nothing at all on ANGLE/D3D11. `InstancedMesh` works.
   - In first person the rounds leave the viewmodel's muzzle (`Fx.muzzleFor`).
 
+## 0c. Session 5 (2026-09-27): Tomoe, Hibiki's run, Tenkai-Oh's hammer, the shield camera
+
+- **Tomoe** (tank) was made on Kaggle, and Modal credits were saved:
+  - The model sheet is `tomoepose` model_tomoe_7.
+  - Her weapons come from `tomoeprops`: SDXL plus **InstantStyle**, i.e. the IP-Adapter reference goes into the style block `up.block_0` only. A plain IP-Adapter at 0.45 redrew the whole character in every prop image.
+  - TRELLIS.2 builds the body and the props. Use `WORKERS=1` for small prop batches, because a second 4B pipeline loading next to a running cascade OOM-kills both workers silently.
+  - After TRELLIS: `ow_finish` (face bake + paint), then `build_assets.py --only tomoe` (geodesic weights, pose 0.981).
+  - Axe choreography reuses the **hammer path**: `hammerPose` modes `reaping` (overhead-right load, a diagonal cleave through the front landing about 0.42 s in, and a follow-through past the left hip) and `tide` (the axe driven out low ahead). `s.hammer` is only true while the axe is out; otherwise the same axe rides the chest bone, slung across her back (`Animator.placeBack`).
+  - The scattergun and Crescent Fang ride the forearms in the `guns` slot. `Animator.gunHide` hides the Fang while it's thrown and both while the axe is out.
+  - Generated props are fitted by **PCA** (`TomoeProps.fitProp`). Image-to-3D keeps the picture's diagonal pose, so bounding-box axes are wrong. The long axis gives the haft or barrel, the bulkier end decides the direction, and the axe's head offset sets the edge side (+X, the swing tangent).
+  - First person: a one-handed scattergun, and an overhand throw with the left hand. The cleave sweeps the axe across the screen from high right to low left. `keep: 0.97` cuts her sleeve cloth out of the viewmodel. `Fx.fpActor` skips your own status particles in first person (they burst on the camera).
+- **Hibiki's run** is a skate stride (push, recovery, glide on the diagonal; lean, hip sway, counter-swinging left arm), not a jog clip. Mag-Grind climbs and mantles onto roofs.
+- **Tenkai-Oh's hammer** follows Reinhardt: 0.96 s alternating swings, anticipation, a flat strike at shoulder height, a long follow-through with a held end pose, and knockback along the swing.
+- **Shield camera**: with the Solar Bulwark up (or during Dawn Charge), first person blends out to third person over the shoulder, like Reinhardt's Barrier Field. Holding primary fire pans the camera freely while the shield keeps its facing.
+- Tools: `tests/e2e/hero_look.mjs` (large viewer shots at chosen moments), `tomoe_play.mjs`, `fp_fire_probe.mjs`.
+
 ## 0. Session 2 (2026-09-25, evening): what changed
 
 **Clip library is live** (`public/anim`): Quaternius UAL1 + UAL2 *Standard* (the free tier: 43 clips each) and 38 Mixamo

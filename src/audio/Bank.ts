@@ -2,8 +2,9 @@
 // every hero's voice lines, decoded up front so a gunshot never waits on a fetch. The web edition never loads it and keeps
 // the synthesised recipes in Sfx.ts.
 export interface BankInfo {
-  sfx: Record<string, { n: number; cat: string; loop?: boolean }>;
+  sfx: Record<string, { n: number; cat: string; loop?: boolean; ext?: string }>;
   vo: Record<string, Record<string, number>>;          // voice -> line key -> count
+  subs?: Record<string, Record<string, string[]>>;      // voice -> line key -> the words of each take (subtitles)
   banks: Record<string, string>;                        // hero id -> voice bank (mechs speak through their pilots)
 }
 
@@ -12,6 +13,9 @@ export class SampleBank {
   ready = false;
   private bufs = new Map<string, AudioBuffer[]>();
   private last = new Map<string, number>();
+  private idx = new WeakMap<AudioBuffer, number>();
+  /** the words of a voice line buffer (subtitles), '' if unknown */
+  words(voice: string, key: string, buf: AudioBuffer): string { const i = this.idx.get(buf); return i === undefined ? '' : this.info?.subs?.[voice]?.[key]?.[i] ?? ''; }
 
   async load(ctx: AudioContext, base: string, onProgress?: (k: number) => void) {
     try {
@@ -20,12 +24,15 @@ export class SampleBank {
       this.info = await r.json() as BankInfo;
     } catch { return; }
     const jobs: [string, string][] = [];
-    for (const [id, s] of Object.entries(this.info!.sfx)) for (let i = 0; i < s.n; i++) jobs.push([`sfx:${id}`, `${base}sfx/${id}/${i}.ogg`]);
+    // loops ship lossless (.flac: a sample-exact loop point), one-shots as Vorbis
+    for (const [id, s] of Object.entries(this.info!.sfx)) for (let i = 0; i < s.n; i++) jobs.push([`sfx:${id}`, `${base}sfx/${id}/${i}.${s.ext ?? 'ogg'}`]);
     for (const [v, keys] of Object.entries(this.info!.vo)) for (const [k, n] of Object.entries(keys)) for (let i = 0; i < n; i++) jobs.push([`vo:${v}:${k}`, `${base}sfx/vo/${v}/${k}_${i}.ogg`]);
     let done = 0;
     const one = async ([key, url]: [string, string]) => {
       try {
         const buf = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer());
+        // each line remembers which take it is (decodes finish in any order): the subtitle is looked up by it
+        const m = /_(\d+)\.ogg$/.exec(url); if (m) this.idx.set(buf, +m[1]);
         const list = this.bufs.get(key) ?? []; list.push(buf); this.bufs.set(key, list);
       } catch { /* a missing line just falls back */ }
       onProgress?.(++done / jobs.length);

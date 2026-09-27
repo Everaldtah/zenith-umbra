@@ -75,7 +75,8 @@
   "flame": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "punch": {
    "n": 1,
@@ -96,12 +97,14 @@
   "healbeam": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "healbeam2": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "crit": {
    "n": 1,
@@ -174,7 +177,8 @@
   "burn": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "step_stone": {
    "n": 3,
@@ -203,12 +207,14 @@
   "skate_roll": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "grind": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "jump": {
    "n": 1,
@@ -245,7 +251,8 @@
   "wind": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "wings": {
    "n": 2,
@@ -490,57 +497,68 @@
   "groove_heal": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "groove_speed": {
    "n": 1,
    "cat": "loop",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_amatsu": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_kurogane": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_hangar": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_cathedral": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_rift": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_hanabi": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_cloudstep": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_kagura": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "amb_training": {
    "n": 1,
    "cat": "amb",
-   "loop": true
+   "loop": true,
+   "ext": "flac"
   },
   "sonic": {
    "n": 3,
@@ -590,7 +608,7 @@
    "land": 1,
    "low_hp": 2,
    "pain": 4,
-   "pain_big": 2,
+   "pain_big": 1,
    "push": 1,
    "reload": 1,
    "respawn": 2,
@@ -684,13 +702,10 @@
    "defend_point": 1,
    "grind": 2,
    "heal_track": 2,
-   "jump": 2,
+   "jump": 1,
    "kill": 3,
    "kill_rival": 1,
-   "land": 1,
    "low_hp": 2,
-   "pain": 4,
-   "pain_big": 2,
    "push": 1,
    "reload": 1,
    "respawn": 2,
@@ -849,6 +864,28 @@
    "ult_ally": 1,
    "ult_ready": 1
   },
+  "tomoe": {
+   "a1": 2,
+   "a2": 2,
+   "alt": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 1,
+   "thanks": 2
+  },
   "announcer": {
    "count_1": 1,
    "count_2": 1,
@@ -876,5 +913,1164 @@
  "banks": {
   "tenkai": "haruto",
   "gorgoth": "vorn"
+ },
+ "subs": {
+  "haruto": {
+   "a1": [
+    "Charging in!",
+    "Out of my way!"
+   ],
+   "a2": [
+    "Solar Shatter!"
+   ],
+   "alt": [
+    "Shield up!",
+    "Behind the bulwark!"
+   ],
+   "attack_point": [
+    "Everyone on me, we're taking that point!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They're on the point, get in there!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the point, nobody gets past the sun!"
+   ],
+   "eject": [
+    "Tenkai-Oh's down, but I'm not done yet!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Got one!",
+    "That's how it's done!",
+    "Down you go!"
+   ],
+   "kill_rival": [
+    "You taught me never to hold back, Vorn. I listened."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "Tenkai-Oh's taking a beating, I need repairs!",
+    "Hull's cracking, somebody heal me!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Get that Mikoshi moving, I'll cover you!"
+   ],
+   "reload": [
+    "Reloading!"
+   ],
+   "respawn": [
+    "Tenkai-Oh, back on its feet!",
+    "Round two. Let's go!"
+   ],
+   "select": [
+    "Tenkai-Oh, rise with the sun!",
+    "Pilot Haruto Daimon, synchronised and ready!"
+   ],
+   "thanks": [
+    "Thanks, that's the stuff!",
+    "Appreciate it!"
+   ],
+   "ult": [
+    "Dawn Colossus... AWAKEN!"
+   ],
+   "ult_ally": [
+    "Tenkai-Oh, full power! Stay behind me!"
+   ],
+   "ult_pilot": [
+    "Tenkai-Oh, come to me!"
+   ],
+   "ult_pilot_ally": [
+    "Reactor's back online! Tenkai-Oh, drop in!"
+   ],
+   "ult_ready": [
+    "Tenkai-Oh's reactor is full. Say the word!"
+   ]
+  },
+  "mirei": {
+   "a1": [
+    "Linked!",
+    "I've got your back!"
+   ],
+   "a2": [
+    "Make a wish!"
+   ],
+   "attack_point": [
+    "Let's take the point together!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Contest the point, I'm right behind you!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Stay on the point, I've got you all!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Rest now.",
+    "I'm sorry.",
+    "Go back to the dark."
+   ],
+   "kill_rival": [
+    "I learned the song, teacher. You forgot it."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "I need healing, anyone!",
+    "I can't keep singing like this, help me!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Move the Mikoshi, I'll keep you standing!"
+   ],
+   "reload": [
+    "Just a moment!"
+   ],
+   "respawn": [
+    "Back among the stars.",
+    "I'm still singing!"
+   ],
+   "revive": [
+    "Not yet. Come back to us."
+   ],
+   "select": [
+    "The stars are listening.",
+    "Stay close. I'll keep you shining."
+   ],
+   "swoop": [
+    "I've got you!",
+    "Hold on, I'm coming!",
+    "On my way!"
+   ],
+   "thanks": [
+    "Thank you, truly.",
+    "You're a star."
+   ],
+   "ult": [
+    "Let the stars sing!"
+   ],
+   "ult_ally": [
+    "Rise, all of you! The stars aren't finished with you!"
+   ],
+   "ult_ready": [
+    "My requiem is ready. Say when."
+   ]
+  },
+  "kaien": {
+   "a1": [
+    "The spirit walks."
+   ],
+   "a2": [
+    "Sealed.",
+    "Warded."
+   ],
+   "attack_point": [
+    "Advance. The point is ours to take."
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "The point is contested. Stand on it!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold this ground. Nothing crosses."
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Be at peace.",
+    "Your path ends here.",
+    "Rest."
+   ],
+   "kill_rival": [
+    "Come home, little brother."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "I am wounded. Healing, please.",
+    "My seals are fading, I need aid!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Carry the Mikoshi. I will ward the way."
+   ],
+   "reload": [
+    "Replenishing talismans."
+   ],
+   "respawn": [
+    "The gate still stands.",
+    "I return."
+   ],
+   "select": [
+    "The gate is kept.",
+    "Walk in peace, or not at all."
+   ],
+   "thanks": [
+    "My thanks.",
+    "Gratitude, friend."
+   ],
+   "ult": [
+    "Ten thousand seals. None shall pass."
+   ],
+   "ult_ally": [
+    "Stand within the sanctuary!"
+   ],
+   "ult_ready": [
+    "The sanctuary is ready."
+   ]
+  },
+  "raijin": {
+   "a1": [
+    "Too slow!",
+    "Blink and you miss it!"
+   ],
+   "a2": [
+    "Go on, hit me!"
+   ],
+   "attack_point": [
+    "Let's cut through them and take the point!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They're on the point, go, go!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the point, I'll handle the fancy ones!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Next!",
+    "Outclassed.",
+    "Stay down."
+   ],
+   "kill_rival": [
+    "That's for my district, oni."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "I need a patch-up, now!",
+    "Getting cut to ribbons here, heal me!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Push the Mikoshi, I'm on flank!"
+   ],
+   "reload": [
+    "Reloading... not that I need it."
+   ],
+   "respawn": [
+    "Miss me?",
+    "The storm's back."
+   ],
+   "select": [
+    "One blade. One strike.",
+    "The storm picked a side."
+   ],
+   "thanks": [
+    "Thanks. I owe you one.",
+    "Nice. I feel sharp again."
+   ],
+   "ult": [
+    "Thunder JUDGES YOU!"
+   ],
+   "ult_ally": [
+    "The storm's on our side! Push in!"
+   ],
+   "ult_ready": [
+    "My blade is humming. Ultimate ready."
+   ]
+  },
+  "yuzu": {
+   "a1": [
+    "Hup!"
+   ],
+   "a2": [
+    "I see you!",
+    "Revealed!"
+   ],
+   "attack_point": [
+    "Moving up, taking the point!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Enemy on the point, clear them!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Defend the point, I've got overwatch!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Bullseye!",
+    "Clean shot.",
+    "Top of the class."
+   ],
+   "kill_rival": [
+    "Give my brother back!"
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "I'm hit bad, need healing!",
+    "Someone patch me up, I can't aim like this!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Keep the Mikoshi moving, I'll pick them off!"
+   ],
+   "reload": [
+    "Nocking fresh arrows!"
+   ],
+   "respawn": [
+    "Top of the class, back on the field.",
+    "Round two, fresh quiver!"
+   ],
+   "select": [
+    "One clean line of sight. That's all I need.",
+    "Class is in session."
+   ],
+   "thanks": [
+    "Thanks! Back in the fight!",
+    "Perfect, thank you!"
+   ],
+   "ult": [
+    "A hundred suns! Nowhere to hide!"
+   ],
+   "ult_ally": [
+    "Heads down, suns incoming!"
+   ],
+   "ult_ready": [
+    "A hundred suns, locked and loaded!"
+   ]
+  },
+  "hibiki": {
+   "a2": [
+    "Turn it up!",
+    "Max volume!"
+   ],
+   "alt": [
+    "Back it up!",
+    "Scratch that!"
+   ],
+   "attack_point": [
+    "Let's crash that point, everybody move!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They're on our stage! Get on the point!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the point! I'll keep the groove going!"
+   ],
+   "grind": [
+    "Grinding!",
+    "Woo! Riding the wall!"
+   ],
+   "heal_track": [
+    "Healing groove, coming up!",
+    "Switching to the healing track!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Off beat!",
+    "That's a mic drop.",
+    "Encore? Nah."
+   ],
+   "kill_rival": [
+    "Your rhythm's all wrong, big guy!"
+   ],
+   "low_hp": [
+    "My mix is fading, need healing!",
+    "Losing the beat here, heal me up!"
+   ],
+   "push": [
+    "Push the Mikoshi, I'll keep you rolling!"
+   ],
+   "reload": [
+    "Swapping records!"
+   ],
+   "respawn": [
+    "And we're back on the decks!",
+    "Back on air, Neo-Kurogane!"
+   ],
+   "select": [
+    "Neo-Kurogane, you're live with Hibiki!",
+    "Let's turn this city up!"
+   ],
+   "speed_track": [
+    "Tempo up, let's move!",
+    "Speeding it up!"
+   ],
+   "thanks": [
+    "Aw, thanks! You're a legend!",
+    "That's what I'm talking about!"
+   ],
+   "ult": [
+    "Here comes the drop!"
+   ],
+   "ult_ally": [
+    "Everybody close! Bass drop incoming!"
+   ],
+   "ult_ready": [
+    "Bass drop is loaded. Just say when!"
+   ]
+  },
+  "vorn": {
+   "a1": [
+    "Nowhere to run."
+   ],
+   "a2": [
+    "Pierce."
+   ],
+   "alt": [
+    "Plating."
+   ],
+   "attack_point": [
+    "Take the point. Crush anything standing on it."
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They dare stand on our point. Remove them."
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold. No retreat."
+   ],
+   "eject": [
+    "Gorgoth has fallen. I have not!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Weak.",
+    "Remember this lesson.",
+    "Dismissed."
+   ],
+   "kill_rival": [
+    "I taught you better, Haruto."
+   ],
+   "land": [
+    "Hrrmph!"
+   ],
+   "low_hp": [
+    "Gorgoth's hull is failing. Repair it.",
+    "I require support. Now."
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Drive the Mikoshi forward. Leave nothing standing."
+   ],
+   "reload": [
+    "Reloading."
+   ],
+   "respawn": [
+    "Gorgoth rises again.",
+    "The Syndicate endures."
+   ],
+   "select": [
+    "Discipline never runs dry.",
+    "Gorgoth, awaken."
+   ],
+   "thanks": [
+    "Adequate.",
+    "Acknowledged."
+   ],
+   "ult": [
+    "Kneel before the Eclipse."
+   ],
+   "ult_ally": [
+    "Drive them together. The singularity comes."
+   ],
+   "ult_pilot": [
+    "Gorgoth, to me!"
+   ],
+   "ult_pilot_ally": [
+    "Gorgoth returns. Clear the landing zone."
+   ],
+   "ult_ready": [
+    "The singularity is primed."
+   ]
+  },
+  "nocturne": {
+   "a1": [
+    "Hush.",
+    "Silence."
+   ],
+   "a2": [
+    "A pact in blood."
+   ],
+   "attack_point": [
+    "Take the stage, darlings. The point is ours."
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Uninvited guests on the point. Remove them."
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the stage. No one steals my spotlight."
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Such a short song.",
+    "Encore? No.",
+    "Silence suits you."
+   ],
+   "kill_rival": [
+    "You still sing flat, little bird."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "Someone attend to me. At once!",
+    "My voice is breaking, darlings, heal me!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Carry the Mikoshi, and do try to keep up."
+   ],
+   "reload": [
+    "A moment to breathe."
+   ],
+   "respawn": [
+    "Did you miss me, darlings?",
+    "The diva returns."
+   ],
+   "select": [
+    "Hush now, darlings.",
+    "The Crimson Moon is listening."
+   ],
+   "thanks": [
+    "How thoughtful.",
+    "You may continue."
+   ],
+   "ult": [
+    "Hear my requiem, darlings!"
+   ],
+   "ult_ally": [
+    "Sing with me, my children!"
+   ],
+   "ult_ready": [
+    "My requiem awaits its audience."
+   ]
+  },
+  "hex": {
+   "a1": [
+    "Strings attached."
+   ],
+   "a2": [
+    "Wither.",
+    "Hexed."
+   ],
+   "attack_point": [
+    "The point, my dolls. Take it."
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Intruders on the point. Let's play with them."
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the point. Let them come to the strings."
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Another doll for the collection.",
+    "Stitched shut.",
+    "Perfect. Still."
+   ],
+   "kill_rival": [
+    "Your brother sends his regards."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "My stitches are coming loose! Mend me!",
+    "Someone fix me, I'm unravelling!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Push the Mikoshi, my puppets. Dance for me."
+   ],
+   "reload": [
+    "Threading the needle."
+   ],
+   "respawn": [
+    "Did you think a doll could break?",
+    "Stitched and whole again."
+   ],
+   "select": [
+    "Hold still, my dear.",
+    "Let's play dolls."
+   ],
+   "thanks": [
+    "How very kind.",
+    "Mmm. Better."
+   ],
+   "ult": [
+    "Curtain up! Dance, my dolls!"
+   ],
+   "ult_ally": [
+    "The theater opens. Watch them dance."
+   ],
+   "ult_ready": [
+    "The theater is ready for its performance."
+   ]
+  },
+  "kagemaru": {
+   "a1": [
+    "Behind you."
+   ],
+   "a2": [
+    "Into the veil."
+   ],
+   "attack_point": [
+    "I'll cut a path. Take the point."
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Enemy on the point. Deal with it."
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the point. I'll hunt anyone who comes."
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Too slow.",
+    "Seals mean nothing.",
+    "Gone."
+   ],
+   "kill_rival": [
+    "Where's your seal now, brother?"
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "I'm bleeding out here. Heal me.",
+    "Need healing. Now."
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Push the Mikoshi. I'll take care of their backline."
+   ],
+   "reload": [
+    "Sharpening."
+   ],
+   "respawn": [
+    "The shadows spat me back out.",
+    "Again."
+   ],
+   "select": [
+    "The shadows are everywhere.",
+    "Seals are just paper."
+   ],
+   "thanks": [
+    "Hmph. Thanks.",
+    "Fine. I owe you."
+   ],
+   "ult": [
+    "A thousand cuts. Count them."
+   ],
+   "ult_ally": [
+    "Blind them. I'll do the rest."
+   ],
+   "ult_ready": [
+    "A thousand cuts are ready."
+   ]
+  },
+  "enra": {
+   "a1": [
+    "COME HERE!"
+   ],
+   "a2": [
+    "Branded!"
+   ],
+   "attack_point": [
+    "Take the point! Burn everything on it!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "Prey on the point! Crush them!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "This point is my hunting ground!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Ha! Kindling.",
+    "Weak!",
+    "Ashes!"
+   ],
+   "kill_rival": [
+    "Your mother's blade was sharper, boy."
+   ],
+   "land": [
+    "Hrrmph!"
+   ],
+   "low_hp": [
+    "The oni bleeds! Feed me!",
+    "HEAL ME, or burn with me!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Drag the Mikoshi forward, or I drag you!"
+   ],
+   "reload": [
+    "Reloading my fury!"
+   ],
+   "respawn": [
+    "You cannot seal me twice!",
+    "The oni returns!"
+   ],
+   "select": [
+    "A thousand years, and I am AWAKE!",
+    "Who wants to burn first?"
+   ],
+   "thanks": [
+    "Hah. Good.",
+    "More!"
+   ],
+   "ult": [
+    "BURN! THE ASURA WAKES!"
+   ],
+   "ult_ally": [
+    "Stand back! The oni is hungry!"
+   ],
+   "ult_ready": [
+    "The Asura hungers. Unleash it?"
+   ]
+  },
+  "gantetsu": {
+   "a1": [
+    "Hakkeyoi!",
+    "Charge!"
+   ],
+   "a2": [
+    "Feel the drums!"
+   ],
+   "attack_point": [
+    "Into the ring, everybody! Take the point!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They're in our ring! Throw them out!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the ring! Nobody pushes us out!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Out of the ring!",
+    "The crowd goes wild!",
+    "Ha! Next challenger!"
+   ],
+   "kill_rival": [
+    "Big machine, bigger fall!"
+   ],
+   "land": [
+    "Hrrmph!"
+   ],
+   "low_hp": [
+    "Even a champion needs a doctor! Heal me!",
+    "The crowd's worried, patch me up!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Heave! Push the Mikoshi, festival style!"
+   ],
+   "reload": [
+    "Hot barrels, fresh drums!"
+   ],
+   "respawn": [
+    "The champion returns to the ring!",
+    "Round two! The crowd wants more!"
+   ],
+   "select": [
+    "The Iron Yokozuna has arrived!",
+    "Listen to that crowd!"
+   ],
+   "thanks": [
+    "Ha! You're in my corner now!",
+    "That's the spirit!"
+   ],
+   "ult": [
+    "Into the ring! Nobody leaves!"
+   ],
+   "ult_ally": [
+    "Grand dohyo! Let's give them a show!"
+   ],
+   "ult_ready": [
+    "The grand dohyo is ready! Who wants a show?"
+   ]
+  },
+  "tomoe": {
+   "a1": [
+    "Up and at them!",
+    "Nobody falls today!"
+   ],
+   "a2": [
+    "Onikiri!",
+    "Bleed for me!"
+   ],
+   "alt": [
+    "Catch!",
+    "Come here, you!"
+   ],
+   "attack_point": [
+    "Follow your queen! Take that point!"
+   ],
+   "burn": [
+    "Hot, hot, hot!"
+   ],
+   "contest": [
+    "They're on our point! Carve them off it!"
+   ],
+   "death": [
+    "Aaaaagh...!",
+    "No... not like this...",
+    "Hhhhk... aaah..."
+   ],
+   "defend_point": [
+    "Hold the line! Nobody touches my point!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Scrap!",
+    "Down in the dirt where you belong.",
+    "Who's next?"
+   ],
+   "kill_rival": [
+    "The ring's mine now, big man!"
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "Patch me up, I'm not done yet!",
+    "Oi, healer! Your queen is bleeding!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Shove that Mikoshi, you lot! Push!"
+   ],
+   "reload": [
+    "Loading shells."
+   ],
+   "respawn": [
+    "The Empress is back. Miss me?",
+    "Round two, and I'm angrier."
+   ],
+   "select": [
+    "Kneel, or bleed.",
+    "The Crescent Empress has arrived."
+   ],
+   "thanks": [
+    "Good. Now keep it coming.",
+    "That's the stuff."
+   ]
+  },
+  "announcer": {
+   "count_1": [
+    "One."
+   ],
+   "count_2": [
+    "Two."
+   ],
+   "count_3": [
+    "Three."
+   ],
+   "defeat": [
+    "Defeat."
+   ],
+   "float_contested": [
+    "The Mikoshi is contested."
+   ],
+   "float_enemy": [
+    "The enemy is pushing the Mikoshi."
+   ],
+   "float_moving": [
+    "The Mikoshi is moving."
+   ],
+   "float_unlock": [
+    "The Mikoshi rises. Push it through the enemy gate."
+   ],
+   "match_start": [
+    "Prepare for combat."
+   ],
+   "overtime": [
+    "Overtime!"
+   ],
+   "point_lost": [
+    "We have lost the objective."
+   ],
+   "point_open": [
+    "The objective is now open."
+   ],
+   "point_taken": [
+    "Objective secured."
+   ],
+   "round_2": [
+    "Round two."
+   ],
+   "round_3": [
+    "Final round."
+   ],
+   "round_lost": [
+    "Round lost."
+   ],
+   "round_won": [
+    "Round won."
+   ],
+   "they_capture": [
+    "The enemy is capturing the objective."
+   ],
+   "thirty": [
+    "Thirty seconds remaining."
+   ],
+   "victory": [
+    "Victory!"
+   ],
+   "we_capture": [
+    "We are capturing the objective."
+   ]
+  }
  }
 }

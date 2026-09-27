@@ -61,9 +61,10 @@ STYLE = {
     "gorgoth": ("shotgun", (0.2, -0.19, 0.34), (0.05, -0.19, 0.62), 0.09),
     "gantetsu": ("dual", (0.44, -0.3, 0.42), (-0.44, -0.3, 0.42), 0.03),
     "hibiki": ("pistol", (0.25, -0.17, 0.52), (-0.24, -0.3, 0.4), 0.05),
+    "tomoe": ("shotgun", (0.21, -0.2, 0.44), (-0.23, -0.29, 0.38), 0.1),
 }
 # eye pushed forward past a high collar / bulky coat (metres), as FP_STYLE.push in FirstPerson.ts
-PUSH = {"enra": 0.05, "gantetsu": 0.08}
+PUSH = {"enra": 0.05, "gantetsu": 0.08, "tomoe": 0.04}
 # near clip (m): cut geometry closer than this to the camera - a high collar wrapped around the eye (FP_STYLE.clip)
 CLIP = {"raijin": 0.14}
 GRIP, REST_R, REST_L, RECOIL = STYLE.get(a.hero, ("rifle", (0.16, -0.15, 0.34), (0.03, -0.14, 0.5), 0.04))

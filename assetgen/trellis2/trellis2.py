@@ -139,7 +139,8 @@ try:
     sh(f"cp -r /tmp/TRELLIS.2/o-voxel /tmp/ext/o-voxel && {pip} --no-build-isolation /tmp/ext/o-voxel", "o-voxel")
     publish("installed", minutes=round((time.time() - t0) / 60, 1))
 
-    dirs = sorted([d for d in glob.glob("/kaggle/input/**/img", recursive=True) if os.path.isdir(d)], key=lambda d: "hexfix" in d)   # hexfix copies last (wins)
+    # every input folder holding images (datasets uploaded flat have no img/ dir); hexfix copies last (wins)
+    dirs = sorted({os.path.dirname(f) for f in glob.glob("/kaggle/input/**/*.png", recursive=True)}, key=lambda d: ("hexfix" in d, d))
     cdir = "/tmp/allimg"; os.makedirs(cdir, exist_ok=True)
     for d in dirs: subprocess.run(f"cp {d}/*.png {cdir}/", shell=True)
     jobs = [(k.replace("model_", ""), f"{cdir}/{k}_{v}.png") for k, v in PICKS.items() if os.path.exists(f"{cdir}/{k}_{v}.png")]
@@ -148,15 +149,17 @@ try:
     # warm the model downloads once (two workers racing on the HF cache corrupts it)
     sh(f"cd /tmp && {py} -c \"from huggingface_hub import snapshot_download as s; s('microsoft/TRELLIS.2-4B'); s('microsoft/TRELLIS-image-large', allow_patterns=['ckpts/ss_dec*']); import timm; timm.create_model('vit_large_patch16_dinov3.lvd1689m', pretrained=True)\"", "download-models")
     procs = []
-    for g in range(2):
-        if not jobs[g::2]: continue          # an idle worker still loads a 4B pipeline into host RAM - don't start it
+    # WORKERS=1: one GPU works the whole list (a second 4B pipeline load next to a running cascade can OOM-kill both)
+    NW = max(1, min(2, int(os.environ.get("WORKERS", "2"))))
+    for g in range(NW):
+        if not jobs[g::NW]: continue         # an idle worker still loads a 4B pipeline into host RAM - don't start it
         if g == 1:
             # the VM's RAM can't hold worker 1's pipeline load next to worker 0's first cascade (worker 0 was OOM-killed
             # silently, every time): wait until worker 0 has finished its first asset
             for _ in range(1800):
                 if os.path.exists("/tmp/first0") or procs[0].poll() is not None: break
                 time.sleep(2)
-        env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(g), "JOBS": json.dumps(jobs[g::2]), "NTFY_TOPIC": TOPIC, "PTYPE": PTYPE}
+        env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(g), "JOBS": json.dumps(jobs[g::NW]), "NTFY_TOPIC": TOPIC, "PTYPE": PTYPE}
         procs.append(subprocess.Popen([py, "/tmp/worker.py"], env=env, stdout=open(f"/tmp/worker{g}.log", "w"), stderr=subprocess.STDOUT))
     for p in procs: p.wait()
     made = sorted(os.path.basename(p) for p in glob.glob(f"{OUT}/*.glb"))

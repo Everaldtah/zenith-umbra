@@ -132,6 +132,7 @@ export class Bot {
     const a = this.a, P = a.def.primary;
     if (a.def.id === 'tenkai') return 3.5;         // hammer reach is 5m: stand just inside it
     if (a.def.id === 'gantetsu') return 8;          // chainguns: brawling range
+    if (a.def.id === 'tomoe') return 6;             // scattergun and axe: in their faces
     if (P.kind === 'melee') return 1.5;
     if (a.def.id === 'enra') return 4;
     if (a.def.id === 'gorgoth') return 7;
@@ -470,6 +471,24 @@ export class Bot {
           const wall = [[-vz, vx], [vz, -vx]].some(([x, z]) => { const h = w.level.ray({ x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { x, y: 0, z }, 1.6); return h && Math.abs(h.ny) < 0.3; });
           if (wall) { a.input.jump = true; a.sv.botGrind = t + 1.2 + Math.random() * 1.5; }
         }
+        break;
+      }
+      case 'tomoe': {
+        const st = a.sv.fang ?? 0, since = t - (a.sv.fangAt ?? t);
+        // the Fang is out: yank its victim in once the wound has bitten (at once for a flyer - COUNTER), call it off a wall
+        if (st === 3) {
+          const stuck = w.actors.find(x => x.id === a.sv.fangTgt);
+          if (stuck && (stuck.flying || (since > 0.5 && dist3(stuck.pos, a.pos) > 5) || since > 2.5)) { this.castAt('alt'); break; }
+        } else if (st === 2 && since > 0.8) { this.castAt('alt'); break; }
+        // Tide of Blades: a crowd in the lane ahead, or a wounded target to run down
+        if (ultReady && tg && vis(tg) && d < 16 && Math.abs(tg.pos.y - a.pos.y) < 1.5 && (near(tg.pos, 5, foes).length >= 2 || tg.health / tg.maxHp < 0.4)) { this.castAt('ult', tg.center); break; }
+        // Horagai War Call: under fire, or the team diving in together
+        if (rdy('warcall') && ((t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.7) || (tg && d < 12 && near(a.pos, 15, allies).length >= 3))) { this.castAt('a1'); break; }
+        // Crescent Reaping: everyone inside axe reach
+        if (rdy('reaping') && tg && d < 5 && vis(tg)) { this.castAt('a2', tg.center); break; }
+        // Crescent Fang: at range, and the Diva out of the sky first
+        const noc = foes.find(x => x.def.id === 'nocturne' && x.flying && dist3(x.pos, a.pos) < 25 && vis(x));
+        if (!st && rdy('crescent') && (noc || (tg && d > 6 && d < 24 && vis(tg)))) { this.castAt('alt', (noc ?? tg)!.center); break; }
         break;
       }
       case 'gantetsu': {

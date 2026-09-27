@@ -18,6 +18,7 @@ export const CAST_SLOT: Record<string, Slot[]> = {
   pilotroll: ['roll', 'dash'], sunhop: ['flip', 'vault', 'jump_start'], flashstep: ['dash', 'slide'], shadowstep: ['dash', 'flip'],
   spiritstep: ['flip', 'dash'], thousandcuts: ['dash', 'melee'], chain: ['throw', 'cast'], marionette: ['cast', 'throw'],
   reveal: ['shoot', 'cast'], hundredsuns: ['cast'], parry: ['block', 'cast'], veil: ['cast'], judgment: ['cast'], asura: ['cast'],
+  crescent: ['throw', 'cast'], recall: ['cast'], warcall: ['cast'],
 };
 // upper-body moves that also own the legs while standing still (the stance of a swing, cast or throw)
 const STANCE: Set<Slot> = new Set(['melee', 'cast', 'throw', 'punch', 'block']);

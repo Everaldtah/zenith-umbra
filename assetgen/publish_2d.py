@@ -99,3 +99,11 @@ if os.path.exists(HM):
     im = Image.open(HM).convert('RGB'); W, H = im.size
     s = int(W * 0.37); cx = W // 2; y0 = 0
     save(im.crop((cx - s // 2, y0, cx + s // 2, y0 + s)), 'img/portrait_hibiki.webp', 85, (512, 512)); n += 1
+# Tomoe (Kaggle: tomoepose): key art from the horned white-and-gold key visual, portrait from the chosen model sheet
+TK = os.path.join(HERE, 'out', 'tomoepose', 'img', 'key_tomoe_2.png')
+TM = os.path.join(HERE, '..', 'work', 'ow', 'pick', 'tomoe.png')     # = model_tomoe_7, the look the model was built from
+if os.path.exists(TK): save(Image.open(TK).convert('RGB'), 'img/key_tomoe.webp', 82); n += 1
+if os.path.exists(TM):
+    im = Image.open(TM).convert('RGB'); W, H = im.size
+    s = int(W * 0.34); cx = W // 2; y0 = 10
+    save(im.crop((cx - s // 2, y0, cx + s // 2, y0 + s)), 'img/portrait_tomoe.webp', 85, (512, 512)); n += 1

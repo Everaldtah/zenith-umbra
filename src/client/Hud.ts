@@ -1,6 +1,8 @@
 // In-match HUD (DOM overlay): health, abilities, ult, ammo, objective, kill feed, counter callouts, damage numbers,
 // enemy health bars, scoreboard.
 import * as THREE from 'three';
+import { bindsFor, keyShort, type Action, type Settings } from './Settings';
+import { drawReticle } from './SettingsUI';
 import { isAbility, type AbilityDef } from '../data/heroes';
 import type { Actor } from '../game/Actor';
 import type { GameEvent, World } from '../game/World';
@@ -34,6 +36,8 @@ export class Hud {
   private hitmark = el('div', 'hitmark');
   private portrait = el('div', 'portrait');
   private flight = el('div', 'flight');
+  private subs = el('div', 'subs');
+  private opt: Settings | null = null;
   private numPool: { e: HTMLElement; born: number; pos: THREE.Vector3; vy: number }[] = [];
   private barEls = new Map<number, HTMLElement>();
   private abilEls: Record<string, HTMLElement> = {};
@@ -42,10 +46,60 @@ export class Hud {
   onUltReady: (() => void) | null = null;
 
   constructor(parent: HTMLElement) {
-    this.root.append(this.bars, this.nums, this.cross, this.hitmark, this.hp, this.portrait, this.abil, this.ultEl, this.ammo, this.flight, this.obj, this.feed, this.callout, this.banner, this.status, this.board, this.fps);
+    this.root.append(this.bars, this.nums, this.cross, this.hitmark, this.hp, this.portrait, this.abil, this.ultEl, this.ammo, this.flight, this.obj, this.feed, this.callout, this.banner, this.status, this.board, this.fps, this.subs);
     parent.append(this.root);
   }
   show(v: boolean) { this.root.style.display = v ? '' : 'none'; }
+
+  /** Settings > Gameplay / Accessibility / Controls (reticle) */
+  applySettings(s: Settings) {
+    this.opt = s;
+    this.lastHero = '';                  // rebuild the ability bar: its key labels follow the bindings
+    const g = s.gameplay;
+    for (const e of [this.hp, this.portrait, this.abil, this.ultEl, this.ammo, this.flight, this.obj, this.feed, this.status, this.callout]) {
+      (e.style as any).zoom = String(g.hudScale); e.style.opacity = String(g.hudOpacity);
+    }
+    this.root.classList.toggle('nofeed', !g.killFeed); this.root.classList.toggle('nonums', !g.damageNumbers);
+    this.root.classList.toggle('nohit', !g.hitmarkers); this.root.classList.toggle('nocounter', !g.counterCallouts);
+    this.subs.style.setProperty('--ss', String(s.access.subSize)); this.subs.style.setProperty('--sbg', String(s.access.subBg));
+    this.root.style.setProperty('--hudshake', String(s.access.hudShake));
+    this.drawReticle();
+  }
+
+  /** a custom reticle replaces the per-weapon one (Settings > Controls > Reticle) */
+  private drawReticle() {
+    const R = this.opt?.controls.reticle;
+    if (!R || R.type === 'default') { if (this.cross.classList.contains('custom')) { this.cross.innerHTML = ''; this.cross.className = 'cross ' + (this.lastKind || 'hitscan'); } return; }
+    this.cross.className = 'cross custom';
+    const size = Math.ceil((R.gap + R.length) * 2 + R.thickness * 2 + R.dot + 12), c = document.createElement('canvas');
+    c.width = c.height = size;
+    drawReticle(c.getContext('2d')!, size / 2, size / 2, R, 1);
+    this.cross.innerHTML = ''; this.cross.append(c);
+  }
+  private lastKind = '';
+
+  /** the ability bar shows the keys the player actually bound (their hero's own set first) */
+  private label(k: string, hero: string) {
+    const A: Record<string, Action> = { RMB: 'alt', SHIFT: 'a1', E: 'a2', C: 'melee', Q: 'ult' };
+    return this.opt && A[k] ? keyShort(bindsFor(this.opt, hero, A[k])[0]) : k;
+  }
+
+  /** the advanced performance overlay (null = off / simple) */
+  perf(lines: string[] | null) {
+    this.fps.classList.toggle('adv', !!lines);
+    if (lines) this.fps.textContent = lines.join('\n');
+  }
+
+  /** a voice line's subtitle (Accessibility > Subtitles filters by category) */
+  subtitle(name: string, color: string, text: string, cat: string, secs: number) {
+    const lv = this.opt?.access.subtitles ?? 'critical';
+    const show = lv === 'all' || (lv === 'conversations' && cat !== 'exert' && cat !== 'pain') || (lv === 'critical' && (cat === 'critical' || cat === 'announcer'));
+    if (!show || !text) return;
+    const d = el('div', '', `${name ? `<b style="--c:${color}">${name}:</b>` : ''}${text}`);
+    this.subs.append(d);
+    while (this.subs.children.length > 3) this.subs.firstChild!.remove();
+    setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 300); }, Math.max(1.6, secs) * 1000);
+  }
 
   private buildAbilities(a: Actor) {
     this.abil.innerHTML = ''; this.abilEls = {};
@@ -55,13 +109,14 @@ export class Hud {
       ['SHIFT', a.def.ability1, a.def.ability1.name], ['E', a.def.ability2, a.def.ability2.name], ['C', null, 'Melee'],
     ];
     for (const [key, def, name] of list) {
-      const b = el('div', 'ab' + (def?.counter ? ' counter' : ''), `<div class="cd"></div><div class="k">${key}</div><div class="n">${name}</div>`);
+      const b = el('div', 'ab' + (def?.counter ? ' counter' : ''), `<div class="cd"></div><div class="k">${this.label(key, a.def.id)}</div><div class="n">${name}</div>`);
       if (def?.counter) b.title = def.counter;
       this.abil.append(b); this.abilEls[key] = b;
     }
     this.portrait.innerHTML = `<img src="${BASE}img/portrait_${a.def.id}.webp" onerror="this.style.display='none'"><div><b>${a.def.name}</b><span>${a.def.title}${a.def.pilot ? ` · pilot ${a.def.pilot.name}` : ''}</span></div>`;
     this.portrait.style.setProperty('--c', a.def.color);
-    this.cross.className = 'cross ' + a.def.primary.kind;
+    this.lastKind = a.def.primary.kind;
+    if (!this.cross.classList.contains('custom')) this.cross.className = 'cross ' + a.def.primary.kind;
   }
 
   update(w: World, me: Actor | null, cam: THREE.Camera, now: number, fps: number, showBoard: boolean, spectating: string) {
@@ -82,7 +137,14 @@ export class Hud {
         (e.querySelector('.cd') as HTMLElement).style.height = `${left > 0 ? left / Math.max(0.1, def.cooldown) * 100 : 0}%`;
         e.classList.toggle('ready', left <= 0);
         e.classList.toggle('silenced', me.has('silence', t));
-        (e.querySelector('.k') as HTMLElement).textContent = left > 0 ? left.toFixed(left < 3 ? 1 : 0) : k;
+        (e.querySelector('.k') as HTMLElement).textContent = left > 0 ? left.toFixed(left < 3 ? 1 : 0) : this.label(k, me.def.id);
+        // Tomoe: while the Crescent Fang is out, RMB calls it back (no cooldown shown until it's caught)
+        if (id === 'crescent' && me.sv.fang) {
+          const stuck = me.sv.fang === 2 || me.sv.fang === 3;
+          (e.querySelector('.cd') as HTMLElement).style.height = '0%';
+          e.classList.toggle('ready', stuck);
+          (e.querySelector('.k') as HTMLElement).textContent = stuck ? 'RECALL' : '···';
+        }
       }
       {
         // quick melee cooldown
@@ -101,7 +163,7 @@ export class Hud {
       this.ultEl.innerHTML = titan > 0
         // giant form running: the ring drains over the 60 seconds
         ? `<div class="ring" style="--p:${(titan / 60 * 100).toFixed(1)}"></div><div class="v">${Math.ceil(titan)}s</div><div class="n">GIANT FORM</div>`
-        : `<div class="ring" style="--p:${(u * 100).toFixed(1)}"></div><div class="v">${ready ? 'Q' : Math.floor(u * 100) + '%'}</div><div class="n">${me.def.ult.name}</div>`;
+        : `<div class="ring" style="--p:${(u * 100).toFixed(1)}"></div><div class="v">${ready ? this.label('Q', me.def.id) : Math.floor(u * 100) + '%'}</div><div class="n">${me.def.ult.name}</div>`;
       this.ultEl.classList.toggle('active', titan > 0);
       this.ultEl.classList.toggle('ready', ready);
       if (ready && !this.ultWasReady) this.onUltReady?.();
@@ -125,7 +187,7 @@ export class Hud {
       const swoop = me.def.id === 'mirei' ? (me.has('swoop', t) ? 'SWOOP' : me.cdLeft('swoop', t) > 0 ? `F ${me.cdLeft('swoop', t).toFixed(1)}` : 'F SWOOP') : '';
       if (flies && !dj) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>${swoop ? `<span class="sw${me.ready('swoop', t) ? ' on' : ''}">${swoop}</span>` : ''}`;
       const st: string[] = [];
-      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'LIFESTEAL', '#ff2d55'], ['burning', 'BURNING', '#ff8a3d'], ['tachiai', 'UNSTOPPABLE', '#34d1bf'], ['taiko', 'TAIKO HEARTBEAT', '#ffb35c'], ['dohyo', 'GRAND DOHYO', '#ffe6a8'], ['tempo', 'TEMPO RUSH', '#ffd23f'], ['groove', 'HEALING GROOVE', '#7dffcf'], ['amp', 'MAX VOLUME', '#39d6ff'], ['pumped', 'PUMPED', '#ffd23f'], ['grinding', 'MAG-GRIND', '#9ef6ff']];
+      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'LIFESTEAL', '#ff2d55'], ['burning', 'BURNING', '#ff8a3d'], ['tachiai', 'UNSTOPPABLE', '#34d1bf'], ['taiko', 'TAIKO HEARTBEAT', '#ffb35c'], ['dohyo', 'GRAND DOHYO', '#ffe6a8'], ['tempo', 'TEMPO RUSH', '#ffd23f'], ['groove', 'HEALING GROOVE', '#7dffcf'], ['amp', 'MAX VOLUME', '#39d6ff'], ['pumped', 'PUMPED', '#ffd23f'], ['grinding', 'MAG-GRIND', '#9ef6ff'], ['wound', 'WOUNDED', '#ff2d55'], ['warcall', 'WAR CALL', '#ffd98a'], ['tideult', 'UNSTOPPABLE', '#5ff2e0']];
       for (const [k, n, c] of S2) if (me.has(k, t)) st.push(`<span style="--c:${c}">${n}</span>`);
       this.status.innerHTML = st.join('');
       this.root.classList.toggle('dead', !me.alive);
@@ -200,7 +262,9 @@ export class Hud {
       let b = this.barEls.get(a.id);
       if (!b) { b = el('div', 'ob'); this.bars.append(b); this.barEls.set(a.id, b); }
       const enemy = !me || a.team !== me.team;
-      b.className = 'ob ' + (a.team === (me?.team ?? 'zenith') ? 'ally' : 'enemy');
+      const G = this.opt?.gameplay, showBar = !G || (enemy ? G.enemyBars : G.allyBars), showName = !G || G.nameTags;
+      b.className = 'ob ' + (a.team === (me?.team ?? 'zenith') ? 'ally' : 'enemy') + (showBar ? '' : ' nobar') + (showName ? '' : ' noname');
+      b.style.display = showBar || showName ? '' : 'none';
       b.style.transform = `translate(${(v.x * 0.5 + 0.5) * innerWidth}px, ${(-v.y * 0.5 + 0.5) * innerHeight}px) scale(${Math.max(0.55, Math.min(1, 14 / d))})`;
       const icons = ['stun', 'root', 'silence', 'antiheal', 'brand', 'tethered', 'linked', 'sealed'].filter(s => a.has(s, t)).map(s => `<em class="s-${s}"></em>`).join('');
       b.innerHTML = `<span>${enemy && !me ? '' : ''}${a.def.name}${icons}</span><div><i style="width:${a.health / a.maxHp * 100}%"></i>${a.shieldAmt > 1 ? `<u style="width:${Math.min(100, a.shieldAmt / a.maxHp * 100)}%"></u>` : ''}</div>`;

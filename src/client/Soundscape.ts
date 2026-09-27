@@ -84,7 +84,7 @@ export class Soundscape {
     if (e.t === 'dmg' && !e.heal) {
       if (e.src === me && e.tgt !== me) {
         const t = performance.now();
-        if (t - this.lastHitSnd > 45) { this.lastHitSnd = t; sfx.play(e.crit ? 'crit' : 'hit', undefined, e.crit ? 1 : 0.9); }
+        if (t - this.lastHitSnd > 45) { this.lastHitSnd = t; sfx.play(e.crit ? 'crit' : 'hit', undefined, (e.crit ? 1 : 0.9) * sfx.mix.hitmarker); }
       }
       if (e.tgt === me) {
         if (e.src) this.hitMe.set(e.src.id, performance.now() / 1000);

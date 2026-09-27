@@ -202,8 +202,10 @@ export class HeroViewer {
     if (m === 'ult') {
       // Tenkai-Oh previews the giant form; everyone else plays their ult cast
       if (a.def.ult.id === 'colossus') { a.set('titan', T, 9999); a.scale += (TITAN_SCALE - a.scale) * Math.min(1, dt * 2.6); }
+      // Tomoe: the Crescent Warpath charge (axe out in front, unstoppable lean)
+      else if (a.def.ult.id === 'tide') { a.forced = { vx: 0, vy: 0, vz: 0, until: 1e9, kind: 'tide' }; a.set('tideult', T, 0.2); a.vel = { x: 0, y: 0, z: 9 }; }
       else if (T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ult.id; }
-    }
+    } else if (a.forced?.kind === 'tide') a.forced = null;
     if (m === 'alt' && !a.def.dualGuns && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
     // SHIFT for Gantetsu: the Tachiai Rush (head down, guns tucked)
     if (m === 'shift' && a.def.ability1.id === 'tachiai') { a.set('tachiai', T, 0.1); a.vel = { x: 0, y: 0, z: a.def.speed * 1.85 }; }

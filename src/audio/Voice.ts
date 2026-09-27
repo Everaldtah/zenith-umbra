@@ -30,6 +30,8 @@ export class VoiceDirector {
   private now = () => performance.now() / 1000;
   private announcer: Talk | null = null;
   me: Actor | null = null;
+  /** subtitles: (speaker name, colour, words, category, seconds) - the HUD decides what to show */
+  onLine: ((name: string, color: string, text: string, cat: string, secs: number) => void) | null = null;
 
   reset() { for (const t of this.talking.values()) t.stop(); this.talking.clear(); this.last.clear(); this.announcer?.stop(); this.announcer = null; }
 
@@ -67,6 +69,7 @@ export class VoiceDirector {
     const played = sfx.playLine(buf, self ? null : pos, cat === 'critical' ? 1.15 : cat === 'exert' ? 0.7 : 1,
       { rel: self ? 'self' : ally ? 'ally' : 'enemy', radio, ult: cat === 'critical' && enemy });
     if (!played) return false;
+    this.onLine?.(a.def.name, a.def.color, sfx.bank.words(bank, key, buf), cat, played.dur);
     this.last.set(lk, t);
     this.talking.set(a.id, { stop: played.stop, pri: PRI[cat], until: t + played.dur });
     if (cat === 'critical' || cat === 'death' || self) sfx.duck(cat === 'critical' ? 0.45 : 0.25, played.dur);
@@ -81,8 +84,8 @@ export class VoiceDirector {
     this.last.set(lk, t);
     const buf = sfx.bank.line('announcer', key); if (!buf) return;
     this.announcer?.stop();
-    const p = sfx.playLine(buf, null, 1.05, { rel: 'self' });
-    if (p) { this.announcer = { stop: p.stop, pri: 9, until: t + p.dur }; sfx.duck(0.35, p.dur); }
+    const p = sfx.playLine(buf, null, 1.05, { rel: 'self', announcer: true });
+    if (p) { this.announcer = { stop: p.stop, pri: 9, until: t + p.dur }; sfx.duck(0.35, p.dur); this.onLine?.('', '#ffffff', sfx.bank.words('announcer', key, buf), 'announcer', p.dur); }
   }
 }
 

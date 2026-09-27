@@ -8,6 +8,7 @@ export interface Input {
   fire: boolean; alt: boolean; a1: boolean; a2: boolean; ult: boolean; reload: boolean;
   melee: boolean;                  // quick melee (C)
   swoop?: boolean;                 // Mirei: Starwing Swoop to the ally under the crosshair (F)
+  grind?: boolean;                 // Hibiki: Mag-Grind held (the player's binding; bots ride on jumpHeld)
   yaw: number; pitch: number;
 }
 export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, melee: false, swoop: false, yaw: 0, pitch: 0 });
@@ -25,6 +26,8 @@ export class Actor {
   input: Input = emptyInput();
   hp: number; armor: number; maxArmor: number;
   shields: Shield[] = [];
+  /** open wounds: damage over time that stacks per wound (Tomoe's blades heal her off them - Blood Tide) */
+  wounds: { src: Actor; dps: number; until: number }[] = [];
   alive = true; respawnAt = 0; deathAt = 0;
   grounded = false; lastGroundedAt = 0; airJumps = 0; flying = false; flight = 100;
   st: Record<string, number> = {};        // status -> until (sim time)

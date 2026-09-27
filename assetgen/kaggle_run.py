@@ -62,7 +62,7 @@ def watch(stage, topic):
             print(st.strip())
             out = HERE / "out" / stage
             out.mkdir(parents=True, exist_ok=True)
-            print(kaggle("kernels", "output", slug, "-p", str(out)).stdout[-400:])
+            print(kaggle("kernels", "output", slug, "-p", str(out), "--page-size", "200").stdout[-400:])
             return
         time.sleep(30)
 

@@ -6,6 +6,7 @@ import { Animator, type AnimState } from './Animator';
 import { heroModel } from './Assets';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
+import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
 
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
@@ -185,6 +186,9 @@ export function mannequin(a: Actor): THREE.Object3D {
   return root;
 }
 
+/** friendly / enemy outline colours (Settings > Accessibility) */
+export const UI_COLORS = { ally: '#5cc8ff', enemy: '#ff3b5c' };
+
 export class CharacterView {
   group = new THREE.Group();            // world transform (position + yaw)
   inner = new THREE.Group();            // death tilt / squash
@@ -200,6 +204,8 @@ export class CharacterView {
   barrierMesh: THREE.Mesh | null = null;
   scaleFit = 1;
   hammer: HammerProp | null = null;
+  /** Tomoe's axe slung on her back between swings */
+  backAxe: THREE.Object3D | null = null;
   /** the hero this view was built for: the World swaps defs (mech <-> pilot), and the view is rebuilt then */
   defId: string;
   jets: THREE.Mesh[] = [];
@@ -213,7 +219,7 @@ export class CharacterView {
 
   constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic') {
     this.defId = actor.def.id;
-    this.rimColor = new THREE.Color(actor.team === viewerTeam ? '#5cc8ff' : '#ff3b5c');
+    this.rimColor = new THREE.Color(actor.team === viewerTeam ? UI_COLORS.ally : UI_COLORS.enemy);
     this.look = lookUniforms(this.rimColor);
     const skins = skinsFor(actor.def.id, actor.def.team);
     this.skin = skins.find(s => s.id === skinId) ?? skins[0];
@@ -261,6 +267,14 @@ export class CharacterView {
     for (const g of this.guns) g.group.parent?.remove(g.group);
     for (const s of this.skates) s.group.parent?.remove(s.group);
     this.guns = []; this.skates = []; anim.feet = null;
+    if (this.actor.def.id === 'tomoe' && anim.ok) {
+      // Tomoe: the Crownfire Scattergun on the right forearm, the Crescent Fang in the left fist
+      const fang = buildFang(anim.height), gun = buildScattergun(anim.height);
+      this.guns = [{ group: fang, spin: new THREE.Group(), flash: new THREE.Mesh(), core: gun.core, len: 0 }, gun];
+      root.add(fang); root.add(gun.group);
+      anim.guns = [fang, gun.group];
+      return;
+    }
     if (this.actor.def.id === 'hibiki' && anim.ok) {
       // Hibiki: the Subwoofer Blaster on the right forearm (an empty mount on the left), mag-skates on both feet
       const mount = new THREE.Group(), amp = buildSonicAmp(anim.height);
@@ -283,6 +297,18 @@ export class CharacterView {
   updateGuns(dt: number, time: number) {
     if (!this.guns.length) return;
     const a = this.actor;
+    if (a.def.id === 'tomoe') {
+      // the axe replaces both guns while it's out; the Fang leaves her hand when thrown; the crown muzzle flashes per blast
+      const axe = this.axeOut(time), age = time - a.anim.attackAt;
+      this.anim.gunHide = [axe || !!a.sv.fang, axe];
+      this.guns[0].group.visible = this.guns[0].group.visible && !this.anim.gunHide[0];
+      this.guns[1].group.visible = this.guns[1].group.visible && !axe;
+      const g = this.guns[1];
+      g.flash.visible = g.group.visible && age < 0.06 && a.anim.attackKind === 'primary' && a.alive;
+      if (g.flash.visible) { g.flash.scale.setScalar(0.8 + Math.random() * 0.5); g.flash.rotation.z = Math.random() * Math.PI; }
+      if (this.backAxe) this.backAxe.visible = !axe;
+      return;
+    }
     if (a.def.id === 'hibiki') {
       // the woofer pumps on each round of the burst; the equaliser and wheels glow the colour of the track
       const g = this.guns[1], age = time - a.anim.attackAt;
@@ -358,6 +384,15 @@ export class CharacterView {
       m.add(this.hammer.group);
       anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
     }
+    // Tomoe: the great axe is posed on the hammer path while she swings it (Crescent Reaping, Tide of Blades) and rides
+    // slung across her back the rest of the time
+    if (id === 'tomoe' && anim.ok) {
+      this.hammer = buildGreatAxe(anim.height);
+      m.add(this.hammer.group);
+      anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
+      const back = buildGreatAxe(anim.height);
+      m.add(back.group); anim.back = back.group; this.backAxe = back.group;
+    }
     // a pilot's sidearm rides in the right hand, barrel along the forearm (so it points where the arm aims)
     if (this.actor.def.gunProp && anim.ok && anim.bones.hand_R && anim.rest.hand_R) {
       const gun = buildBlaster(anim.height), r = anim.rest.hand_R;
@@ -432,6 +467,12 @@ export class CharacterView {
     return [(dx * cy - dz * sy) / l, (dx * sy + dz * cy) / l];
   }
 
+  /** Tomoe has the great axe in her hands (a Crescent Reaping in flight, or the Crescent Warpath charge) */
+  axeOut(time: number) {
+    const a = this.actor, an = a.anim;
+    return a.def.id === 'tomoe' && (a.forced?.kind === 'tide' || (an.castId === 'reaping' && time - an.castAt < 0.75));
+  }
+
   /** gameplay state -> animation state */
   private animState(dt: number, time: number): AnimState {
     const a = this.actor, an = a.anim;
@@ -444,8 +485,9 @@ export class CharacterView {
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
-      hammer: !!this.hammer, swingSide: an.attackSide,
-      move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter' : a.flying && a.def.jets ? 'jets' : '',
+      hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
+      move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter'
+        : a.forced?.kind === 'tide' ? 'tide' : an.castId === 'reaping' && time - an.castAt < 0.75 ? 'reaping' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
       hero: a.def.id,
       hitDir: this.hitDir(), knocked: !!a.forced && (a.forced.kind === 'knock' || a.forced.kind === 'pull'),
@@ -528,7 +570,7 @@ export class CharacterView {
     this.smear();
     this.updateGuns(dt, time);
     const an = a.anim;
-    if (this.hammer) {
+    if (this.hammer && a.def.id !== 'tomoe') {
       // rocket thruster: roars through the swing, the sun cores flare on impact
       const age = time - an.attackAt, on = an.attackKind === 'primary' && age > 0.12 && age < 0.45;   // fires on the strike, not the wind-up
       const f = this.hammer.flame;

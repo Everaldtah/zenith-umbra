@@ -142,6 +142,13 @@ s("bassrise", "a rising white noise sweep riser getting louder, electronic music
 s("bassdrop", "a massive electronic dance music bass drop impact, huge sub bass boom", 1.8)
 s("groove_heal", "a mellow lo-fi hip hop beat with a warm bassline and soft keys, 90 bpm", 4.0, kind="ambient", loop=True)
 s("groove_speed", "an energetic drum and bass breakbeat with a driving bassline, 174 bpm", 4.0, kind="ambient", loop=True)
+# ---------------------------------------------------------------- Tomoe (rendered on Kaggle with MMAudio: kagglesfx)
+s("scattergun", "a heavy pump-action shotgun blast, huge punchy boom with a bright metallic ring and a pump action rack, close", 0.9, hf=True)
+s("warcall", "a huge conch shell war horn blown hard, a deep resonant bellowing horn call echoing across a battlefield", 1.6)
+s("reapwind", "a heavy battle axe heaved back over the shoulder, a deep metallic whoosh building up", 0.5)
+s("reaping", "a giant battle axe cleaving hard through the air, a heavy whoosh into a sharp ringing metallic slash", 0.7, hf=True)
+s("fangreturn", "a spinning throwing blade whirring back through the air, a fast rhythmic metallic whoosh", 0.8)
+s("fangcatch", "a heavy knife caught in a gloved hand, a short metallic clink and leather grip", 0.3)
 # ---------------------------------------------------------------- map ambience beds (loops)
 for m, p in {
     "amatsu": "a mountain shrine at dawn, gentle wind, wind chimes and distant birds",

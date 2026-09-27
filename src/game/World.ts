@@ -142,7 +142,7 @@ export class World {
     a.pitch = 0;
     a.def = a.baseDef;
     a.hp = a.def.hp; a.maxArmor = a.def.armor + a.mods.armor; a.armor = a.maxArmor; a.scale = 1;
-    a.shields = []; a.st = {}; a.sv = {}; a.src = {}; a.forced = null;
+    a.shields = []; a.wounds = []; a.st = {}; a.sv = {}; a.src = {}; a.forced = null;
     a.alive = true; a.respawnAt = 0; a.flight = 100; a.flying = false;
     a.ammo = a.maxAmmo; a.reloadUntil = 0;
     if (a.def.dualGuns && !isAbility(a.def.secondary)) a.sv.ammo2 = Math.max(1, Math.round((a.def.secondary.ammo ?? 0) * (1 + a.mods.ammo)));
@@ -241,7 +241,7 @@ export class World {
   }
 
   // ------------------------------------------------------------------ combat
-  damage(src: Actor | null, tgt: Actor, amount: number, o: { crit?: boolean; kind?: string; shieldMult?: number; ability?: string; noLifesteal?: boolean } = {}): number {
+  damage(src: Actor | null, tgt: Actor, amount: number, o: { crit?: boolean; kind?: string; shieldMult?: number; ability?: string; noLifesteal?: boolean; wound?: boolean } = {}): number {
     const t = this.time;
     if (!tgt.alive || amount <= 0) return 0;
     if (src && src.team === tgt.team && src !== tgt) return 0;
@@ -279,7 +279,8 @@ export class World {
     }
     tgt.shields = tgt.shields.filter(s => s.amt > 0.5);
     if (dmg > 0 && tgt.armor > 0) {
-      const eff = Math.max(dmg * 0.7, Math.min(dmg, dmg - 5));
+      // wounds bleed straight through armor (Tomoe's counter to Gantetsu's plating)
+      const eff = o.wound ? dmg : Math.max(dmg * 0.7, Math.min(dmg, dmg - 5));
       const take = Math.min(tgt.armor, eff);
       tgt.armor -= take; dealt += take; dmg -= take / (eff / dmg);
     }
@@ -321,6 +322,20 @@ export class World {
     this.emit({ t: 'dmg', src, tgt, amt: dealt, crit: !!o.crit, pos: tgt.center });
     if (tgt.health <= 0.01 && tgt.hp <= 0.01) this.kill(tgt, src);
     return dealt;
+  }
+
+  /** open wounds bleed; Tomoe drinks from her own (Blood Tide: heals 150% of the wound damage she deals) */
+  private bleedWounds(a: Actor, dt: number) {
+    const t = this.time;
+    a.wounds = a.wounds.filter(w => w.until > t);
+    for (const w of [...a.wounds]) {
+      const dealt = this.damage(w.src, a, w.dps * dt, { kind: 'dot', noLifesteal: true, wound: true });
+      if (dealt > 0 && w.src.alive && w.src.def.id === 'tomoe') {
+        const h = this.heal(w.src, w.src, dealt * 1.5, true);
+        w.src.stats.bloodtide = (w.src.stats.bloodtide ?? 0) + h;
+      }
+      if (!a.alive) break;
+    }
   }
 
   heal(src: Actor, tgt: Actor, amount: number, quiet = false): number {
@@ -370,7 +385,7 @@ export class World {
     if (tgt.def === tgt.baseDef && PILOTS[tgt.def.id]) { this.demech(tgt, src); return; }
     tgt.alive = false; tgt.deathAt = this.time; tgt.deaths++;
     tgt.respawnAt = tgt.noRespawn ? 0 : this.time + (tgt.isRobot ? 3 : this.mode === 'aitest' ? 4 : this.mode === 'campaign' ? 8 : 6);
-    tgt.forced = null; tgt.flying = false; tgt.barrier.up = false; tgt.beamOn = false; tgt.flameOn = false;
+    tgt.forced = null; tgt.flying = false; tgt.barrier.up = false; tgt.beamOn = false; tgt.flameOn = false; tgt.wounds = [];
     const killer = src && src !== tgt ? src : (tgt.lastHitBy && this.time - tgt.lastHitAt < 6 ? tgt.lastHitBy : null);
     if (killer) {
       killer.kills++; killer.streak++; killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
@@ -573,14 +588,15 @@ export class World {
       if (t < p.readyAt) continue;
       for (const a of this.actors) {
         if (!a.alive || a.isRobot || a.isBoss || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > 1.1 || Math.abs(a.pos.y - p.y) > 1.3) continue;
-        const dot = a.has('burning', t) || a.has('brand', t) || a.has('bleed', t);
+        const dot = a.has('burning', t) || a.has('brand', t) || a.has('bleed', t) || a.wounds.length > 0;
         if (a.health >= a.maxHp - 0.5 && !dot) continue;
         // a pack heals through healing reduction and burns away damage over time (as in Overwatch)
         const P = p.big ? PACK.big : PACK.small;
         let left = P.hp;
         const h = Math.min(left, a.def.hp - a.hp); a.hp += h; left -= h;
         const ar = Math.min(left, a.maxArmor - a.armor); a.armor += ar;
-        for (const s of ['burning', 'brand', 'bleed']) a.clear(s);
+        for (const s of ['burning', 'brand', 'bleed', 'wound']) a.clear(s);
+        a.wounds = [];
         p.readyAt = t + P.respawn;
         a.stats.packs = (a.stats.packs ?? 0) + 1;
         this.emit({ t: 'dmg', src: a, tgt: a, amt: h + ar, crit: false, heal: true, pos: a.center });
@@ -636,6 +652,7 @@ export class World {
     if (per('bleed')) this.damage(a.src.bleed ?? null, a, (a.sv.bleed ?? 33) * dt, { kind: 'dot', noLifesteal: true });
     if (per('hot') && a.src.hot) this.heal(a.src.hot, a, (a.sv.hot ?? 0) * dt, true);
     if (per('burning')) this.damage(a.src.burning ?? null, a, 16 * dt, { kind: 'dot', noLifesteal: true });
+    if (a.wounds.length) this.bleedWounds(a, dt);
     if (a.def.id === 'gantetsu') { const s = a.shields.find(x => x.kind === 'roar'); if (s && t - (a.sv.roarAt ?? 0) > 2) s.amt -= 12 * dt; }
     // Bass Drop's temporary health holds for a beat, then fades out over 6s
     { const s = a.shields.find(x => x.kind === 'bassdrop'); if (s && t - (a.sv.bassAt ?? 0) > 0.8) s.amt -= 750 / 6 * dt; }
@@ -708,6 +725,7 @@ export class World {
       if (a.charging) spd *= 0.7;
       if (a.barrier.up) spd *= 0.65;
       if (a.flameOn) spd *= 0.9;
+      if (a.has('reapwind', t)) spd *= 0.55;           // Tomoe heaving the axe round
       const rooted = a.has('root', t) || a.has('stun', t);
       let mx = inp.mx, mz = inp.mz;
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
@@ -752,7 +770,14 @@ export class World {
         a.vel.y += ((want - a.pos.y) * 2 - a.vel.y) * Math.min(1, dt * 3);
       }
       // air control: a slingshot / superjump out of a swoop carries its momentum (steering nudges it, not brakes it)
-      const k = a.grounded ? 14 : a.flying ? 4 : a.has('slingshot', t) || a.has('superjump', t) ? 0.55 : 2.5;
+      let k = a.grounded ? 14 : a.flying ? 4 : a.has('slingshot', t) || a.has('superjump', t) ? 0.55 : 2.5;
+      // Hibiki skates (like Lucio): different acceleration / deceleration - pushes up to speed, glides when you let go,
+      // carves (not snaps) through turns, and keeps his momentum into a jump
+      if (d.id === 'hibiki') {
+        const want = Math.hypot(wx, wz), cur = Math.hypot(a.vel.x, a.vel.z);
+        const turning = want > 0.1 && cur > 0.5 && (wx * a.vel.x + wz * a.vel.z) / (want * cur) < 0.3;
+        k = a.grounded ? (want < 0.1 ? 1.6 : turning ? 4 : want > cur ? 5.5 : 3) : 1.4;
+      }
       if (!swooping) {
         a.vel.x += (wx - a.vel.x) * Math.min(1, dt * k);
         a.vel.z += (wz - a.vel.z) * Math.min(1, dt * k);
@@ -838,49 +863,72 @@ export class World {
    * Weapons and the heal beam keep working throughout. Returns true while the swoop owns her velocity this step.
    */
   /**
-   * Hibiki - Mag-Grind (wall ride): airborne with SPACE held beside a wall, he locks onto it and grinds along at +30%
-   * speed without falling. Releasing SPACE kicks him off the wall (up and away); the wall ending, landing, a knockback
-   * or pushing away from the wall just drops him off. Grinding charges his empowered Scratch Wave (abilities.ts).
+   * Hibiki - Mag-Grind (wall ride + climb), after Lucio: airborne with the grind button held (his own binding: left mouse
+   * by default; bots use jump) beside a wall, he locks onto it and grinds along at +30% speed without falling.
+   *  - LOOK UP while riding and the ride angles upward (steeper = slower along the wall), for up to 2.4s of climb per
+   *    latch; look down to drop along it.
+   *  - Head-on into a wall he rides straight up it.
+   *  - At the top edge he mantles onto the roof and stays there.
+   *  - Let go and he kicks off the wall - up and away, higher if he's looking up - so two walls criss-crossed climb an
+   *    alley; every fresh latch refills the climb.
+   * The wall ending, landing, a knockback or pushing away from the wall just drops him off. Grinding charges his
+   * empowered Scratch Wave (abilities.ts).
    */
   private grindStep(a: Actor, dt: number, spd: number, rooted: boolean): boolean {
     const t = this.time, L = this.level, inp = a.input;
     if (a.def.id !== 'hibiki') return false;
     const on = a.has('grinding', t);
+    const hold = inp.grind ?? inp.jumpHeld;
+    const look = Math.max(-1, Math.min(1, a.pitch / 0.7));           // -1 looking down .. 1 looking well up
     const off = (kick: boolean) => {
       a.clear('grinding'); a.sv.grindCd = t + 0.3;
       if (kick) {
-        a.vel.x += (a.sv.grindNx ?? 0) * 5.5; a.vel.z += (a.sv.grindNz ?? 0) * 5.5; a.vel.y = 6.2;
+        const up = Math.max(0, look);
+        a.vel.x += (a.sv.grindNx ?? 0) * (5.5 - 2 * up); a.vel.z += (a.sv.grindNz ?? 0) * (5.5 - 2 * up); a.vel.y = 6.2 + 3.6 * up;
         a.anim.jumpAt = t; this.sfx('jump', a.pos, a); this.fx('doublejump', a.pos, { color: a.def.glow });
       }
       return false;
     };
-    if (a.grounded || rooted || a.forced || a.has('stun', t)) return on ? off(false) : false;
-    if (!inp.jumpHeld) return on ? off(true) : false;
+    if (a.grounded) a.sv.climbT = 0;
+    if (rooted || a.forced || a.has('stun', t)) return on ? off(false) : false;
+    if (!hold) return on ? off(true) : false;
     const y = a.pos.y + a.height * 0.5, reach = a.radius + 0.6;
-    const probe = (nx: number, nz: number) => {
-      const h = L.ray({ x: a.pos.x, y, z: a.pos.z }, { x: nx, y: 0, z: nz }, reach);
+    const probe = (nx: number, nz: number, py = y) => {
+      const h = L.ray({ x: a.pos.x, y: py, z: a.pos.z }, { x: nx, y: 0, z: nz }, reach);
       return h && Math.abs(h.ny) < 0.35 ? h : null;
     };
     const hs = Math.hypot(a.vel.x, a.vel.z);
     if (!on) {
-      // latch: some air under him, moving, a vertical wall at his side (or ahead of him)
-      if (t < (a.sv.grindCd ?? 0) || hs < 1.5 || a.pos.y - L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.2) < 0.5) return false;
-      const vx = a.vel.x / hs, vz = a.vel.z / hs;
+      if (t < (a.sv.grindCd ?? 0)) return false;
+      const air = a.pos.y - L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.2);
+      // from the ground he only latches running at a wall while looking up it (skating up the wall); in the air, any wall
+      const fromGround = a.grounded || air < 0.5;
+      if (fromGround && look < 0.3) return false;
+      const fx0 = Math.sin(a.yaw), fz0 = Math.cos(a.yaw);
+      const vx = hs > 0.5 ? a.vel.x / hs : fx0, vz = hs > 0.5 ? a.vel.z / hs : fz0;
       let best: { t: number; nx: number; nz: number } | null = null;
-      for (const [dx, dz] of [[-vz, vx], [vz, -vx], [vx * 0.7 - vz * 0.7, vz * 0.7 + vx * 0.7], [vx * 0.7 + vz * 0.7, vz * 0.7 - vx * 0.7]]) {
-        const l = Math.hypot(dx, dz), h = probe(dx / l, dz / l);
+      const dirs = fromGround ? [[fx0, fz0], [vx, vz]] : [[-vz, vx], [vz, -vx], [vx * 0.7 - vz * 0.7, vz * 0.7 + vx * 0.7], [vx * 0.7 + vz * 0.7, vz * 0.7 - vx * 0.7], [vx, vz], [fx0, fz0]];
+      for (const [dx, dz] of dirs) {
+        const l = Math.hypot(dx, dz) || 1, h = probe(dx / l, dz / l);
         if (h && (!best || h.t < best.t)) { const nl = Math.hypot(h.nx, h.nz) || 1; best = { t: h.t, nx: h.nx / nl, nz: h.nz / nl }; }
       }
       if (!best) return false;
       a.sv.grindNx = best.nx; a.sv.grindNz = best.nz;
-      // ride in the direction he was already travelling along the wall
+      // ride the way he was already travelling along the wall; head-on (or from a standstill) he rides straight up it
       const along = a.vel.x * -best.nz + a.vel.z * best.nx;
       a.sv.grindDir = along >= 0 ? 1 : -1;
+      a.sv.grindHeadOn = Math.abs(along) < Math.max(1.2, hs * 0.35) ? 1 : 0;
+      a.sv.climbT = 0;
+      if (fromGround) { a.grounded = false; a.lastGroundedAt = -9; a.pos.y += 0.05; }
       this.sfx('grindstart', a.pos, a);
     } else {
       // still a wall there? (corners and wall ends drop him off with his momentum)
       const h = probe(-(a.sv.grindNx ?? 0), -(a.sv.grindNz ?? 0));
-      if (!h) return off(false);
+      if (!h) {
+        // ...unless he's at the top of it: then he mantles onto the roof
+        if (this.mantle(a)) return false;
+        return off(false);
+      }
       const nl = Math.hypot(h.nx, h.nz) || 1; a.sv.grindNx = h.nx / nl; a.sv.grindNz = h.nz / nl;
     }
     const nx = a.sv.grindNx, nz = a.sv.grindNz, dir = a.sv.grindDir ?? 1;
@@ -889,18 +937,56 @@ export class World {
     const ix = fx * inp.mz + rx * inp.mx, iz = fz * inp.mz + rz * inp.mx;
     if (ix * nx + iz * nz > 0.75) return off(false);
     const tx = -nz * dir, tz = nx * dir;
-    if (ix * tx + iz * tz < -0.7) a.sv.grindDir = -dir;
-    const sp = spd * 1.3, cur = a.vel.x * tx + a.vel.z * tz;
+    if (ix * tx + iz * tz < -0.7) { a.sv.grindDir = -dir; a.sv.grindHeadOn = 0; }
+    // climb: looking up angles the ride upward (for a while), looking down drops along the wall
+    a.sv.climbT = (a.sv.climbT ?? 0) + dt;
+    // head-on he can only skate a storey or so straight up; riding along the wall he climbs at an angle for longer
+    const headOn = !!a.sv.grindHeadOn, climbMax = headOn ? 1.1 : 2.4;
+    const climbing = look > 0.12 && a.sv.climbT < climbMax;
+    const up = climbing ? look * Math.min(1, (climbMax - a.sv.climbT) / 0.35) : 0;
+    const sp = spd * 1.3 * (headOn ? 0.15 : 1 - 0.55 * Math.max(0, up)), cur = a.vel.x * tx + a.vel.z * tz;
     const v = cur + (sp - cur) * Math.min(1, dt * 6);
     // a light pull toward the wall keeps the skates on it
     const gap = (probe(-nx, -nz)?.t ?? reach) - a.radius;
     const pull = Math.max(0, gap - 0.05) * 6;
     a.vel.x = tx * v - nx * pull; a.vel.z = tz * v - nz * pull;
-    a.vel.y += (0 - a.vel.y) * Math.min(1, dt * 12);
+    const vyT = up > 0 ? (headOn ? 5.4 : 4.4) * up : look < -0.25 ? -5 * -look : 0;
+    a.vel.y += (vyT - a.vel.y) * Math.min(1, dt * (up > 0 ? 8 : 12));
+    // nearing the top of the wall on the way up: over the edge and onto the roof
+    if (a.vel.y > 0.5 && !probe(-nx, -nz, a.pos.y + a.height + 0.25) && this.mantle(a)) return false;
     a.set('grinding', t, 0.15); a.flying = false;
+    a.sv.grindUp = up;
     // which side the wall is on relative to where he's facing (the animator leans away from it)
     a.sv.grindSide = (nx * rx + nz * rz) > 0 ? -1 : 1;
     return true;
+  }
+
+  /** Mag-Grind top-out: if the wall he's riding ends in a roof within reach above his feet, pop up over the edge and land
+   *  on it (he stays on top of the building). Returns true if he mantled. */
+  private mantle(a: Actor): boolean {
+    const L = this.level, nx = a.sv.grindNx ?? 0, nz = a.sv.grindNz ?? 0;
+    const [X, Z] = L.size;
+    for (const inset of [a.radius + 0.35, a.radius + 0.8]) {
+      const px = a.pos.x - nx * inset, pz = a.pos.z - nz * inset;
+      // never onto the arena's boundary walls
+      if (Math.abs(px) > X - 1 || Math.abs(pz) > Z - 1) return false;
+      const roof = L.groundAt(px, pz, a.pos.y + 1.6, a.radius * 0.5);
+      // his hands reach the edge: the roof is at most ~1.3m above his skates
+      if (!Number.isFinite(roof) || roof < a.pos.y - 0.3 || roof > a.pos.y + 1.3) continue;
+      // room to stand up there?
+      if (L.ceilingAt(px, pz, roof + 0.05) < roof + a.height * 0.9) continue;
+      const t = this.time;
+      a.pos = { x: px, y: roof + 0.02, z: pz };
+      const tx = -(a.sv.grindNz ?? 0) * (a.sv.grindDir ?? 1), tz = (a.sv.grindNx ?? 0) * (a.sv.grindDir ?? 1);
+      const along = a.vel.x * tx + a.vel.z * tz;
+      a.vel = { x: -nx * 3 + tx * along * 0.6, y: 0, z: -nz * 3 + tz * along * 0.6 };
+      a.grounded = true; a.lastGroundedAt = t; a.anim.landAt = t;
+      a.clear('grinding'); a.sv.grindCd = t + 0.35; a.sv.climbT = 0;
+      a.stats.mantles = (a.stats.mantles ?? 0) + 1;
+      this.sfx('land', a.pos, a); this.fx('doublejump', a.pos, { color: a.def.glow });
+      return true;
+    }
+    return false;
   }
 
   private swoopStep(a: Actor, dt: number): boolean {

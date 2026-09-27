@@ -35,7 +35,7 @@ export interface AnimState {
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
-  move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets'
+  move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets' | 'reaping' | 'tide' (Tomoe's axe)
   swingSide?: number;       // +1 sweeps right-to-left, -1 left-to-right (swings alternate)
   angel?: boolean;          // Mirei: angelic combat-medic flight (upright hover, swept-back dash, glide)
   gliding?: boolean;        // slow-fall glide with the wings spread
@@ -86,6 +86,7 @@ const PERSONA: Record<string, Persona> = {
   kaien: { weight: 0.3, bounce: 0.2, lean: 0.3, stance: 0.45, width: 1.18, chest: 0.06, hip: 0.1, sway: 0.3, aimK: 120, aimD: 13, lag: 0.9, squash: 0.5 },
   // angelic medic: light on her feet, feet close, graceful contrapposto, floaty aim
   // street skater: low, loose and bouncy, leaning into every push
+  tomoe: { weight: 0.62, bounce: 0.35, lean: 0.62, stance: 0.72, width: 1.25, chest: 0.07, hip: 0.3, sway: 0.5, aimK: 115, aimD: 12, lag: 1.05, squash: 0.7 },
   hibiki: { weight: 0.1, bounce: 0.45, lean: 1.0, stance: 0.9, width: 1.1, chest: -0.02, hip: 0.35, sway: 0.9, aimK: 190, aimD: 17, lag: 0.7, squash: 1.1 },
   mirei: { weight: 0.08, bounce: 0.35, lean: 0.35, stance: 0.12, width: 0.8, chest: 0.12, hip: 0.95, sway: 0.7, aimK: 105, aimD: 11, lag: 1.0, squash: 0.75 },
   // diva: poised, chest high, cocked hip
@@ -124,7 +125,7 @@ const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAx
 // ---------------- Tenkai-Oh's rocket hammer, choreographed after a heavyweight hammer tank: swings alternate sides -
 // wind up behind the shoulder, sweep flat through the front with the weight rolling onto the lead foot, follow through
 // past the other shoulder, settle back into the guard (hammer upright in front, head by the right shoulder).
-export const SWING_TIME = 0.85;
+export const SWING_TIME = 0.96;          // Reinhardt: 0.96s per swing
 // th: yaw of the haft around the body (0 = straight ahead, + = toward the left side), ph: haft elevation,
 // d: grip distance from the shoulder centre in ARM LENGTHS (1 = arms locked straight), gy: grip height above the
 // shoulders in body heights. Reference (Reinhardt): both hands together at the bottom of the haft, arms straight out
@@ -141,7 +142,7 @@ function keyed(K: [number, HPose][], p: number) {
   return { th: L(a.th, b.th), ph: L(a.ph, b.ph), d: L(a.d, b.d), gy: L(a.gy, b.gy) };
 }
 function hammerPose(p: number, side: number, shield: boolean, casting: boolean, mode: string, cp: number) {
-  if (mode === 'dawncharge') return { th: -2.3, ph: -0.35, d: 0.85, gy: -0.25, imp: 0, w: 1, side: 1 };       // trailing low behind the right hip
+  if (mode === 'dawncharge') return { th: -2.3, ph: -0.35, d: 0.85, gy: -0.25, imp: 0, w: 1, side: 1, lean: 0.2 };       // trailing low behind the right hip, shoulder down
   if (mode === 'shatter' && cp < 1) {
     // overhead wind-up, then the head is driven down into the ground in front
     const K: [number, HPose][] = [
@@ -153,20 +154,44 @@ function hammerPose(p: number, side: number, shield: boolean, casting: boolean, 
       [1, GUARD],
     ];
     const q = keyed(K, cp);
-    return { ...q, imp: Math.max(0, 1 - Math.abs(cp - 0.74) / 0.12) * 1.4, w: 1, side: 1 };
+    // the whole body sells it: rear back as the hammer goes up, crunch forward over the knees into the slam
+    const lean = cp < 0.55 ? -0.2 * Math.sin(Math.min(1, cp / 0.55) * Math.PI * 0.5) : cp < 0.9 ? -0.2 + 0.62 * smooth(Math.min(1, (cp - 0.55) / 0.2)) : 0.42 * (1 - (cp - 0.9) / 0.1);
+    return { ...q, imp: Math.max(0, 1 - Math.abs(cp - 0.74) / 0.12) * 1.4, w: 1, side: 1, lean };
   }
-  if (shield) return { th: -0.75, ph: -1.15, d: 0.6, gy: -0.36, imp: 0, w: 0, side };      // lowered while the shield is up
-  if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side };
+  if (mode === 'reaping' && cp < 1) {
+    // Tomoe's Crescent Reaping: the axe comes off her back high over the right shoulder, is heaved round and down through
+    // the front on a diagonal (the cut lands ~0.42s in) and follows through low past the left hip, her weight rolling
+    // onto the lead foot, then is shouldered again
+    const K: [number, HPose][] = [
+      [0, { th: -1.2, ph: 1.25, d: 0.3, gy: 0.2 }],
+      [0.3, { th: -0.85, ph: 1.45, d: 0.42, gy: 0.36 }],   // loaded: axe high behind the right shoulder, torso coiled
+      [0.5, { th: -0.15, ph: 0.35, d: 0.95, gy: 0.02 }],   // the cleave crossing the front, arms long
+      [0.62, { th: 0.75, ph: -0.35, d: 1.0, gy: -0.12 }],  // through the target on the diagonal
+      [0.8, { th: 1.45, ph: -0.6, d: 0.85, gy: -0.22 }],   // follow-through low past the left hip
+      [1, { th: 1.1, ph: -0.2, d: 0.7, gy: -0.18 }],
+    ];
+    const q = keyed(K, cp);
+    const lean = cp < 0.3 ? -0.14 * Math.sin(cp / 0.3 * Math.PI * 0.5) : cp < 0.8 ? -0.14 + 0.5 * smooth(Math.min(1, (cp - 0.3) / 0.32)) : 0.36 * (1 - (cp - 0.8) / 0.2);
+    return { ...q, imp: Math.max(0, 1 - Math.abs(cp - 0.56) / 0.12) * 1.2, w: 1, side: -1, lean };
+  }
+  if (mode === 'tide') return { th: -0.3, ph: -0.45, d: 0.95, gy: -0.1, imp: 0, w: 1, side: 1, lean: 0.38 };   // the axe driven out ahead and low, both hands, charging in behind it
+  if (shield) return { th: -0.75, ph: -1.15, d: 0.6, gy: -0.36, imp: 0, w: 0, side, lean: 0 };      // lowered while the shield is up
+  if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side, lean: 0 };
+  // Reinhardt's sweep (alternating, first one counter-clockwise from above = his right to his left): a short
+  // anticipation that loads the hammer onto the start side with the torso coiled, a fast flat strike through the front at
+  // shoulder height, a long follow-through well past the other shoulder (~220 deg of arc) and a held end pose - the
+  // hitbox lingers there - before settling back to the guard.
   const K: [number, HPose][] = [
     [0, GUARD],
-    [0.2, { th: -side * 1.75, ph: 0.55, d: 0.75, gy: 0.04 }],  // wind-up: head drawn back high over the shoulder
-    [0.34, { th: 0, ph: -0.02, d: 1.0, gy: 0.0 }],             // impact: arms locked straight out at shoulder height
-    [0.5, { th: side * 1.6, ph: 0.05, d: 0.97, gy: 0.0 }],     // follow-through, still at full reach
-    [0.68, { th: side * 1.1, ph: 0.5, d: 0.75, gy: -0.1 }],    // settle
+    [0.16, { th: -side * 1.95, ph: 0.3, d: 0.86, gy: 0.02 }],  // anticipation: coiled, head cocked on the start side
+    [0.33, { th: -side * 0.2, ph: 0.02, d: 1.0, gy: -0.02 }],  // the strike: arms locked, head flat, crossing the front
+    [0.46, { th: side * 1.5, ph: -0.04, d: 0.98, gy: -0.03 }], // follow-through at full reach
+    [0.6, { th: side * 2.0, ph: 0.08, d: 0.9, gy: -0.05 }],    // end of the arc
+    [0.78, { th: side * 1.85, ph: 0.22, d: 0.84, gy: -0.07 }], // held: the swing's weight still carrying him
     [1, GUARD],
   ];
   const q = keyed(K, p);
-  return { ...q, imp: Math.max(0, 1 - Math.abs(p - 0.34) / 0.14), w: Math.min(1, p / 0.1, (1 - p) / 0.25), side };
+  return { ...q, imp: Math.max(0, 1 - Math.abs(p - 0.35) / 0.16), w: Math.min(1, p / 0.08, (1 - p) / 0.22), side, lean: -0.08 * Math.max(0, 1 - Math.abs(p - 0.16) / 0.12) + 0.1 * Math.max(0, 1 - Math.abs(p - 0.4) / 0.2) };
 }
 
 export class Animator {
@@ -209,8 +234,14 @@ export class Animator {
   hammerLen = 1;
   /** twin chaingun props (model-space children of the rig root) [left hand, right hand], barrels along the forearms */
   guns: [THREE.Object3D, THREE.Object3D] | null = null;
+  /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
+  gunHide: [boolean, boolean] = [false, false];
+  /** skating (Hibiki): how much of the skate stroke is blended in, and each stroke's lateral weight shift */
+  private skW = 0;
   /** props clamped under the feet (Hibiki's mag-skates) */
   feet: [THREE.Object3D, THREE.Object3D] | null = null;
+  /** a weapon slung across the back (Tomoe's great axe between swings), riding the chest */
+  back: THREE.Object3D | null = null;
   // ---- performance layer outputs, applied by the view: whole-body tilt about a pivot at the hips, squash & stretch
   tilt = { pitch: 0, roll: 0 };
   sqY = 1; sqXZ = 1;
@@ -278,6 +309,17 @@ export class Animator {
     });
   }
 
+  /** the slung weapon rides the chest: haft on the diagonal across the back, head over the left shoulder */
+  private placeBack() {
+    if (!this.back || !this.bones.chest || !this.rest.chest) return;
+    const R = this.rest.chest, Q = (this.modelQ.get(this.bones.chest) ?? R.q).clone().multiply(R.q.clone().invert());
+    const H = this.height;
+    // pommel behind the right hip, haft up across the spine, the crescent head flat against the back over the left shoulder
+    this.back.position.copy(this.modelPos('chest')).add(new THREE.Vector3(-0.08 * H, -0.27 * H, -0.11 * H).applyQuaternion(Q));
+    this.back.quaternion.copy(Q).multiply(rot(Z, -0.42));
+    this.back.scale.setScalar(0.85);
+  }
+
   /** `aim` (first person, model space): point both barrels at this spot ahead of the reticle instead of along the forearms */
   private placeGuns(aim?: THREE.Vector3) {
     if (!this.guns) return;
@@ -294,7 +336,7 @@ export class Animator {
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
-      g.visible = true;
+      g.visible = !this.gunHide[i];
     });
   }
 
@@ -552,10 +594,10 @@ export class Animator {
     const pq = punching ? s.attackAge / 0.42 : 9;
     this.punchExt = pq < 0.14 ? -0.35 * pq / 0.14 : pq < 0.26 ? -0.35 + 1.35 * (pq - 0.14) / 0.12 : Math.max(0, 1 - (pq - 0.26) / 0.74);
     this.punchW = pq >= 1 ? 0 : pq < 0.85 ? 1 : (1 - pq) / 0.15;
-    const cp = s.move === 'shatter' ? s.castAge / 0.75 : 9;
+    const cp = s.move === 'shatter' ? s.castAge / 0.75 : s.move === 'reaping' ? s.castAge / 0.75 : 9;
     const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05 && s.move !== 'shatter', s.move ?? '', cp) : null;
     const charging = s.move === 'dawncharge';
-    const hTw = hs ? Math.max(-0.7, Math.min(0.7, hs.th * 0.45)) * hs.w : 0;
+    const hTw = hs ? Math.max(-1.1, Math.min(1.1, hs.th * 0.6)) * hs.w : 0;
     const pTw = -0.45 * Math.max(0, this.punchExt) * this.punchW;
     this.cast = Math.max(0, 1 - s.castAge / 0.55);
     this.landDip = Math.max(0, 1 - s.landAge / 0.3) * (heavy ? 0.14 : 0.1);
@@ -605,6 +647,12 @@ export class Animator {
     this.phase += (speed * dt) / cycleLen * (moving ? 1 : 0);
     const md = speed > 0.01 ? _v2.set(lvx / speed, 0, lvz / speed).clone() : new THREE.Vector3(0, 0, 1);
     const lift = this.legLen * (heavy ? 0.16 : 0.22) * Math.min(1, speed / 3 + 0.3);
+    // skating (Hibiki, after Lucio / inline speed skating): long push-glide strokes, about one per leg per second.
+    // sph = each leg's stroke phase: 0-0.42 push (knee extends, foot drives out and back on the diagonal), 0.42-0.62
+    // recovery (low arc back under the hips), 0.62-1 glide (weight on it, knee ~105 deg)
+    const skateGait = PERF && !!s.skate && s.grounded && moving > 0;
+    this.skW += ((skateGait ? 1 : 0) - this.skW) * Math.min(1, dt * 6);
+    const sph0 = ((this.phase * 0.36) % 1 + 1) % 1, sphOf = (i: number) => (sph0 + i * 0.5) % 1;
     const hipsOff = new THREE.Vector3();
     const toModel = (w: THREE.Vector3) => { const dx = (w.x - s.pos.x) / s.scale, dz = (w.z - s.pos.z) / s.scale; return new THREE.Vector3(dx * cy - dz * sy, (w.y - s.pos.y) / s.scale, dx * sy + dz * cy); };
     const toWorld = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * s.scale, s.pos.y + m.y * s.scale, s.pos.z + (-m.x * sy + m.z * cy) * s.scale);
@@ -618,16 +666,21 @@ export class Animator {
         this.pplant[i] = null;
         tgt = restFoot.clone();
       } else if (moving && PERF && s.skate) {
-        // skating: no planted foot - the wheels roll. Each foot pushes out and back on the diagonal, then glides
-        // home under the hips, knees soft; a push is a "footfall" (the skate sound, the body's bob)
-        const sph = ((this.phase * 0.55 + i * 0.5) % 1 + 1) % 1, push = sph < 0.55;
-        const u = push ? sph / 0.55 : (sph - 0.55) / 0.45, e = u * u * (3 - 2 * u);
-        const outX = side * this.legLen * (push ? 0.04 + 0.26 * e : 0.3 - 0.26 * e);
-        const backZ = this.legLen * (push ? 0.12 - 0.5 * e : -0.38 + 0.5 * e);
-        tgt = restFoot.clone().add(new THREE.Vector3(outX, 0, backZ).applyAxisAngle(Y, this.hipYaw));
-        tgt.y = this.footY + (push ? 0 : Math.sin(u * Math.PI) * this.legLen * 0.07);
-        if (push && !this.lastStance[i] && this.cLegs < 0.5) this.footfall(i, heavy, PS);
-        this.lastStance[i] = push;
+        // no planted foot - the wheels roll with him
+        const sp = sphOf(i);
+        let out: number, back: number, up = 0;
+        if (sp < 0.42) {                       // push: out and back on the diagonal, the knee straightening
+          const u = sp / 0.42, e = u * u * (3 - 2 * u);
+          out = 0.05 + 0.36 * e; back = 0.08 - 0.42 * e;
+        } else if (sp < 0.62) {                // recovery: a low arc back in under the hips
+          const u = (sp - 0.42) / 0.2, e = u * u * (3 - 2 * u);
+          out = 0.41 - 0.36 * e; back = -0.34 + 0.46 * e; up = Math.sin(u * Math.PI) * 0.09;
+        } else { out = 0.05; back = 0.12 - 0.04 * (sp - 0.62) / 0.38; }   // glide: under the body, slightly ahead
+        tgt = restFoot.clone().add(new THREE.Vector3(side * out * this.legLen, 0, back * this.legLen).applyAxisAngle(Y, this.hipYaw));
+        tgt.y = this.footY + up * this.legLen;
+        const pushing = sp < 0.42;
+        if (pushing && !this.lastStance[i] && this.cLegs < 0.5) this.footfall(i, heavy, PS);
+        this.lastStance[i] = pushing;
         this.pplant[i] = null;
       } else if (moving) {
         const stance = ph < duty;
@@ -743,9 +796,13 @@ export class Animator {
     const stance = idleW * (heavy ? 0.03 : 0.02 + 0.05 * PS.stance);
     const lunge = s.melee ? Math.sin(Math.min(1, this.atk) * Math.PI) * 0.12 * this.legLen : 0;
     hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0) - stance * this.legLen - lunge * 0.3;
+    // skating: knees ~105 deg (hips low), weight rolls over the gliding leg every stroke; standing, he nods to the beat
+    const skSway = Math.sin(2 * Math.PI * sph0 + Math.PI);
+    if (this.skW > 0.01) { hipsOff.y -= 0.12 * this.legLen * this.skW; hipsOff.x += skSway * 0.085 * this.legLen * this.skW; }
+    if (PERF && s.skate && idleW > 0.01) hipsOff.y -= (0.5 - 0.5 * Math.cos(s.time * Math.PI * 3)) * 0.018 * this.legLen * idleW;
     hipsOff.z += lunge;
     // hammer: weight rolls onto the front foot at impact; jab: a small step into the punch
-    if (hs) { hipsOff.z += hs.imp * 0.09 * this.legLen; hipsOff.y -= hs.imp * 0.06 * this.legLen + (hs.w > 0 ? 0.02 * this.legLen : 0); }
+    if (hs) { hipsOff.z += hs.imp * 0.09 * this.legLen; hipsOff.y -= hs.imp * 0.06 * this.legLen + (hs.w > 0 ? 0.02 * this.legLen : 0); hipsOff.x += Math.sin(hs.th) * 0.05 * this.legLen * hs.w; }
     if (charging) hipsOff.y -= 0.07 * this.legLen;
     hipsOff.z += Math.max(0, this.punchExt) * this.punchW * 0.05 * this.legLen;
     if (s.barrier) hipsOff.y -= 0.06 * this.legLen;
@@ -784,7 +841,7 @@ export class Animator {
     const stepRoll = heavy ? Math.sin(this.phase * 2 * Math.PI) * 0.05 * this.moveBlend : 0;   // mechs rock side to side per stomp
     // ---------------- hips (face the movement direction)
     const tumP = -0.45 * this.tumble * this.hitZ, tumR = 0.4 * this.tumble * this.hitX;
-    const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.22).premultiply(rot(X, this.lean.y * 0.4 + tumP)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift * PS.sway * 2 + stepRoll + wsh * 0.07 + tumR));
+    const Dh = rot(Y, this.hipYaw + hipSway + hTw * 0.34).premultiply(rot(X, this.lean.y * 0.4 + tumP)).premultiply(rot(Z, -this.lean.x * 0.5 + idleShift * PS.sway * 2 + stepRoll + wsh * 0.07 + tumR));
     if (s.stunned) Dh.premultiply(rot(Z, Math.sin(s.time * 9) * 0.06));
     // clip torso: the clip's deltas with the gameplay additives on top (aim pitch, flinch, recoil)
     const withAim = (q: THREE.Quaternion | null, pitch: number) => q ? q.clone().premultiply(rot(X, pitch)) : null;
@@ -809,8 +866,9 @@ export class Animator {
     const upright = PERF ? -0.2 * this.moveBlend * run * (heavy ? 0.4 : 1) : 0;
     // the clip's own torso keeps these additives (aim, flinch, lag, carriage)
     const withAdd = (q: THREE.Quaternion | null, p: number, y: number, r: number) => q ? q.clone().premultiply(rot(Z, r)).premultiply(rot(Y, y)).premultiply(rot(X, p)) : null;
-    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 + fP * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 : 0) + (charging ? 0.38 : 0) + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright))
-      .multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4 + lagYaw * 0.35)).multiply(rot(Z, fR - wsh * 0.04));
+    const skLean = this.skW * 0.24, skTwist = this.skW * skSway * 0.14;
+    const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 + fP * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 + hs.lean : 0) + (charging ? 0.38 : 0) + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright + skLean))
+      .multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4 + lagYaw * 0.35 + skTwist)).multiply(rot(Z, fR - wsh * 0.04 - skSway * 0.06 * this.skW));
     blendD(Ds, withAdd(cq('spine'), aimP * 0.2 + fP * 0.6 + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright, lagYaw * 0.35, fR - wsh * 0.04), wTorso);
     if (this.bones.spine) this.applyDelta('spine', Ds);
     const Dc = Ds.clone().multiply(rot(X, aimP * 0.3 + fP * 0.4 - this.recoil * 0.9 + breath + lagPitch * 0.7 + carriage * 0.6 + this.kick.x * 0.08 + upright * 0.6))
@@ -868,7 +926,12 @@ export class Animator {
       // relaxed pose: rest direction pulled 25% toward straight down, swung with the gait
       const restD = R[ua].dir.clone().applyQuaternion(Dc);
       const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), s.angel ? 0.1 : flyer && s.flying ? 0.05 : 0.3).normalize();
-      relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1));
+      relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1) * (1 - this.skW));
+      if (this.skW > 0.01 && i === 0) {
+        const sw = Math.sin(2 * Math.PI * sphOf(1) + 0.19);            // forward while the right leg pushes
+        relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(Dc).normalize(), -sw * 0.85 * this.skW);
+        relaxed.applyAxisAngle(new THREE.Vector3(0, 1, 0), -sw * 0.35 * this.skW);
+      }
       if (flyer && s.flying) relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0), -0.3 * this.flyBlend);
       if (s.angel && (s.flying || s.gliding)) relaxed.lerp(new THREE.Vector3(side * 0.55, -0.8, -0.15), 0.35 * Math.max(this.flyBlend, s.gliding ? 1 : 0)).normalize();
       // weapon-ready stance: elbows forward, hands up in front of the body; relaxes into arm swing at full sprint
@@ -879,7 +942,7 @@ export class Animator {
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
       // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
       let over: { hand: THREE.Vector3; w: number; pole?: THREE.Vector3 } | null = null;
-      const leftFree = s.move === 'shatter' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
+      const leftFree = s.move === 'shatter' || s.move === 'reaping' || s.move === 'tide' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
       if (hs && (i === 1 || !leftFree)) {
         const HH = this.height;
         const Sh = R.upperarm_L && R.upperarm_R ? R.upperarm_L.p.clone().add(R.upperarm_R.p).multiplyScalar(0.5).add(hipsOff) : R.chest.p.clone().add(hipsOff);
@@ -1057,5 +1120,6 @@ export class Animator {
     this.springs(s, dt);
     this.placeGuns();
     this.placeFeet();
+    this.placeBack();
   }
 }

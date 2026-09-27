@@ -52,13 +52,31 @@ export function ignite(w: World, src: Actor, x: Actor, heat: number) {
   x.set('burning', t, 2.5, undefined, src);
 }
 
+/**
+ * A wound: `total` damage bled over `dur` seconds. Wounds stack (each ticks on its own), health packs and cleanses close
+ * them, and the ones Tomoe opens heal her as they bleed (World.bleedWounds).
+ */
+export function wound(w: World, src: Actor, x: Actor, total: number, dur = 3) {
+  if (!x.alive || x.team === src.team) return;
+  x.wounds.push({ src, dps: total / dur, until: w.time + dur });
+  x.set('wound', w.time, dur, undefined, src);
+  w.fx('wound', x.center, { actor: x, color: '#ff2d55' });
+  // COUNTER: armor is no answer to a wound
+  if (src.def.id === 'tomoe' && x.def.id === 'gantetsu' && x.armor > 0 && w.time - (x.sv.woundCounterAt ?? -99) > 12) {
+    x.sv.woundCounterAt = w.time;
+    w.emit({ t: 'counter', actor: src, target: x, text: "Tomoe's wounds bleed through Gantetsu's armor" });
+  }
+}
+
 /** C: every hero's quick melee - a short jab in front of them */
 export function quickMelee(w: World, a: Actor) {
   const t = w.time;
   a.nextMelee = t + QUICK_MELEE.cooldown;
   a.anim.attackAt = t; a.anim.attackKind = 'punch';
   breakStealth(w, a);
-  const n = meleeArc(w, a, 1.2 + a.radius * 1.3, QUICK_MELEE.damage, 0.45, 2 * a.scale);
+  // Tomoe: with the Crescent Fang in hand, the jab cuts - a wound (15 over 3s)
+  const cut = a.def.id === 'tomoe' && !a.sv.fang;
+  const n = meleeArc(w, a, 1.2 + a.radius * 1.3, QUICK_MELEE.damage, 0.45, 2 * a.scale, cut ? x => wound(w, a, x, 15) : undefined);
   w.sfx(n ? 'punch' : 'whiff', a.center, a);
   if (n) w.fx('impact', { x: a.pos.x + a.forward().x * (a.radius + 0.9), y: a.pos.y + a.height * 0.6, z: a.pos.z + a.forward().z * (a.radius + 0.9) }, { color: a.def.glow });
 }
@@ -127,7 +145,13 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
         if (!a.alive || a.has('stun', w.time)) return;
         const reach = W.range * (a.scale > 1 ? 1 + (a.scale - 1) * 0.5 : 1);
         w.fx('hammer', a.center, { color: a.def.glow, actor: a, side, r: reach });
-        const n = meleeArc(w, a, reach, W.damage * mult, 0.1, a.height * 1.3);
+        // hits are knocked along the swing (sideways to his facing, the way the head is travelling)
+        const f0 = a.forward();
+        const n = meleeArc(w, a, reach, W.damage * mult, 0.1, a.height * 1.3, x => {
+          if (x.def.frame === 'mech' || x.isBoss || x.has('ccimmune', w.time) || x.has('tachiai', w.time)) return;
+          const kx = -f0.z * side * 5.5 + f0.x * 2, kz = f0.x * side * 5.5 + f0.z * 2;
+          x.forced = { vx: kx, vy: 0, vz: kz, until: w.time + 0.18, kind: 'knock' };
+        });
         // the head of the hammer also batters enemy barriers it passes through
         const f = a.forward();
         for (const o of w.enemies(a)) {

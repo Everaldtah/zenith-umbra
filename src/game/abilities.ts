@@ -3,13 +3,13 @@ import { isAbility } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from './Actor';
 import { dist3, norm, type Proj, type World, type Zone } from './World';
-import { ignite } from './weapons';
+import { ignite, wound } from './weapons';
 
 let ZID = 1;
 type Impl = (w: World, a: Actor) => boolean;
 
 const CC = ['stun', 'root', 'silence', 'grounded', 'tethered'];
-const DEBUFF = ['brand', 'bleed', 'antiheal', 'slow', 'vuln', ...CC];
+const DEBUFF = ['brand', 'bleed', 'wound', 'antiheal', 'slow', 'vuln', ...CC];
 
 function ccBlocked(w: World, x: Actor) { return x.has('ccimmune', w.time) || x.has('linked', w.time) || x.has('tachiai', w.time); }
 function applyCC(w: World, src: Actor, x: Actor, kind: string, dur: number): boolean {
@@ -83,6 +83,7 @@ const I: Record<string, Impl> = {
     for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 10) {
       const had = DEBUFF.filter(s => x.has(s, w.time));
       for (const s of DEBUFF) x.clear(s);
+      x.wounds = [];
       w.zones = w.zones.filter(z => !(z.kind === 'tether' && z.data?.target === x));
       x.set('ccimmune', w.time, 2);
       if (had.includes('brand') || had.includes('antiheal')) {
@@ -523,6 +524,71 @@ const I: Record<string, Impl> = {
     a.shots++;
     return true;
   },
+  // ================================================================ Tomoe
+  crescent(w, a) {
+    // thrown from the left hand along the crosshair; it sticks in whatever it meets (onProj 'crescent')
+    const t = w.time, e = a.eye, f = a.forward(), lx = Math.cos(a.yaw), lz = -Math.sin(a.yaw);
+    const from = { x: e.x + lx * 0.3 * a.scale + f.x * 0.35, y: e.y - 0.3 * a.scale, z: e.z + lz * 0.3 * a.scale + f.z * 0.35 };
+    const aim = w.aimPoint(a, FANG_RANGE);
+    const p = w.spawnProj(a, from, norm({ x: aim.x - from.x, y: aim.y - from.y, z: aim.z - from.z }), FANG_SPEED, { dmg: FANG_DMG, fx: 'crescent', special: 'crescent', life: FANG_RANGE / FANG_SPEED, r: 0.3, grav: 1.5 });
+    a.sv.fang = 1; a.sv.fangProj = p.id; a.sv.fangAt = t;
+    w.sfx('throw', from, a);
+    return true;
+  },
+  warcall(w, a) {
+    const t = w.time;
+    let n = 0;
+    for (const x of w.allies(a)) {
+      if (dist3(x.pos, a.pos) > WARCALL_R || (x !== a && !w.level.lineOfSight(a.eye, x.center))) continue;
+      w.shield(x, x === a ? 200 : 100, 3, 'warcall', a);
+      x.sv.speed = x.has('speed', t) ? Math.max(x.sv.speed ?? 1, 1.3) : 1.3; x.sv.speedFrom = a.id; x.set('speed', t, 3);
+      x.set('warcall', t, 3);
+      if (x !== a) { n++; w.fx('warcallally', x.center, { actor: x, color: a.def.glow }); }
+    }
+    a.stats.warcall = (a.stats.warcall ?? 0) + n;
+    w.fx('warcall', a.center, { actor: a, color: a.def.glow, r: WARCALL_R }); w.sfx('warcall', a.center, a);
+    return true;
+  },
+  reaping(w, a) {
+    // the axe comes off her back and round in a heavy cleave; she slows as she heaves it
+    const t = w.time;
+    a.set('reapwind', t, 0.62);
+    w.sfx('reapwind', a.center, a);
+    w.after(REAP_HIT, () => {
+      if (!a.alive || a.has('stun', w.time)) return;
+      const f = a.forward();
+      let n = 0;
+      for (const x of w.enemies(a)) {
+        const v = { x: x.pos.x - a.pos.x, z: x.pos.z - a.pos.z }, l = Math.hypot(v.x, v.z);
+        if (l > REAP_R + x.radius || Math.abs(x.pos.y - a.pos.y) > 2.6 * a.scale) continue;
+        if ((v.x * f.x + v.z * f.z) / (l || 1) < 0.34 && l > x.radius + 0.4) continue;
+        if (!w.level.lineOfSight(a.eye, x.center)) continue;
+        w.damage(a, x, 90, { kind: 'ability' }); wound(w, a, x, 40); n++;
+        w.fx('slash', x.center, { color: a.def.glow });
+      }
+      // every enemy cut shortens the cooldown by a second
+      if (n) { a.cd.reaping = Math.max(w.time, (a.cd.reaping ?? 0) - n); a.hits++; }
+      a.shots++;
+      w.fx('reaping', a.center, { actor: a, color: a.def.glow, r: REAP_R }); w.sfx(n ? 'reaping' : 'whiff', a.center, a);
+      if (n) w.sfx('impact_body', a.center, a);
+    });
+    return true;
+  },
+  tide(w, a) {
+    // an unstoppable 20m charge; everyone in the lane is cut, wounded and starved of healing
+    const t = w.time, d = flatDir(a);
+    (a as any)._tideHit = new Set<number>();
+    a.forced = { vx: d.x * TIDE_SPEED, vy: 0, vz: d.z * TIDE_SPEED, until: t + TIDE_LEN / TIDE_SPEED, kind: 'tide', onEnd: () => {
+      a.cd.reaping = 0;
+      if (a.sv.fang) fangHome(w, a); else a.cd.crescent = 0;
+      w.fx('slam', a.pos, { r: 3, color: a.def.glow, actor: a }); w.sfx('slam', a.pos, a);
+    } };
+    a.set('ccimmune', t, TIDE_LEN / TIDE_SPEED + 0.15); a.set('tideult', t, TIDE_LEN / TIDE_SPEED + 0.05);
+    w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur: TIDE_LEN / TIDE_SPEED });
+    w.sfx('ultcall', a.center, a); w.sfx('charge', a.center, a); w.sfx('roar', a.center, a);
+    w.emit({ t: 'msg', text: 'TOMOE · CRESCENT WARPATH', color: a.def.color });
+    return true;
+  },
   bassdrop(w, a) {
     // the leap: straight up; the drop lands when he touches down (or at the top of the arc if he's airborne)
     const t = w.time;
@@ -533,6 +599,55 @@ const I: Record<string, Impl> = {
     return true;
   },
 };
+
+// Tomoe's numbers
+export const FANG_DMG = 55, FANG_WOUND = 30, FANG_SPEED = 42, FANG_RANGE = 30, FANG_BACK = 46, FANG_STICK = 6;
+export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42, TIDE_LEN = 20, TIDE_SPEED = 17;
+
+/** where the Crescent Fang is right now (flying, stuck, riding an enemy or on its way home), or null in her hand */
+export function fangPos(w: World, a: Actor): V3 | null {
+  const st = a.sv.fang ?? 0;
+  if (st === 1) { const p = w.projs.find(q => q.id === a.sv.fangProj); return p ? p.pos : null; }
+  if (st === 3) { const x = w.actors.find(o => o.id === a.sv.fangTgt); return x ? x.center : null; }
+  if (st === 2 || st === 4) return { x: a.sv.fangX, y: a.sv.fangY, z: a.sv.fangZ };
+  return null;
+}
+/** RMB again: call the blade back - out of an enemy it hauls them toward her first */
+function recallFang(w: World, a: Actor) {
+  const t = w.time;
+  if (a.sv.fang === 3) {
+    const x = w.actors.find(o => o.id === a.sv.fangTgt);
+    if (x && x.alive) {
+      const p = x.center;
+      a.sv.fangX = p.x; a.sv.fangY = p.y; a.sv.fangZ = p.z;
+      if (!ccBlocked(w, x) && x.def.frame !== 'mech' && !x.isBoss && !x.has('tachiai', t)) {
+        const d = norm({ x: a.pos.x - x.pos.x, y: 0, z: a.pos.z - x.pos.z });
+        const dist = Math.min(12, Math.max(0, dist3(a.pos, x.pos) - (a.radius + x.radius + 1.2)));
+        interrupt(w, x, a);
+        x.forced = { vx: d.x * dist / 0.34, vy: 2.5, vz: d.z * dist / 0.34, until: t + 0.34, kind: 'pull' };
+        a.stats.yanks = (a.stats.yanks ?? 0) + 1;
+        // COUNTER: out of the sky - a flyer is dragged down and grounded
+        if (x.flying || x.def.frame === 'flyer') {
+          x.flying = false; applyCC(w, a, x, 'grounded', 1.5);
+          if (x.def.id === 'nocturne') w.emit({ t: 'counter', actor: a, target: x, text: 'Crescent Fang drags Lady Nocturne out of the sky' });
+        }
+        w.fx('chainline', a.center, { target: x, color: a.def.glow, dur: 0.34 }); w.sfx('yank', x.center, a);
+      }
+    }
+  }
+  a.sv.fang = 4; a.sv.fangAt = t;
+  (a as any)._fangBack = new Set<number>([a.sv.fangTgt ?? -1]);
+  a.anim.castAt = t; a.anim.castId = 'recall';
+  w.sfx('fangreturn', { x: a.sv.fangX, y: a.sv.fangY, z: a.sv.fangZ }, a);
+}
+/** the blade is back in her hand: the cooldown starts now */
+function fangHome(w: World, a: Actor) {
+  const t = w.time;
+  a.sv.fang = 0; a.sv.fangTgt = 0;
+  const cd = (a.def.secondary as { cooldown: number }).cooldown ?? 6;
+  a.cd.crescent = a.has('tideult', t) ? t : t + cd * (1 - a.mods.cdr) * (1 - (a.mods.cdrBy.crescent ?? 0));
+  w.sfx('fangcatch', a.center, a);
+}
 
 /** Hibiki's aura reach (Crossmix / Max Volume) */
 export const AURA_R = 12;
@@ -609,6 +724,25 @@ function onProj(w: World, p: Proj, at: V3, hit: Actor | null) {
       const g = w.level.groundAt(at.x, at.z, at.y + 0.5);
       zone(w, a, 'grievous', { x: at.x, y: g > -Infinity ? g : at.y, z: at.z }, 6, 4);
       w.fx('hexburst', at, { r: 6, color: '#c77dff', dur: 4 }); w.sfx('hexburst', at, a);
+      break;
+    }
+    case 'crescent': {
+      if (a.sv.fang !== 1 || a.sv.fangProj !== p.id) break;
+      if (hit) {
+        w.damage(a, hit, FANG_DMG, { kind: 'ability' }); wound(w, a, hit, FANG_WOUND);
+        a.hits++;
+        if (hit.alive) { a.sv.fang = 3; a.sv.fangTgt = hit.id; a.sv.fangAt = t; w.sfx('chainhit', at, a); }
+        else { a.sv.fang = 2; a.sv.fangX = at.x; a.sv.fangY = at.y; a.sv.fangZ = at.z; a.sv.fangAt = t; }
+        w.fx('slash', at, { color: a.def.glow });
+      } else if (p.life <= 0) {
+        // out of range in open air: it turns and comes home
+        a.sv.fangX = at.x; a.sv.fangY = at.y; a.sv.fangZ = at.z; a.sv.fang = 4; a.sv.fangAt = t;
+        (a as any)._fangBack = new Set<number>();
+      } else {
+        a.sv.fang = 2; a.sv.fangX = at.x; a.sv.fangY = at.y; a.sv.fangZ = at.z; a.sv.fangAt = t;
+        w.fx('impact', at, { color: a.def.glow }); w.sfx('impact_metal', at, a);
+      }
+      a.shots++;
       break;
     }
     case 'chain': {
@@ -733,6 +867,38 @@ export function tickAbilities(w: World, dt: number) {
       if ((a.grounded && since > 0.12) || (a.vel.y < 0 && since > 0.35) || !a.has('dropair', t)) { a.sv.dropArmed = 0; a.clear('dropair'); bassDrop(w, a); }
     }
   }
+  // Tomoe: the Crescent Fang rides whoever it is stuck in, comes home on its own after a while, cuts its way back
+  for (const a of w.actors) {
+    if (a.def.id !== 'tomoe') continue;
+    const st = a.sv.fang ?? 0;
+    if (!a.alive) { if (st) { a.sv.fang = 0; a.sv.fangTgt = 0; } continue; }
+    if (st) a.cd.crescent = Math.max(a.cd.crescent ?? 0, t + 0.1);            // no cooldown ticks while the blade is out
+    if (st === 1 && !w.projs.some(q => q.id === a.sv.fangProj)) { if (a.sv.fang === 1) a.sv.fang = 0; continue; }
+    if (st === 3) {
+      const x = w.actors.find(o => o.id === a.sv.fangTgt);
+      if (!x || !x.alive) { const c = x ? x.center : a.center; a.sv.fangX = c.x; a.sv.fangY = c.y; a.sv.fangZ = c.z; a.sv.fang = 2; a.sv.fangAt = t; }
+      else if (t - (a.sv.fangAt ?? t) > FANG_STICK) recallFang(w, a);
+    } else if (st === 2 && t - (a.sv.fangAt ?? t) > FANG_STICK + 2) recallFang(w, a);
+    else if (st === 4) {
+      const home = { x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z };
+      const from = { x: a.sv.fangX, y: a.sv.fangY, z: a.sv.fangZ };
+      const v = { x: home.x - from.x, y: home.y - from.y, z: home.z - from.z }, l = Math.hypot(v.x, v.y, v.z), step = FANG_BACK * dt;
+      if (l <= step + 0.6) { fangHome(w, a); continue; }
+      const to = { x: from.x + v.x / l * step, y: from.y + v.y / l * step, z: from.z + v.z / l * step };
+      const cut: Set<number> = (a as any)._fangBack ?? ((a as any)._fangBack = new Set<number>());
+      for (const x of w.enemies(a)) {
+        if (cut.has(x.id)) continue;
+        const c = x.center, q = { x: c.x - from.x, y: c.y - from.y, z: c.z - from.z };
+        const s2 = Math.max(0, Math.min(step, (q.x * v.x + q.y * v.y + q.z * v.z) / l));
+        const dx = from.x + v.x / l * s2 - c.x, dy = from.y + v.y / l * s2 - c.y, dz = from.z + v.z / l * s2 - c.z;
+        if (dx * dx + dz * dz > (x.radius + 0.5) ** 2 || Math.abs(dy) > x.height * 0.55) continue;
+        cut.add(x.id);
+        w.damage(a, x, FANG_DMG, { kind: 'ability' }); wound(w, a, x, FANG_WOUND);
+        w.fx('slash', c, { color: a.def.glow }); w.sfx('chainhit', c, a);
+      }
+      a.sv.fangX = to.x; a.sv.fangY = to.y; a.sv.fangZ = to.z;
+    }
+  }
   for (const z of w.zones) if (z.kind === 'dohyo' && !z.owner.alive) z.until = t;
   // dashes that interact with enemies on the way
   for (const a of w.actors) {
@@ -781,6 +947,19 @@ export function tickAbilities(w: World, dt: number) {
         pin.vel = { x: 0, y: 0, z: 0 }; pin.set('stun', t, 0.1);
         w.level.collide(pin.pos, pin.radius, pin.height);
       }
+    } else if (a.forced.kind === 'tide') {
+      // Crescent Warpath: a 3.5m-wide lane of steel - each enemy in it is cut once
+      const hit: Set<number> = (a as any)._tideHit ?? ((a as any)._tideHit = new Set<number>());
+      const f = norm({ x: a.forced.vx, y: 0, z: a.forced.vz });
+      for (const x of w.enemies(a)) {
+        if (hit.has(x.id)) continue;
+        const v = { x: x.pos.x - a.pos.x, z: x.pos.z - a.pos.z }, along = v.x * f.x + v.z * f.z, lat = Math.abs(v.x * -f.z + v.z * f.x);
+        if (along < -a.radius - x.radius || along > a.radius + x.radius + 1.4 || lat > 1.75 + x.radius || Math.abs(x.pos.y - a.pos.y) > 2.6) continue;
+        hit.add(x.id);
+        w.damage(a, x, 40, { kind: 'ability' }); wound(w, a, x, 90); x.set('antiheal', t, 4.5, undefined, a);
+        w.fx('slash', x.center, { color: a.def.glow }); w.sfx('reaping', x.center, a);
+        a.stats.tide = (a.stats.tide ?? 0) + 1;
+      }
     } else if (a.forced.kind === 'abysscharge') {
       let pin = w.actors.find(x => x.id === a.sv.pinned);
       if (!pin) {
@@ -804,6 +983,8 @@ export function tickAbilities(w: World, dt: number) {
 export function castAbility(w: World, a: Actor, id: string, slot: 'a1' | 'a2' | 'ult' | 'alt'): boolean {
   const t = w.time;
   if (id === 'none' || !I[id]) return false;
+  // Tomoe: RMB with the blade out calls it back (stuck anywhere) - no cooldown involved
+  if (id === 'crescent' && a.sv.fang) { if (a.sv.fang === 2 || a.sv.fang === 3) { recallFang(w, a); return true; } return false; }
   if (slot !== 'ult' && !a.ready(id, t)) return false;
   if (a.forced && !['knock', 'pull'].includes(a.forced.kind) && id !== 'thousandcuts') return false;
   if (a.has('stealth', t) && id !== 'veil') { a.clear('stealth'); a.set('ambush', t, 0.6); }

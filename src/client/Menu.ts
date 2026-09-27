@@ -6,7 +6,8 @@ import { loadCareer, saveCareer, rankOf, applyCompetitive, applyQuickPlay, skill
 import { BASE } from '../render/Assets';
 import { sfx } from '../audio/Sfx';
 import type { Game } from './Game';
-import { saveSettings, IS_DESKTOP, type Preset } from './Settings';
+import { saveSettings, IS_DESKTOP } from './Settings';
+import { SettingsScreen } from './SettingsUI';
 import type { Mode } from '../game/World';
 import { LEVELS, LEVEL, BOSSES, CAMPAIGN_HEROES } from '../campaign/data';
 import { playStory } from '../campaign/Cinematic';
@@ -487,20 +488,9 @@ export class Menu {
   }
 
   settings(back: () => void) {
-    const s = this.game.settings;
-    this.show(`<div class="pause settings"><h2>SETTINGS</h2>
-      <label>Graphics <select class="q">${(['low', 'medium', 'high', 'ultra'] as Preset[]).map(p => `<option ${p === s.preset ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
-      <label>Mouse sensitivity <input class="sens" type="range" min="0.2" max="3" step="0.05" value="${s.sens}"></label>
-      <label>Field of view <input class="fov" type="range" min="70" max="110" step="1" value="${s.fov}"></label>
-      <label>Volume <input class="vol" type="range" min="0" max="1" step="0.05" value="${s.volume}"></label>
-      <label>Camera <select class="view"><option value="third" ${s.view === 'third' ? 'selected' : ''}>Third person</option><option value="first" ${s.view === 'first' ? 'selected' : ''}>First person</option></select></label>
-      <label>Show FPS <input class="fps" type="checkbox" ${s.showFps ? 'checked' : ''}></label>
-      <div class="btns"><button class="primary ok">DONE</button></div></div>`);
-    (this.root.querySelector('.ok') as HTMLElement).onclick = () => {
-      const q = (c: string) => this.root.querySelector(c) as HTMLInputElement;
-      s.preset = q('.q').value as Preset; s.sens = +q('.sens').value; s.fov = +q('.fov').value; s.volume = +q('.vol').value;
-      s.view = q('.view').value as 'third' | 'first'; s.showFps = q('.fps').checked;
-      saveSettings(s); this.game.applySettings(s); back();
-    };
+    this.root.style.display = '';
+    const g = this.game;
+    new SettingsScreen(this.root, { settings: g.settings, applySettings: s => g.applySettings(s), captureInput: fn => { g.input.capture = fn; } }, back).open();
   }
+
 }

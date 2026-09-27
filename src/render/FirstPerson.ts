@@ -35,6 +35,8 @@ export const FP_STYLE: Record<string, Style> = {
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
   gantetsu: { grip: 'dual', R: [0.44, -0.3, 0.42], L: [-0.44, -0.3, 0.42], recoil: 0.03, push: 0.08 },
   hibiki: { grip: 'pistol', R: [0.25, -0.17, 0.52], L: [-0.24, -0.3, 0.4], recoil: 0.05 },
+  // the scattergun one-handed on the right, the Crescent Fang held low in the left fist
+  tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.23, -0.29, 0.38], recoil: 0.1, push: 0.04, keep: 0.97 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -210,6 +212,7 @@ export class FirstPersonArms {
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
     this.view.inner.scale.setScalar(1);
     this.view.updateGuns(dt, t);
+    if (this.view.backAxe) this.view.backAxe.visible = false;          // slung on her back: never in the viewmodel
     // ---- 1. authored clips (Overwatch-style: gameplay owns the clock - see assetgen/blender/fp_choreo.py)
     if (this.mixer) {
       const kind = a.anim.attackKind;
@@ -314,11 +317,28 @@ export class FirstPersonArms {
       src = 'beam';
     }
     // abilities: a two-handed gesture toward the aim (ults reach higher)
-    if (cast < 0.6 && a.anim.castId) {
+    const own = a.def.id === 'tomoe' && ['crescent', 'recall', 'reaping', 'tide'].includes(a.anim.castId);
+    if (cast < 0.6 && a.anim.castId && !own) {
       const k = bump(cast / 0.6), ult = a.anim.castId === a.def.ult.id;
       R = lerp(R, [0.1, ult ? 0.02 : -0.08, 0.5], k);
       if (L) L = lerp(L, [-0.1, ult ? 0.02 : -0.08, 0.5], k); else L = [-0.1, -0.08, 0.5];
       src = ult ? 'ult' : 'ability';
+    }
+    // Tomoe: the Fang leaves the left hand in an overhand throw and is called back palm-out; the great axe is heaved
+    // across the screen from high right to low left for Crescent Reaping, and held out in front through the Warpath
+    let axe: 'cleave' | 'warpath' | null = null;
+    if (a.def.id === 'tomoe' && S.L) {
+      const id = a.anim.castId;
+      if (id === 'crescent' && cast < 0.45) {
+        const u = cast / 0.45, back: V = [-0.32, 0.06, 0.12], out: V = [-0.02, -0.06, 0.62];
+        L = lerp(u < 0.35 ? lerp(S.L, back, smooth(u / 0.35)) : lerp(back, out, smooth((u - 0.35) / 0.4)), S.L, smooth((u - 0.8) / 0.2));
+        src = 'throw';
+      } else if (id === 'recall' && cast < 0.5) { L = lerp(S.L, [-0.1, -0.02, 0.56], bump(cast / 0.5)); src = 'recall'; }
+      if (id === 'reaping' && cast < 0.75) {
+        const u = cast / 0.75, hi: V = [0.3, 0.14, 0.44], lo: V = [-0.34, -0.36, 0.52], home: V = [0.2, -0.22, 0.44];
+        R = u < 0.3 ? lerp(home, hi, smooth(u / 0.3)) : u < 0.8 ? lerp(hi, lo, smooth((u - 0.3) / 0.32)) : lerp(lo, home, smooth((u - 0.8) / 0.2));
+        L = add(R, [-0.06, -0.1, -0.04]); axe = 'cleave'; src = 'cleave';
+      } else if (a.forced?.kind === 'tide') { R = [0.16, -0.22, 0.5]; L = [-0.08, -0.3, 0.44]; axe = 'warpath'; src = 'warpath'; }
     }
     // hit flinch
     const hit = t - a.anim.hitAt;
@@ -328,7 +348,8 @@ export class FirstPersonArms {
     // hand targets are camera-relative; the rig sits wherever puts the grip in reach (viewmodelOffset)
     const toM = (v: V) => new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(this.eye);
     const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L) : null, toM(R)];
-    const prop = S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
+    const prop = axe ? { pos: hands[1]!.clone(), dir: hands[1]!.clone().sub(hands[0]!).normalize(), side: axe === 'cleave' ? new THREE.Vector3(1, -0.3, 0) : new THREE.Vector3(0, 0, 1) }
+      : S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
     // twin chainguns converge on a point well past the reticle (hip-held guns never follow the bent forearms)
     const gunAim = an.guns ? toM([0, 0, 14]) : undefined;
     an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop, gunAim });

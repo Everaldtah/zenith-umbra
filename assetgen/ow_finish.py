@@ -19,9 +19,9 @@ HERE = Path(__file__).resolve().parent
 SRC = HERE / 'out' / 'trellis2-zz-ow' / 'glb'
 OUT = HERE / 'out' / 'trellis2-zzzz-final' / 'glb'
 WORK = HERE.parent / 'work' / 'ow'
-HEROES = ['tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto', 'gantetsu', 'hibiki']
+HEROES = ['tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto', 'gantetsu', 'hibiki', 'tomoe']
 # masks, helmets and mech visors keep their own sculpted faces
-FACE = {'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'haruto', 'gantetsu', 'hibiki'}
+FACE = {'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'haruto', 'gantetsu', 'hibiki', 'tomoe'}
 # hard-surface mechs: painted edges carry more of the read
 PAINT = {'tenkai': ['--edge', '0.3', '--ao', '0.35'], 'gorgoth': ['--edge', '0.3', '--ao', '0.35']}
 

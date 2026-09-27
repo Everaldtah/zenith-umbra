@@ -28,6 +28,7 @@ const NAMES: Record<string, [string, string, string, string]> = {
   haruto: ['Night Pilot', 'Blossom Ace', 'Arcade Ace', 'Sunforged Ace'],
   gantetsu: ['Midnight Bout', 'Hanami Champion', 'Neon Matsuri', 'Thunder Yokozuna'],
   hibiki: ['Pirate Radio', 'Sakura Remix', 'Neon Drop', 'Golden Frequency'],
+  tomoe: ['Salt Gate Night', 'Sakura Empress', 'Neon Warlord', 'Sun Crown Empress'],
 };
 
 export function skinsFor(heroId: string, team: 'zenith' | 'umbra'): Skin[] {

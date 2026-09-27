@@ -109,6 +109,12 @@
         "MX_Dodge_Right",
         "MX_Dodge_Back"
       ]
+    },
+    "tomoe": {
+      "throw": [
+        "MX_Throw",
+        "OverhandThrow"
+      ]
     }
   },
   "casts": {
@@ -179,6 +185,14 @@
     "callmech": [
       "MX_Cast_1H_Up",
       0.8
+    ],
+    "warcall": [
+      "MX_Battlecry",
+      1.0
+    ],
+    "recall": [
+      "MX_Cast_1H_Fwd",
+      0.45
     ]
   },
   "trim": {

@@ -7,6 +7,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PLAY_MAPS } from '../data/maps';
 import { HEROES, HERO } from '../data/heroes';
@@ -32,7 +35,41 @@ import { sfx } from '../audio/Sfx';
 import { Input, KEYS } from './Input';
 import { Hud } from './Hud';
 import { AiLab } from './AiLab';
-import { PRESETS, IS_DESKTOP, type Settings } from './Settings';
+import { PRESETS, IS_DESKTOP, quality, type Settings } from './Settings';
+import { UI_COLORS } from '../render/CharacterView';
+
+/** Image Sharpening (Settings > Video): a light unsharp mask after tone mapping */
+const SHARPEN = {
+  uniforms: { tDiffuse: { value: null }, amount: { value: 0 }, texel: { value: new THREE.Vector2(1 / 1920, 1 / 1080) } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float amount; uniform vec2 texel; varying vec2 vUv;
+    void main(){ vec4 c=texture2D(tDiffuse,vUv);
+      vec3 n=texture2D(tDiffuse,vUv+vec2(texel.x,0.)).rgb+texture2D(tDiffuse,vUv-vec2(texel.x,0.)).rgb+texture2D(tDiffuse,vUv+vec2(0.,texel.y)).rgb+texture2D(tDiffuse,vUv-vec2(0.,texel.y)).rgb;
+      gl_FragColor=vec4(clamp(c.rgb+(c.rgb*4.0-n)*amount,0.0,1.0),c.a); }`,
+};
+
+/** colour-blind correction filters (Settings > Accessibility): daltonisation matrices mixed with identity by strength */
+const CB: Record<string, number[]> = {
+  protanopia: [0.567, 0.433, 0, 0.558, 0.442, 0, 0, 0.242, 0.758],
+  deuteranopia: [0.625, 0.375, 0, 0.7, 0.3, 0, 0, 0.3, 0.7],
+  tritanopia: [0.95, 0.05, 0, 0, 0.433, 0.567, 0, 0.475, 0.525],
+};
+function colorBlindFilter(kind: string, strength: number): string {
+  if (kind === 'none' || !CB[kind] || typeof document === 'undefined') return '';
+  let svg = document.getElementById('zu-cb') as SVGSVGElement | null;
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.id = 'zu-cb';
+    svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.style.position = 'absolute';
+    svg.innerHTML = '<filter id="zu-cb-f" color-interpolation-filters="linearRGB"><feColorMatrix type="matrix"/></filter>';
+    document.body.append(svg);
+  }
+  const m = CB[kind], k = Math.max(0, Math.min(1, strength)), I = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  // the simulated deficiency's error, shifted into channels the viewer can see (Fidaner daltonisation), by strength
+  const mix = m.map((v, i) => I[i] + (I[i] - v) * k * 0.7);
+  const row = (r: number) => `${mix[r * 3].toFixed(3)} ${mix[r * 3 + 1].toFixed(3)} ${mix[r * 3 + 2].toFixed(3)} 0 0`;
+  svg.querySelector('feColorMatrix')!.setAttribute('values', `${row(0)} ${row(1)} ${row(2)} 0 0 0 1 0`);
+  return 'url(#zu-cb-f)';
+}
 
 // physics rate: the desktop build simulates at 120 Hz (finer collisions, snappier input); the web build at 60 Hz
 const DT = 1 / (IS_DESKTOP ? 120 : 60);
@@ -65,6 +102,15 @@ export class Game {
   last = performance.now();
   fpsAvg = 60;
   camYaw = 0; camPitch = 0;
+  /** first person, Overwatch-style: some abilities pull the camera out to third person while they last (Reinhardt's
+   *  Barrier Field / Charge -> Tenkai-Oh's Solar Bulwark / Dawn Charge). 0 = eyes, 1 = over the shoulder */
+  abilityCam = 0;
+  /** barrier free look: the shield's facing, held while the camera pans (hold primary fire with the shield up) */
+  private freeLook: { yaw: number; pitch: number } | null = null;
+  /** abilities that play in third person (as in Overwatch) */
+  static readonly THIRD_PERSON: Record<string, (a: Actor) => boolean> = {
+    tenkai: a => a.barrier.up || a.forced?.kind === 'dawncharge',
+  };
   specIdx = 0; specNextSwitch = 0; freeCam = false;
   camPos = new THREE.Vector3();
   timeScale = 1;
@@ -73,6 +119,9 @@ export class Game {
   framesRendered = 0;
   envTex: THREE.Texture | null = null;
   bossCam: { actor: Actor; until: number; t0: number } | null = null;
+  /** dynamic render scale: the fraction of the chosen render scale being drawn right now */
+  dynScale = 1;
+  private dynAt = 0;
   hostSync: HostSync | null = null;
   clientSync: ClientSync | null = null;
   onCampaignEnd: ((won: boolean) => void) | null = null;
@@ -94,8 +143,10 @@ export class Game {
     host.append(this.renderer.domElement);
     this.renderer.domElement.className = 'game-canvas';
     this.input = new Input(this.renderer.domElement);
+    this.input.settings = settings;
     this.hud = new Hud(host);
     this.hud.show(false);
+    voice.onLine = (n, c, text, cat, secs) => this.hud.subtitle(n, c, text, cat, secs);
     this.hud.onUltReady = () => { sfx.play('ult_ready'); if (FULL && this.match?.player) voice.say(this.match.player, 'ult_ready', 'chatter'); };
     this.applySettings(settings);
     addEventListener('resize', () => this.resize());
@@ -110,21 +161,90 @@ export class Game {
 
   applySettings(s: Settings) {
     this.settings = s;
-    const q = PRESETS[s.preset];
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * q.pixelRatio);
-    this.renderer.shadowMap.enabled = q.shadows > 0;
+    this.input.settings = s;
+    const Q = quality(s), v = s.video, o = s.sound, A = s.access;
+    if (!v.dynamicRes) this.dynScale = 1;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * Q.pixelRatio * this.dynScale);
+    this.renderer.shadowMap.enabled = Q.shadows > 0;
+    const st = Q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    if (this.renderer.shadowMap.type !== st) { this.renderer.shadowMap.type = st; this.renderer.shadowMap.needsUpdate = true; }
+    this.renderer.toneMappingExposure = 0.95 * v.gamma;
     this.input.sens = 0.0022 * s.sens;
-    sfx.setVolume(s.volume);
+    // sound: master, the category buses, the mix preset, background audio
+    sfx.setVolume(o.master);
+    Object.assign(sfx.mix, { sfx: o.sfx, voice: o.voice, announcer: o.announcer, ambience: o.ambience, ui: o.ui, hitmarker: o.hitmarker, music: o.music, preset: o.mix, background: o.background });
+    sfx.latencyHint = o.latency;
+    sfx.applyMix();
     this.camera.fov = s.fov * 0.75;       // horizontal-ish FOV feel for 16:9
-    this.composer = null;
-    if (q.bloom) {
-      this.composer = new EffectComposer(this.renderer);
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.5, 0.82);
-      this.composer.addPass(this.bloom);
-      this.composer.addPass(new OutputPass());
-    }
+    this.buildComposer();
+    // brightness / contrast / colour-blind correction on the final picture
+    const cb = colorBlindFilter(A.colorblind, A.cbStrength);
+    this.renderer.domElement.style.filter = [v.brightness !== 1 ? `brightness(${v.brightness.toFixed(2)})` : '', v.contrast !== 1 ? `contrast(${v.contrast.toFixed(2)})` : '', cb].filter(Boolean).join(' ');
+    // team UI colours: health bars, outlines
+    UI_COLORS.ally = A.allyColor; UI_COLORS.enemy = A.enemyColor;
+    document.documentElement.style.setProperty('--ally', A.allyColor); document.documentElement.style.setProperty('--enemy', A.enemyColor);
+    for (const vw of this.views.values()) vw.rimColor.set(this.match?.player && vw.actor.team !== this.match.player.team ? A.enemyColor : A.allyColor);
+    this.hud.applySettings(s);
+    this.applySceneDetail();
+    this.displayMode(v.displayMode);
     this.resize();
+  }
+
+  /** the post chain the options ask for: ambient occlusion, bloom (glow quality), tone mapping, FXAA, sharpening */
+  private buildComposer() {
+    const s = this.settings, Q = quality(s), v = s.video;
+    const ao = v.ao !== 'off', sharp = v.sharpen > 0;
+    this.composer = null; this.bloom = null;
+    if (!Q.bloom && !Q.fxaa && !ao && !sharp) return;
+    const c = new EffectComposer(this.renderer);
+    c.addPass(new RenderPass(this.scene, this.camera));
+    if (ao) {
+      const g = new GTAOPass(this.scene, this.camera, innerWidth, innerHeight);
+      g.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1, samples: { off: 8, low: 8, medium: 12, high: 16 }[v.ao] });
+      g.blendIntensity = { off: 0, low: 0.6, medium: 0.8, high: 1 }[v.ao];
+      c.addPass(g);
+    }
+    if (Q.bloom) {
+      const k = { low: 0.5, medium: 0.75, high: 1 }[v.refraction];
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth * k, innerHeight * k), 0.55, 0.5, 0.82);
+      c.addPass(this.bloom);
+    }
+    c.addPass(new OutputPass());
+    if (Q.fxaa) c.addPass(new FXAAPass());
+    if (sharp) { const p = new ShaderPass(SHARPEN); p.uniforms.amount.value = v.sharpen / 100 * 0.6; c.addPass(p); }
+    this.composer = c;
+    if (this.bloom && this.match) { const day = FULL && this.match.world.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55; }
+  }
+
+  /** detail options that live in the scene: reflections, fog distance, texture filtering, effects density, waypoint */
+  applySceneDetail() {
+    const s = this.settings, Q = quality(s), v = s.video, A = s.access;
+    this.scene.environmentIntensity = Q.envIntensity * (v.localReflections ? 1 : 0.8);
+    const fog = this.scene.fog as (THREE.Fog & { __base?: [number, number] }) | null;
+    if (fog && 'near' in fog) {
+      fog.__base ??= [fog.near, fog.far];
+      const k = { low: 1.4, medium: 1.15, high: 1 }[v.fog];
+      fog.near = fog.__base[0] * k; fog.far = fog.__base[1] * k;
+    }
+    const aniso = Math.min(this.renderer.capabilities.getMaxAnisotropy(), v.texFilter);
+    this.scene.traverse(ob => {
+      const m = (ob as THREE.Mesh).material;
+      for (const mt of Array.isArray(m) ? m : m ? [m] : []) {
+        const t = (mt as THREE.MeshStandardMaterial).map;
+        if (t && t.anisotropy !== aniso) { t.anisotropy = aniso; t.needsUpdate = true; }
+      }
+    });
+    if (this.fx) { this.fx.lodScale = Q.particles; this.fx.damageScale = { low: 0.5, default: 1, high: 1.4 }[v.damageFx]; this.fx.flashScale = A.flashReduction ? 0.3 : 1; }
+    const beam = this.mapScene?.group.getObjectByName('pointBeam') as THREE.Mesh | undefined;
+    if (beam) { (beam.material as THREE.MeshBasicMaterial).opacity = 0.12 * s.gameplay.waypointOpacity; beam.visible = s.gameplay.waypointOpacity > 0.01; }
+  }
+
+  private displayMode(m: Settings['video']['displayMode']) {
+    try {
+      const full = !!document.fullscreenElement;
+      if (m !== 'windowed' && !full) document.documentElement.requestFullscreen?.().catch(() => { /* needs a user gesture */ });
+      else if (m === 'windowed' && full) document.exitFullscreen?.().catch(() => { /* ignore */ });
+    } catch { /* not allowed here */ }
   }
 
   resize() {
@@ -164,7 +284,10 @@ export class Game {
     this.envTex ??= new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = this.envTex;
     this.scene.environmentIntensity = 0.55;
-    this.fx = new Fx(this.scene, q.fxCap);
+    this.fx = new Fx(this.scene, quality(this.settings).fxCap);
+    // scene detail options now, and again once the heroes' models have streamed in (texture filtering)
+    this.buildComposer(); this.applySceneDetail();
+    for (const ms of [3000, 9000]) setTimeout(() => { if (this.running) this.applySceneDetail(); }, ms);
     // first person: your rounds leave the viewmodel's gun(s) - right hand, or alternating hands for twin guns
     let hand = 1;
     this.fx.muzzleFor = (a, from) => {
@@ -255,11 +378,19 @@ export class Game {
   // ------------------------------------------------------------------ frame
   private loop(tms: number) {
     requestAnimationFrame(t => this.loop(t));
-    const q = PRESETS[this.settings.preset];
+    const Q = quality(this.settings), v = this.settings.video;
     let dt = Math.min(0.1, (tms - this.last) / 1000);
-    if (dt < 1 / q.maxFps - 0.002) return;
+    if (dt < 1 / Q.maxFps - 0.002) return;
     this.last = tms;
     if (dt > 0) this.fpsAvg += (1 / dt - this.fpsAvg) * 0.05;
+    // dynamic render scale: hold the frame-rate target (the cap, or 60) by trading resolution, a step at a time
+    if (v.dynamicRes && this.running && tms - this.dynAt > 500) {
+      this.dynAt = tms;
+      const target = v.fpsCap || 60, prev = this.dynScale;
+      if (this.fpsAvg < target * 0.92) this.dynScale = Math.max(0.5, this.dynScale - 0.05);
+      else if (this.fpsAvg > target * 1.08) this.dynScale = Math.min(1, this.dynScale + 0.03);
+      if (this.dynScale !== prev) { this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * Q.pixelRatio * this.dynScale); this.resize(); }
+    }
     const m = this.match;
     if (!this.running || !m || !this.mapScene || !this.fx) { this.input.endFrame(); return; }
     const w = m.world;
@@ -269,16 +400,31 @@ export class Game {
     // ---- input
     if (this.input.once('Escape') && me && !this.paused) this.setPaused(true);
     // Normal matches are first person and Stadium third person (as in Overwatch 2); elsewhere V toggles
-    if (this.input.once(KEYS.view) && !FIXED_VIEW[w.mode]) { this.settings.view = this.settings.view === 'third' ? 'first' : 'third'; }
+    if (this.input.pressed('view') && !FIXED_VIEW[w.mode]) { this.settings.view = this.settings.view === 'third' ? 'first' : 'third'; }
+    if (this.input.pressed('perf')) { const o = ['off', 'simple', 'advanced'] as const; this.settings.video.perfStats = o[(o.indexOf(this.settings.video.perfStats) + 1) % 3]; }
     this.updateArmory(w, me);
-    if (w.mode === 'training' && me && !this.paused && this.input.once(KEYS.swap)) { this.paused = true; this.input.unlock(); (window as any).__zu.openSwap?.(); }
+    if (w.mode === 'training' && me && !this.paused && this.input.pressed('swap')) { this.paused = true; this.input.unlock(); (window as any).__zu.openSwap?.(); }
     if (!me && !online) this.spectatorKeys();
     // ---- simulate (a shared co-op world never pauses)
     if (!this.paused || online) {
       if (me) {
         this.camYaw = this.input.yaw; this.camPitch = this.input.pitch;
-        const aim = this.solveAim(me);
+        const tp = this.view === 'first' && me.alive && !!Game.THIRD_PERSON[me.def.id]?.(me);
+        this.abilityCam += ((tp ? 1 : 0) - this.abilityCam) * Math.min(1, dt * 9);
+        // barrier free look: primary fire held with the shield up pans the camera; the shield keeps its facing
+        const fl = this.settings.controls.barrierFreeLook && me.barrier.up && this.input.held('fire');
+        if (fl && !this.freeLook) this.freeLook = { yaw: me.yaw, pitch: me.pitch };
+        if (!fl && this.freeLook) { this.input.yaw = this.freeLook.yaw; this.input.pitch = this.freeLook.pitch; this.camYaw = this.input.yaw; this.camPitch = this.input.pitch; this.freeLook = null; }
+        const aim = this.freeLook ?? this.solveAim(me);
         this.input.apply(me, aim.yaw, aim.pitch);
+        if (this.freeLook) {
+          me.input.fire = false;
+          if (this.settings.controls.freeLookRelative) {
+            // WASD follows the camera, not the shield
+            const d = this.camYaw - this.freeLook.yaw, c = Math.cos(d), s = Math.sin(d), mx = me.input.mx, mz = me.input.mz;
+            me.input.mx = mx * c + mz * s; me.input.mz = mz * c - mx * s;
+          }
+        }
         if (!this.input.locked || this.paused) { me.input.fire = false; me.input.alt = false; me.input.mx = me.input.mz = 0; }
       }
       if (this.clientSync) {
@@ -304,10 +450,10 @@ export class Game {
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);
-      if (a === me && this.view === 'first') v.group.visible = false;
+      if (a === me && this.view === 'first' && this.abilityCam < 0.08) v.group.visible = false;
     }
     // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
-    const wantFp = !!me && me.alive && this.view === 'first' && !me.sv.zoom && !this.bossCam;
+    const wantFp = !!me && me.alive && this.view === 'first' && !me.sv.zoom && !this.bossCam && this.abilityCam < 0.08;
     if (this.fp && (!me || this.fp.actor !== me || this.fp.defId !== me.def.id)) { this.fp.dispose(); this.fp = null; }
     if (wantFp && !this.fp) this.fp = new FirstPersonArms(me!, equippedSkin(me!.def.id));
     if (this.fp && wantFp) {
@@ -319,6 +465,7 @@ export class Game {
     }
     this.fpAim.yaw = this.camYaw; this.fpAim.pitch = this.camPitch;
     this.fx.wfx?.cam.copy(this.camera.position);
+    this.fx.fpActor = wantFp ? me : null;
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
     this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null);
     this.updateCamera(dt, me);
@@ -332,7 +479,12 @@ export class Game {
       r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false;
     }
     this.framesRendered++;
-    this.hud.update(w, me, this.camera, w.time, this.settings.showFps ? this.fpsAvg : 0, this.input.keys.has(KEYS.score), this.spectateLabel());
+    this.hud.update(w, me, this.camera, w.time, this.settings.video.perfStats !== 'off' ? this.fpsAvg : 0, this.input.held('score'), this.spectateLabel());
+    if (this.settings.video.perfStats === 'advanced') {
+      const ri = this.renderer.info, pr = this.renderer.getPixelRatio();
+      this.hud.perf([`${this.fpsAvg.toFixed(0)} FPS  ${(1000 / Math.max(1, this.fpsAvg)).toFixed(1)} ms`, `render ${Math.round(innerWidth * pr)}x${Math.round(innerHeight * pr)} (${Math.round(pr / Math.min(devicePixelRatio, 2) * 100)}%)`,
+        `draws ${ri.render.calls}  tris ${(ri.render.triangles / 1000).toFixed(0)}k`, `audio ${sfx.voices} voices  load ${(sfx.load.avg * 100).toFixed(0)}% (peak ${(sfx.load.peak * 100).toFixed(0)}%)`, `sim ${IS_DESKTOP ? 120 : 60} Hz  heroes ${w.actors.length}`]);
+    } else this.hud.perf(null);
     if (this.lab && w.mode === 'aitest') {
       this.lab.frame(w, this.views, this.fx, dt * this.timeScale, this.renderer);
       if (Math.round(w.time * 60) % 30 === 0) this.lab.render();
@@ -394,6 +546,7 @@ export class Game {
 
   /** third person: find what the crosshair covers and aim the hero's eye at it (so shots land on the reticle) */
   private solveAim(me: Actor) {
+    // first person - and first-person heroes pulled out by an ability: the shield / charge faces where the camera faces
     if (this.view === 'first') return { yaw: this.camYaw, pitch: this.camPitch };
     const w = this.match!.world;
     const cp = this.cameraPose(me, this.camYaw, this.camPitch);
@@ -429,12 +582,14 @@ export class Game {
 
   private updateCamera(dt: number, me: Actor | null) {
     const cam = this.camera;
-    const shake = this.fx?.shake ?? 0;
+    const shake = (this.fx?.shake ?? 0) * this.settings.access.cameraShake;
     const zoomFov = me?.sv.zoom ? 38 : this.settings.fov * 0.75;
     cam.fov += (zoomFov - cam.fov) * Math.min(1, dt * 12); cam.updateProjectionMatrix();
     if (me) {
-      if (this.view === 'first' || !me.alive && false) {
+      if (this.view === 'first') {
         const e = me.eye; cam.position.set(e.x, e.y, e.z);
+        // an ability that plays in third person eases the camera out over the shoulder and back
+        if (this.abilityCam > 0.001) { const k = this.abilityCam * this.abilityCam * (3 - 2 * this.abilityCam); cam.position.lerp(this.cameraPose(me, this.camYaw, this.camPitch), k); }
       } else cam.position.copy(this.cameraPose(me, this.camYaw, this.camPitch));
       if (!me.alive) {
         // death cam: rise and look at the body

@@ -24,6 +24,7 @@ CAST = {
     "kagemaru": ("am_echo",    "a", -0.5, "They gave the seal to him and left me the shadows. Fine. The shadows are everywhere. The seal is just paper."),
     "enra":     ("am_onyx",    "a", -3.0, "A thousand years beneath the stone. A thousand years of listening to you little things scurry. Now I am awake."),
     "gantetsu": ("am_santa",   "a", -1.5, "Ha! Listen to that crowd! Every ring in this city banned me, and still they come to hear the Iron Yokozuna roar!"),
+    "tomoe":    ("af_kore",    "a", -1.5, "Scrapyard rules. You bleed, you learn, you get back up. I built this crown out of junk and I will break it over your head."),
     "announcer": ("bf_isabella", "b", 0.0, "Welcome to the arena. Prepare for combat. The objective will unlock shortly. All combatants, stand by."),
 }
 
@@ -239,6 +240,21 @@ LINES = {
         "a2": [("Feel the drums!", S)],
         "kill": [("Out of the ring!", S), ("The crowd goes wild!", S), ("Ha! Next challenger!", S)],
         "kill_rival": [("Big machine, bigger fall!", S)],
+    },
+    "tomoe": {
+        **efforts(), **common(("Patch me up, I'm not done yet!", "Oi, healer! Your queen is bleeding!"),
+                              ("Good. Now keep it coming.", "That's the stuff."), ("The Empress is back. Miss me?", "Round two, and I'm angrier."),
+                              "Warpath is ready. Point me at them.", "Follow your queen! Take that point!",
+                              "Hold the line! Nobody touches my point!", "Shove that Mikoshi, you lot! Push!",
+                              "They're on our point! Carve them off it!", "Loading shells."),
+        "select": [("Kneel, or bleed.", F), ("The Crescent Empress has arrived.", S)],   # [1] awaits the next voice pass
+        "ult": [("Out of my way! This is my warpath!", X)],
+        "ult_ally": [("Stay behind me! I'm clearing a road!", S)],
+        "a1": [("Up and at them!", S), ("Nobody falls today!", S)],
+        "a2": [("Onikiri!", S), ("Bleed for me!", S)],
+        "alt": [("Catch!", S), ("Come here, you!", S)],
+        "kill": [("Scrap!", S), ("Down in the dirt where you belong.", F), ("Who's next?", S)],
+        "kill_rival": [("The ring's mine now, big man!", S)],
     },
     "announcer": {
         "match_start": [("Prepare for combat.", F)],
