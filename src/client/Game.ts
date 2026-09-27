@@ -185,6 +185,8 @@ export class Game {
     document.documentElement.style.setProperty('--ally', A.allyColor); document.documentElement.style.setProperty('--enemy', A.enemyColor);
     for (const vw of this.views.values()) vw.rimColor.set(this.match?.player && vw.actor.team !== this.match.player.team ? A.enemyColor : A.allyColor);
     this.hud.applySettings(s);
+    document.body.classList.toggle('nohints', !s.gameplay.hints);      // Gameplay > Show Hints: lobby / loading tips
+    if (!this.running && FULL) sfx.music(s.sound.menuMusic ? 'menu' : null);
     this.applySceneDetail();
     this.displayMode(v.displayMode);
     this.resize();

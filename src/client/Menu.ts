@@ -60,6 +60,8 @@ export class Menu {
 
   title() {
     if (!FULL) return this.liteTitle();
+    // Options > Sound > Play Menu Music: the title theme (starts with the first click if audio is still locked)
+    if (!this.game.running) sfx.music(this.game.settings.sound.menuMusic ? 'menu' : null);
     const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && !matchMedia('(pointer:fine)').matches);
     const c = loadCareer();
     const best = (['tank', 'damage', 'support'] as RankRole[]).map(r => c.roles[r]).sort((a, b) => b.rating * (b.games >= PLACEMENTS ? 1 : 0) - a.rating * (a.games >= PLACEMENTS ? 1 : 0))[0];

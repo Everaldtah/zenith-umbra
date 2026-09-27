@@ -324,3 +324,5 @@ h3.zenith, h2.zenith, .zenith b { color: var(--z); } h3.umbra, h2.umbra { color:
 .hud.hurt { animation: hurtshake .15s linear; } @keyframes hurtshake { 25% { transform: translate(calc(3px * var(--hudshake,1)), calc(-2px * var(--hudshake,1))); } 75% { transform: translate(calc(-3px * var(--hudshake,1)), calc(2px * var(--hudshake,1))); } }
 .hud.nofeed .feed, .hud.nonums .nums, .hud.nohit .hitmark, .hud.nocounter .callout .co { display: none; }
 .hud .ob.nobar div, .hud .ob.noname span { display: none; }
+
+.nohints .tips { display: none; }

@@ -124,7 +124,6 @@ export class SettingsScreen {
     this.select('Fog Detail', () => v.fog, x => { v.fog = x; custom(); }, lv(['low', 'medium', 'high']));
     this.select('Dynamic Reflections', () => v.reflections, x => { v.reflections = x; custom(); }, lv(['off', 'low', 'medium', 'high', 'ultra']));
     this.select('Shadow Detail', () => v.shadows, x => { v.shadows = x; custom(); }, lv(['off', 'low', 'medium', 'high', 'ultra']));
-    this.select('Model Detail', () => v.model, x => { v.model = x; custom(); }, lv(['low', 'medium', 'high', 'ultra']), 'Hero model and texture resolution (applies to the next match).');
     this.select('Effects Detail', () => v.effects, x => { v.effects = x; custom(); }, lv(['low', 'medium', 'high', 'ultra']), 'Particle counts for weapons, abilities and impacts.');
     this.select('Lighting Quality', () => v.lighting, x => { v.lighting = x; custom(); }, lv(['low', 'medium', 'high', 'ultra']), 'Soft shadow filtering and light count.');
     this.select('Antialias Quality', () => v.aa, x => { v.aa = x; custom(); }, [['off', 'OFF'], ['fxaa', 'LOW - FXAA'], ['msaa', 'MEDIUM - MSAA'], ['msaa+fxaa', 'HIGH - MSAA + FXAA']], 'MSAA changes take effect after a restart.');
