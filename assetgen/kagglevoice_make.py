@@ -12,7 +12,9 @@ sys.path.insert(0, os.path.join(HERE, "audio"))
 from voice_lines import CAST, LINES, DELIVERY
 
 vids = sys.argv[1].split(",") if len(sys.argv) > 1 else ["tomoe"]
-jobs = [{"vid": v, "cast": CAST[v], "lines": [(k, i, text, d) for k, ls in LINES[v].items() for i, (text, d) in enumerate(ls)]} for v in vids]
+# optional: only these lines (key:index, comma separated), e.g. `kagglevoice_make.py tomoe select:1`
+only = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None
+jobs = [{"vid": v, "cast": CAST[v], "lines": [(k, i, text, d) for k, ls in LINES[v].items() for i, (text, d) in enumerate(ls) if not only or f"{k}:{i}" in only]} for v in vids]
 
 WORKER = r'''
 import io, os, sys, json, re, difflib, traceback, urllib.request

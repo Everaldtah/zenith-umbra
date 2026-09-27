@@ -506,6 +506,30 @@
    "loop": true,
    "ext": "flac"
   },
+  "scattergun": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "warcall": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "reapwind": {
+   "n": 3,
+   "cat": "weapon"
+  },
+  "reaping": {
+   "n": 3,
+   "cat": "weapon"
+  },
+  "fangreturn": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "fangcatch": {
+   "n": 2,
+   "cat": "ability"
+  },
   "amb_amatsu": {
    "n": 1,
    "cat": "amb",
