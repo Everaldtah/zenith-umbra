@@ -1,6 +1,8 @@
 // The in-browser game: owns the renderer, runs the fixed-step World, drives views, camera, FX, audio and HUD.
 import * as THREE from 'three';
 import { FULL } from '../edition';
+import { Soundscape } from './Soundscape';
+import { voice } from '../audio/Voice';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -94,7 +96,7 @@ export class Game {
     this.input = new Input(this.renderer.domElement);
     this.hud = new Hud(host);
     this.hud.show(false);
-    this.hud.onUltReady = () => sfx.play('ult_ready');
+    this.hud.onUltReady = () => { sfx.play('ult_ready'); if (FULL && this.match?.player) voice.say(this.match.player, 'ult_ready', 'chatter'); };
     this.applySettings(settings);
     addEventListener('resize', () => this.resize());
     this.renderer.domElement.addEventListener('click', () => { sfx.unlock(); if (this.running && !this.paused && this.match?.player) this.input.lock(); });
@@ -102,7 +104,7 @@ export class Game {
       // losing the mouse pauses the match - except in the Stadium Armory, which frees the cursor on purpose
       if (!document.pointerLockElement && this.running && this.match?.player && !this.match.world.winner && !this.armory?.open) this.setPaused(true);
     });
-    (window as any).__zu = { ...(window as any).__zu, game: this };
+    (window as any).__zu = { ...(window as any).__zu, game: this, sfx, voice };
     requestAnimationFrame(t => this.loop(t));
   }
 
@@ -163,6 +165,16 @@ export class Game {
     this.scene.environment = this.envTex;
     this.scene.environmentIntensity = 0.55;
     this.fx = new Fx(this.scene, q.fxCap);
+    // first person: your rounds leave the viewmodel's gun(s) - right hand, or alternating hands for twin guns
+    let hand = 1;
+    this.fx.muzzleFor = (a, from) => {
+      if (!this.match || a !== this.match.player || this.view !== 'first') return from;
+      const c = this.camera, f = c.getWorldDirection(new THREE.Vector3()), r = new THREE.Vector3().crossVectors(f, c.up).normalize(), u = new THREE.Vector3().crossVectors(r, f);
+      if (a.def.dualGuns) hand = -hand;
+      const side = a.def.dualGuns ? hand * 0.42 : 0.24;
+      const p = c.position.clone().addScaledVector(f, 1.45).addScaledVector(r, side * 1.15).addScaledVector(u, -0.3);
+      return { x: p.x, y: p.y, z: p.z };
+    };
     const viewerTeam = this.match.player?.team ?? 'zenith';
     for (const a of w.actors) this.addView(a, viewerTeam);
     this.hud.reset();
@@ -173,8 +185,11 @@ export class Game {
     if (this.match.player) { this.camYaw = this.match.player.yaw; this.camPitch = 0; this.input.yaw = this.camYaw; this.input.pitch = 0; }
     sfx.unlock();
     sfx.music(o.mode === 'training' ? 'zenith' : 'battle');
+    if (FULL) this.sound.start(w, this.match.player);
     if (this.match.player) this.input.lock();
   }
+  /** desktop edition: the match's soundscape (space, threat mix, loops, physics sounds, voice lines) */
+  sound = new Soundscape();
 
   /** the camera for this match: fixed by the mode (Normal = first person, Stadium = third person), else the setting */
   get view(): 'first' | 'third' { const m = this.match?.world.mode; return (m && FIXED_VIEW[m]) || this.settings.view; }
@@ -198,7 +213,7 @@ export class Game {
     const v = new CharacterView(a, viewerTeam, a.isPlayer ? equippedSkin(a.def.id) : 'classic');
     v.onStep = (act, _side, heavy) => {
       if (!this.match) return;
-      sfx.play(heavy ? 'mechstep' : 'step', act.pos, heavy ? 1 : 0.6);
+      if (FULL) this.sound.step(act, heavy); else sfx.play(heavy ? 'mechstep' : 'step', act.pos, heavy ? 1 : 0.6);
       if (heavy) { this.fx?.onEvent({ t: 'fx', kind: 'step', pos: { ...act.pos } }, this.match.world.time, this.camPos); this.fx!.shake = Math.max(this.fx!.shake, 0.08 / (1 + this.camPos.distanceTo(new THREE.Vector3(act.pos.x, act.pos.y, act.pos.z)) / 8)); }
     };
     this.views.set(a.id, v);
@@ -207,6 +222,7 @@ export class Game {
 
   stop() {
     this.running = false;
+    if (FULL) this.sound.stop();
     this.armory?.hide();
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
@@ -302,10 +318,12 @@ export class Game {
       this.fp.update({ dt: fdt, time: w.time, yawRate: rate(dy), pitchRate: rate(this.camPitch - this.fpAim.pitch), aspect: this.camera.aspect });
     }
     this.fpAim.yaw = this.camYaw; this.fpAim.pitch = this.camPitch;
+    this.fx.wfx?.cam.copy(this.camera.position);
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
     this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null);
     this.updateCamera(dt, me);
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
+    if (FULL && !this.paused) this.sound.frame(w, me, this.camera, dt);
     // ---- render
     if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     if (this.fp && wantFp) {
@@ -355,11 +373,12 @@ export class Game {
     const w = m.world, me = m.player;
     if (e.t === 'bossintro') { this.bossIntro(e.id); return; }
     this.lab?.onEvent(e);
+    if (FULL) this.sound.event(e);
     if (e.t === 'fx') this.fx.onEvent(e, w.time, this.camPos);
     else if (e.t === 'sfx') {
       // own weapon sounds play un-positioned (in your head), everything else in 3D
       const own = me && e.actor === me;
-      sfx.play(e.id, own ? undefined : e.pos, own ? 0.8 : 1);
+      if (!FULL) sfx.play(e.id, own ? undefined : e.pos, own ? 0.8 : 1);
     } else {
       this.hud.event(e, me, w.time);
       if (e.t === 'counter') sfx.play('counter');

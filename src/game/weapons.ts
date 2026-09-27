@@ -105,8 +105,8 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
         h.dmg += W.damage * Math.max(0.3, fall) * (ah.head ? 1.5 : 1); h.head ||= ah.head;
         hits.set(ah.actor, h);
       } else if (bh) w.hitBarrier(bh.owner, W.damage, a, endP);
-      else if (lh) w.fx('impact', endP, { color: a.def.glow });
-      if (i < 4 && (!dual || (a.sv.tracerN = (a.sv.tracerN ?? 0) + 1) % 2 === 0)) w.fx('tracer', muz, { to: endP, color: a.def.glow });
+      else if (lh) w.fx('impact', endP, { color: a.def.glow, mat: lh.mat, n: { x: lh.nx, y: lh.ny, z: lh.nz } });
+      if (i < 4 && (!dual || (a.sv.tracerN = (a.sv.tracerN ?? 0) + 1) % 2 === 0)) w.fx('tracer', muz, { to: endP, color: a.def.glow, actor: a });
     }
     for (const [x, h] of hits) {
       let dmg = h.dmg, crit = h.head;
@@ -253,9 +253,15 @@ export function updateWeapons(w: World, a: Actor, dt: number) {
     }
   } else if (inp.fire && !busy && t >= a.nextShot && !a.reloadUntil && P.damage > 0) {
     if (!P.ammo || a.ammo > 0) {
-      fire(w, a, P, 'primary');
+      // one round now; a burst weapon (Hibiki's Subwoofer Blaster) follows up with the rest of the burst
+      const round = () => {
+        if (!a.alive || a.reloadUntil || (P.ammo && a.ammo <= 0) || a.has('stun', w.time)) return;
+        fire(w, a, P, 'primary');
+        if (P.ammo) { a.ammo--; if (a.ammo <= 0) { a.reloadUntil = w.time + a.reloadTime(P.reload ?? 1.5); w.sfx('reload', a.pos, a); } }
+      };
+      round();
+      for (let i = 1; i < (P.burst ?? 1); i++) w.after((P.burstGap ?? 0.07) * i, round);
       a.nextShot = t + 1 / a.rate(P.rate);
-      if (P.ammo) { a.ammo--; if (a.ammo <= 0) { a.reloadUntil = t + a.reloadTime(P.reload ?? 1.5); w.sfx('reload', a.pos, a); } }
     }
   }
   // ---- secondary weapons

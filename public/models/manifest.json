@@ -173,6 +173,13 @@
    "bones": [
     "humanoid"
    ]
+  },
+  "hibiki": {
+   "height": 1.82,
+   "tris": 44999,
+   "bones": [
+    "humanoid"
+   ]
   }
  },
  "props": {

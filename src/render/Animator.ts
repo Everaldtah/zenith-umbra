@@ -55,6 +55,8 @@ export interface AnimState {
   slingshot?: boolean;      // flung onward out of a swoop
   dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
+  skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
+  grind?: number;           // Hibiki's Mag-Grind: which side the wall is on (-1 / 1), 0 = not grinding
 }
 
 interface Rest { q: THREE.Quaternion; p: THREE.Vector3; dir: THREE.Vector3; }
@@ -83,6 +85,8 @@ const PERSONA: Record<string, Persona> = {
   // warding monk: wide rooted stance, smooth flowing aim that settles
   kaien: { weight: 0.3, bounce: 0.2, lean: 0.3, stance: 0.45, width: 1.18, chest: 0.06, hip: 0.1, sway: 0.3, aimK: 120, aimD: 13, lag: 0.9, squash: 0.5 },
   // angelic medic: light on her feet, feet close, graceful contrapposto, floaty aim
+  // street skater: low, loose and bouncy, leaning into every push
+  hibiki: { weight: 0.1, bounce: 0.45, lean: 1.0, stance: 0.9, width: 1.1, chest: -0.02, hip: 0.35, sway: 0.9, aimK: 190, aimD: 17, lag: 0.7, squash: 1.1 },
   mirei: { weight: 0.08, bounce: 0.35, lean: 0.35, stance: 0.12, width: 0.8, chest: 0.12, hip: 0.95, sway: 0.7, aimK: 105, aimD: 11, lag: 1.0, squash: 0.75 },
   // diva: poised, chest high, cocked hip
   nocturne: { weight: 0.12, bounce: 0.25, lean: 0.3, stance: 0.06, width: 0.85, chest: 0.14, hip: 1.0, sway: 0.6, aimK: 115, aimD: 12, lag: 0.9, squash: 0.6 },
@@ -205,6 +209,8 @@ export class Animator {
   hammerLen = 1;
   /** twin chaingun props (model-space children of the rig root) [left hand, right hand], barrels along the forearms */
   guns: [THREE.Object3D, THREE.Object3D] | null = null;
+  /** props clamped under the feet (Hibiki's mag-skates) */
+  feet: [THREE.Object3D, THREE.Object3D] | null = null;
   // ---- performance layer outputs, applied by the view: whole-body tilt about a pivot at the hips, squash & stretch
   tilt = { pitch: 0, roll: 0 };
   sqY = 1; sqXZ = 1;
@@ -257,6 +263,21 @@ export class Animator {
   }
 
   /** the twin chainguns ride in the fists, barrels along the forearms - so they point wherever the arms aim */
+  /** foot props follow the feet: under the ankle bone, pointing where the lower body faces */
+  private placeFeet() {
+    if (!this.feet) return;
+    const R = this.rest as Record<BoneName, Rest>;
+    (['L', 'R'] as const).forEach((S, i) => {
+      const f = this.feet![i], fb = `foot_${S}` as BoneName;
+      if (!this.bones[fb] || !R[fb]) { f.visible = false; return; }
+      const p = this.modelPos(fb);
+      // wheels on the floor under the foot (the ankle's height above its rest says how far the foot is lifted)
+      f.position.set(p.x, Math.max(0, p.y - this.footY) - 0.004 * this.height, p.z + 0.015 * this.height);
+      f.rotation.set(0, this.hipYaw, 0);
+      f.visible = true;
+    });
+  }
+
   /** `aim` (first person, model space): point both barrels at this spot ahead of the reticle instead of along the forearms */
   private placeGuns(aim?: THREE.Vector3) {
     if (!this.guns) return;
@@ -515,7 +536,8 @@ export class Animator {
     this.flyBlend += ((s.flying ? 1 : 0) - this.flyBlend) * Math.min(1, dt * 5);
     // ---------------- clip layer: a baked mocap / keyframed pose, blended per body region below
     const angelAir = PERF && !!s.angel && ((s.swoop ?? -1) >= 0 || !!s.gliding || !!s.superjump || !!s.slingshot || (s.swoopFlare ?? 9) < 0.4);
-    const eligible = !heavy && s.frame !== 'drone' && !s.flying && !s.hammer && !s.move && !angelAir;
+    const skating = PERF && !!s.skate && (moving > 0 || !!s.grind);
+    const eligible = !heavy && s.frame !== 'drone' && !s.flying && !s.hammer && !s.move && !angelAir && !skating;
     this.clipW += ((eligible || s.dead ? 1 : 0) - this.clipW) * Math.min(1, dt * 8);
     const L = this.layer ? this.layer.update(s, { speed: speed / this.legLen, angle: Math.atan2(lvx, lvz), moveBlend: this.moveBlend, airBlend: this.airBlend, eligible: this.clipW > 0.01 || !!s.dead }) : null;
     this.clip = L;
@@ -595,6 +617,18 @@ export class Animator {
       if (!s.grounded || this.airBlend > 0.5) {
         this.pplant[i] = null;
         tgt = restFoot.clone();
+      } else if (moving && PERF && s.skate) {
+        // skating: no planted foot - the wheels roll. Each foot pushes out and back on the diagonal, then glides
+        // home under the hips, knees soft; a push is a "footfall" (the skate sound, the body's bob)
+        const sph = ((this.phase * 0.55 + i * 0.5) % 1 + 1) % 1, push = sph < 0.55;
+        const u = push ? sph / 0.55 : (sph - 0.55) / 0.45, e = u * u * (3 - 2 * u);
+        const outX = side * this.legLen * (push ? 0.04 + 0.26 * e : 0.3 - 0.26 * e);
+        const backZ = this.legLen * (push ? 0.12 - 0.5 * e : -0.38 + 0.5 * e);
+        tgt = restFoot.clone().add(new THREE.Vector3(outX, 0, backZ).applyAxisAngle(Y, this.hipYaw));
+        tgt.y = this.footY + (push ? 0 : Math.sin(u * Math.PI) * this.legLen * 0.07);
+        if (push && !this.lastStance[i] && this.cLegs < 0.5) this.footfall(i, heavy, PS);
+        this.lastStance[i] = push;
+        this.pplant[i] = null;
       } else if (moving) {
         const stance = ph < duty;
         if (stance) {
@@ -631,8 +665,13 @@ export class Animator {
         }
         tgt = m;
       }
+      if (PERF && s.grind) {
+        // Mag-Grind: both skates on the wall side, knees bent, the outside leg a little behind
+        const g = s.grind;
+        tgt = restFoot.clone().add(new THREE.Vector3(g * this.legLen * 0.1, this.legLen * 0.12, (side === g ? 0.12 : -0.2) * this.legLen));
+      }
       // airborne: knees up (jump), trailing dangle (flying)
-      if (this.airBlend > 0.01) {
+      else if (this.airBlend > 0.01) {
         const tuck = flyer ? 0.25 : Math.max(0, Math.min(1, (s.vel.y + 4) / 10));
         const air = new THREE.Vector3((i === 0 ? R.foot_L : R.foot_R).p.x + side * this.hipW * 0.1, this.footY + this.legLen * (0.35 * tuck + 0.1), (flyer ? -0.25 : i === 0 ? 0.15 : -0.05) * this.legLen);
         if (flyer) { air.y += Math.sin(s.time * 2.2 + i) * 0.03 * this.legLen; air.z += Math.sin(s.time * 1.7 + i * 2) * 0.05 * this.legLen; }
@@ -1008,6 +1047,8 @@ export class Animator {
       } else if (flyer && s.flying) {
         pT = clampA(lvz * s.scale / 9, 1) * 0.3; rT = -clampA(lvx * s.scale / 9, 1) * 0.3;
       }
+      if (s.grind) { rT += -s.grind * 0.42; pT += 0.16; k = 70; d = 10; }
+      else if (s.skate && s.grounded) { pT += clampA(lvz * s.scale / 8, 1) * 0.14; rT += -clampA(lvx * s.scale / 8, 1) * 0.12 + Math.sin(this.phase * Math.PI * 1.1) * 0.05 * this.moveBlend; }
       if (!PERF) { pT = 0; rT = 0; }
       this.tilt.pitch = spring(this.tiltP, pT, k, d, dt); this.tilt.roll = spring(this.tiltR, rT, k, d, dt);
     }
@@ -1015,5 +1056,6 @@ export class Animator {
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
     this.springs(s, dt);
     this.placeGuns();
+    this.placeFeet();
   }
 }

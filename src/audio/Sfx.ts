@@ -1,6 +1,13 @@
-// Procedural positional sound: every effect is a small recipe of oscillator / noise layers with pitch + filter sweeps.
-// No audio files ship with the game; everything is synthesised at runtime (so it also works offline in the desktop build).
+// Positional sound. The web edition synthesises every effect from a small recipe of oscillator / noise layers with pitch +
+// filter sweeps. The desktop edition plays the recorded bank (Bank.ts: generated, curated, mastered - assetgen/audio_finish
+// .py) through an Overwatch-style mix: category buses, voice ducking, HRTF panning up close, air absorption and occlusion
+// by distance and walls, a per-map reverb that crossfades to a room indoors, quad-delay wall reflections (Space.ts),
+// threat-bucket mixing and louder enemy footsteps. Recipes stay as the fallback for anything the bank doesn't have.
 import * as THREE from 'three';
+import { FULL } from '../edition';
+import { BASE } from '../render/Assets';
+import { SampleBank } from './Bank';
+import { impulse, QuadDelay, SPACE, ROOM, type Acoustic } from './Space';
 
 type Layer = {
   n?: boolean;                 // noise instead of oscillator
@@ -126,6 +133,27 @@ const R: Record<string, Layer[]> = {
   kill: [{ w: 'triangle', f: 1046, d: 0.08, v: 0.2 }, { w: 'triangle', f: 1568, d: 0.18, v: 0.2, dl: 0.07 }],
 };
 
+type P3 = { x: number; y: number; z: number };
+export interface PlayOpts {
+  /** who made the sound (threat mixing, own-sound handling) */
+  actor?: { id: number } | null;
+  /** relation to the listener: own sounds play in your head, enemy footsteps louder than friendly ones (Overwatch) */
+  rel?: 'self' | 'ally' | 'enemy';
+  /** reverb / reflection send override */
+  send?: number;
+  /** playback-rate multiplier */
+  rate?: number;
+}
+interface Loop { src: AudioBufferSourceNode; g: GainNode; lp: BiquadFilterNode; pan: PannerNode | null; id: string; seen: number }
+
+// category -> bus + reference distance + reverb send + pitch variation
+const CATS: Record<string, { ref: number; send: number; quad: number; pv: number }> = {
+  weapon: { ref: 7, send: 0.22, quad: 0.55, pv: 0.06 }, impact: { ref: 3.5, send: 0.18, quad: 0.35, pv: 0.1 },
+  ability: { ref: 7, send: 0.25, quad: 0.25, pv: 0.03 }, move: { ref: 3, send: 0.1, quad: 0.1, pv: 0.06 },
+  step: { ref: 2.6, send: 0.08, quad: 0.05, pv: 0.08 }, feedback: { ref: 4, send: 0.05, quad: 0, pv: 0.02 },
+  loop: { ref: 4, send: 0.12, quad: 0, pv: 0 }, amb: { ref: 1, send: 0, quad: 0, pv: 0 }, voice: { ref: 5, send: 0.12, quad: 0.05, pv: 0 },
+};
+
 export class Sfx {
   ctx: AudioContext | null = null;
   master!: GainNode;
@@ -141,6 +169,22 @@ export class Sfx {
   unknown = new Set<string>();
   private throttle = new Map<string, number>();
 
+  // ---- desktop edition: recorded bank, buses, space, threat mixing, loops
+  bank = new SampleBank();
+  voiceBus!: GainNode;
+  ambBus!: GainNode;
+  private sfxDuck!: GainNode; private ambDuck!: GainNode; private musicDuck!: GainNode;
+  private revOut!: GainNode; private revIn!: GainNode; private roomIn!: GainNode; private outdoor!: ConvolverNode; private room!: ConvolverNode;
+  private quad: QuadDelay | null = null;
+  private indoor = 0;
+  private hrtfLive = 0;
+  /** Game: how blocked the path from the listener to a point is (0 = clear line of sight, 1 = fully walled off) */
+  occlude: ((p: P3) => number) | null = null;
+  /** Game: per-actor mix gain from the threat buckets (1 HIGH, 2 NORMAL, 4-10 LOW, the rest culled) */
+  threat = new Map<number, number>();
+  private loops = new Map<string, Loop>();
+  private frame = 0;
+
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || (window as any).webkitAudioContext;
@@ -149,7 +193,27 @@ export class Sfx {
     this.master = this.ctx.createGain(); this.master.gain.value = this.volume;
     const comp = this.ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
     this.bus = this.ctx.createGain(); this.musicBus = this.ctx.createGain(); this.musicBus.gain.value = 0.35;
-    this.bus.connect(comp); this.musicBus.connect(comp); comp.connect(this.master); this.master.connect(this.ctx.destination);
+    if (FULL) {
+      // bus -> duck -> limiter; voice rides on top; reverb and reflections return after the ducks
+      const C = this.ctx;
+      comp.threshold.value = -10; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      this.sfxDuck = C.createGain(); this.ambDuck = C.createGain(); this.musicDuck = C.createGain();
+      this.voiceBus = C.createGain(); this.ambBus = C.createGain(); this.ambBus.gain.value = 0.9;
+      this.bus.connect(this.sfxDuck); this.sfxDuck.connect(comp);
+      this.musicBus.connect(this.musicDuck); this.musicDuck.connect(comp);
+      this.ambBus.connect(this.ambDuck); this.ambDuck.connect(comp);
+      this.voiceBus.connect(comp);
+      this.revIn = C.createGain(); this.roomIn = C.createGain(); this.revOut = C.createGain(); this.revOut.gain.value = 1;
+      this.outdoor = C.createConvolver(); this.room = C.createConvolver();
+      this.revIn.connect(this.outdoor); this.roomIn.connect(this.room);
+      this.outdoor.connect(this.revOut); this.room.connect(this.revOut); this.revOut.connect(comp);
+      this.quad = new QuadDelay(C, comp);
+      this.setSpace('training');
+      void this.bank.load(C, BASE);
+    } else {
+      this.bus.connect(comp); this.musicBus.connect(comp);
+    }
+    comp.connect(this.master); this.master.connect(this.ctx.destination);
     const len = this.ctx.sampleRate;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -165,8 +229,38 @@ export class Sfx {
     else (L as any).setPosition(pos.x, pos.y, pos.z);
   }
 
-  play(id: string, pos?: { x: number; y: number; z: number }, vol = 1) {
+  // ---------------------------------------------------------------- space (desktop)
+  /** the map's outdoor reverb (indoor rooms share one tight room) */
+  setSpace(mapId: string) {
+    if (!FULL || !this.ctx) return;
+    const a: Acoustic = SPACE[mapId] ?? SPACE.training;
+    this.outdoor.buffer = impulse(this.ctx, a); this.room.buffer = impulse(this.ctx, ROOM);
+    this.outdoorWet = a.wet;
+    this.setIndoor(this.indoor, true);
+  }
+  private outdoorWet = 0.15;
+  /** 0 = open sky over the listener, 1 = a roof: crossfades the outdoor reverb into the room */
+  setIndoor(k: number, now = false) {
+    if (!FULL || !this.ctx) return;
+    this.indoor = k;
+    const t = this.ctx.currentTime, tc = now ? 0.001 : 0.25;
+    this.revIn.gain.setTargetAtTime(this.outdoorWet * (1 - k), t, tc);
+    this.roomIn.gain.setTargetAtTime(ROOM.wet * k, t, tc);
+  }
+  /** distances to the nearest wall in front / right / behind / left of the listener */
+  setReflections(d: number[]) { if (this.quad && this.ctx) this.quad.set(this.ctx, d); }
+  /** voice lines duck the world a little so they cut through (critical lines duck more) */
+  duck(amount: number, secs: number) {
+    if (!FULL || !this.ctx) return;
+    const t = this.ctx.currentTime, g = 1 - amount;
+    for (const [n, k] of [[this.sfxDuck, 0.35], [this.ambDuck, 1], [this.musicDuck, 1]] as [GainNode, number][]) {
+      n.gain.cancelScheduledValues(t); n.gain.setTargetAtTime(1 - (1 - g) * k, t, 0.04); n.gain.setTargetAtTime(1, t + secs, 0.3);
+    }
+  }
+
+  play(id: string, pos?: { x: number; y: number; z: number }, vol = 1, o: PlayOpts = {}) {
     this.played[id] = (this.played[id] ?? 0) + 1;
+    if (FULL && this.bank.ready && this.bank.has(id)) { this.playSample(id, pos, vol, o); return; }
     const recipe = R[id];
     if (!recipe) { if (id !== 'none') this.unknown.add(id); return; }
     const ctx = this.ctx;
@@ -218,6 +312,133 @@ export class Sfx {
     this.voices++;
     setTimeout(() => this.voices--, (end - now) * 1000 + 50);
   }
+
+  /** mix gain, air absorption and occlusion for a sound at pos (shared by one-shots, loops and voice) */
+  private spatial(pos: P3 | undefined, cat: string, o: PlayOpts) {
+    const C = CATS[cat] ?? CATS.ability;
+    let gain = 1, cutoff = 20000, dist = 0, occ = 0;
+    if (o.actor && o.rel !== 'self') gain *= this.threat.get(o.actor.id) ?? 1;
+    if (cat === 'step' && o.rel) gain *= o.rel === 'enemy' ? 1.45 : o.rel === 'ally' ? 0.55 : 0.8;
+    if (pos && o.rel !== 'self') {
+      dist = Math.hypot(pos.x - this.listener.x, pos.y - this.listener.y, pos.z - this.listener.z);
+      // air absorption: far sounds lose their top end
+      cutoff = 20000 * Math.pow(Math.max(0, 1 - dist / 110), 1.8) + 1400;
+      occ = this.occlude ? this.occlude(pos) : 0;
+      if (occ > 0) { cutoff = Math.min(cutoff, 20000 * (1 - 0.93 * occ) + 700); gain *= 1 - 0.5 * occ; }
+    }
+    return { C, gain, cutoff, dist, occ };
+  }
+
+  private makePanner(ctx: AudioContext, pos: P3, ref: number, near: boolean) {
+    const p = ctx.createPanner();
+    const hrtf = near && this.hrtfLive < 10;
+    p.panningModel = hrtf ? 'HRTF' : 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = ref; p.rolloffFactor = 1.15; p.maxDistance = 140;
+    if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else (p as any).setPosition(pos.x, pos.y, pos.z);
+    return { p, hrtf };
+  }
+
+  private playSample(id: string, pos: P3 | undefined, vol: number, o: PlayOpts) {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    const meta = this.bank.meta(id)!, cat = meta.cat;
+    const now = ctx.currentTime, last = this.throttle.get(id) ?? -1;
+    if (now - last < (cat === 'weapon' ? 0.03 : 0.02)) return;
+    this.throttle.set(id, now);
+    if (pos && o.rel !== 'self' && Math.hypot(pos.x - this.listener.x, pos.y - this.listener.y, pos.z - this.listener.z) > 110) return;
+    if (this.voices >= 64) return;
+    const buf = this.bank.sfx(id); if (!buf) return;
+    const S = this.spatial(pos, cat, o);
+    if (S.gain < 0.05) return;           // culled by the threat mix
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    src.playbackRate.value = (o.rate ?? 1) * (1 + (Math.random() - 0.5) * 2 * S.C.pv);
+    const g = ctx.createGain(); g.gain.value = vol * S.gain * (o.rel === 'self' ? 0.9 : 1);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = S.cutoff; lp.Q.value = 0.5;
+    src.connect(lp); lp.connect(g);
+    let hrtf = false;
+    if (pos && o.rel !== 'self') {
+      const { p, hrtf: h } = this.makePanner(ctx, pos, S.C.ref, S.dist < 28); hrtf = h;
+      g.connect(p); p.connect(this.bus);
+    } else g.connect(this.bus);
+    // space: more reverb with distance (the far layer of a gunshot is mostly tail), reflections for close weapons
+    const send = (o.send ?? S.C.send) * (1 + Math.min(1.2, S.dist / 45)) * (1 + S.occ * 0.6);
+    if (send > 0.01) { const r = ctx.createGain(); r.gain.value = send; g.connect(r); r.connect(this.revIn); r.connect(this.roomIn); }
+    if (this.quad && S.C.quad && S.dist < 40) { const q = ctx.createGain(); q.gain.value = S.C.quad * (1 - S.dist / 40); g.connect(q); q.connect(this.quad.input); }
+    this.voices++; if (hrtf) this.hrtfLive++;
+    src.onended = () => { this.voices--; if (hrtf) this.hrtfLive--; src.disconnect(); g.disconnect(); };
+    src.start();
+  }
+
+  /** a voice line on the voice bus (the director decides who hears what); returns its duration */
+  playLine(buf: AudioBuffer, pos: P3 | null, vol: number, o: PlayOpts & { radio?: boolean; ult?: boolean }, onEnd?: () => void): { stop: () => void; dur: number } | null {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return null;
+    const S = this.spatial(pos ?? undefined, 'voice', { ...o, actor: null });
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const g = ctx.createGain();
+    // enemy ult warnings stay loud wherever they come from (you have to hear them to react)
+    g.gain.value = vol * (o.ult ? Math.max(0.85, S.gain) : S.gain);
+    let node: AudioNode = src;
+    if (o.radio) {
+      // a mech pilot speaks over the cockpit comms: band-limited with a little grit
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 320;
+      const bp = ctx.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 3600;
+      const sh = ctx.createWaveShaper(); const c = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 2.2); } sh.curve = c;
+      node.connect(hp); hp.connect(bp); bp.connect(sh); node = sh;
+    }
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.ult ? 20000 : S.cutoff;
+    node.connect(lp); lp.connect(g);
+    if (pos && o.rel !== 'self') {
+      const { p } = this.makePanner(ctx, pos, o.ult ? 30 : 6, false);
+      g.connect(p); p.connect(this.voiceBus);
+    } else g.connect(this.voiceBus);
+    const r = ctx.createGain(); r.gain.value = 0.1; g.connect(r); r.connect(this.revIn); r.connect(this.roomIn);
+    src.onended = () => { src.disconnect(); g.disconnect(); onEnd?.(); };
+    src.start();
+    return { stop: () => { try { g.gain.setTargetAtTime(0, ctx.currentTime, 0.03); src.stop(ctx.currentTime + 0.12); } catch { /* ended */ } }, dur: buf.duration };
+  }
+
+  // ---------------------------------------------------------------- loops (desktop): beams, flames, grinding, wind, auras, beds
+  beginFrame() { this.frame++; }
+  /** keep a looping sound going this frame (call every frame it should play); loops not refreshed fade out */
+  loop(key: string, id: string, pos: P3 | null, vol = 1, o: PlayOpts = {}) {
+    const ctx = this.ctx;
+    if (!FULL || !ctx || ctx.state !== 'running' || !this.bank.ready) return;
+    let L = this.loops.get(key);
+    if (L && L.id !== id) { this.stopLoop(key); L = undefined; }
+    const cat = key.startsWith('amb') ? 'amb' : 'loop';
+    const S = this.spatial(pos ?? undefined, cat, o);
+    const t = ctx.currentTime;
+    if (!L) {
+      const buf = this.bank.sfx(id); if (!buf) return;
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = S.cutoff;
+      src.connect(lp); lp.connect(g);
+      let pan: PannerNode | null = null;
+      const bus = cat === 'amb' ? this.ambBus : this.bus;
+      if (pos && o.rel !== 'self') { pan = this.makePanner(ctx, pos, CATS[cat].ref + 2, false).p; g.connect(pan); pan.connect(bus); } else g.connect(bus);
+      if (cat !== 'amb') { const r = ctx.createGain(); r.gain.value = 0.12; g.connect(r); r.connect(this.revIn); r.connect(this.roomIn); }
+      src.start(t, Math.random() * buf.duration);
+      L = { src, g, lp, pan, id, seen: this.frame };
+      this.loops.set(key, L);
+    }
+    L.seen = this.frame;
+    L.g.gain.setTargetAtTime(vol * S.gain, t, 0.08);
+    L.lp.frequency.setTargetAtTime(S.cutoff, t, 0.1);
+    if (o.rate) L.src.playbackRate.setTargetAtTime(o.rate, t, 0.1);
+    if (L.pan && pos) { L.pan.positionX.value = pos.x; L.pan.positionY.value = pos.y; L.pan.positionZ.value = pos.z; }
+  }
+  /** fade out loops nobody refreshed this frame */
+  endFrame() { for (const [k, L] of this.loops) if (L.seen !== this.frame) this.stopLoop(k); }
+  stopLoop(key: string) {
+    const L = this.loops.get(key); if (!L || !this.ctx) return;
+    this.loops.delete(key);
+    const t = this.ctx.currentTime;
+    L.g.gain.setTargetAtTime(0, t, 0.08);
+    L.src.stop(t + 0.5);
+    L.src.onended = () => { L.src.disconnect(); L.g.disconnect(); };
+  }
+  stopAllLoops() { for (const k of [...this.loops.keys()]) this.stopLoop(k); }
 
   // ---------------------------------------------------------------- music: slow pad + pulse, per-map key
   private musicTimer: number | null = null;

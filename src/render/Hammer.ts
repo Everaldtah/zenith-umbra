@@ -126,3 +126,57 @@ export function buildChaingun(modelHeight: number, side: 'L' | 'R'): ChaingunPro
   g.add(flash);
   return { group: g, spin, flash, core, len };
 }
+
+
+/**
+ * Hibiki's Subwoofer Blaster, strapped to the right forearm: a white-and-gold speaker housing whose woofer cone pumps with
+ * every round, an equaliser strip that glows the colour of the track he's playing, a short muzzle ring.
+ */
+export function buildSonicAmp(modelHeight: number): ChaingunProp {
+  const L = modelHeight;
+  const shell = new THREE.MeshStandardMaterial({ color: '#f2f4f7', metalness: 0.25, roughness: 0.35 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#d9a441', metalness: 0.85, roughness: 0.3 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#15181f', metalness: 0.4, roughness: 0.5 });
+  const core = new THREE.MeshStandardMaterial({ color: '#bffcff', emissive: new THREE.Color('#39d6ff'), emissiveIntensity: 2.4, roughness: 0.4 });
+  const g = new THREE.Group();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
+  };
+  const alongZ = (geo: THREE.BufferGeometry) => geo.rotateX(Math.PI / 2);
+  const cy = -0.028 * L;
+  // housing along the forearm, a gold band, the equaliser strip on top
+  add(new THREE.BoxGeometry(0.075 * L, 0.07 * L, 0.2 * L), shell, 0, cy, 0.06 * L);
+  add(new THREE.BoxGeometry(0.079 * L, 0.012 * L, 0.2 * L), gold, 0, cy + 0.036 * L, 0.06 * L);
+  for (let k = 0; k < 6; k++) add(new THREE.BoxGeometry(0.008 * L, (0.01 + (k % 3) * 0.006) * L, 0.012 * L), core, -0.025 * L + k * 0.01 * L, cy + 0.045 * L, 0.03 * L);
+  // the speaker: a round baffle with the woofer cone (pumps on each shot) and a glowing dust cap
+  const bz = 0.17 * L;
+  add(alongZ(new THREE.CylinderGeometry(0.058 * L, 0.052 * L, 0.03 * L, 26)), shell, 0, cy, bz);
+  add(alongZ(new THREE.TorusGeometry(0.052 * L, 0.006 * L, 8, 26).rotateX(Math.PI / 2)), gold, 0, cy, bz + 0.016 * L);
+  const spin = new THREE.Group(); spin.position.set(0, cy, bz + 0.018 * L); g.add(spin);
+  add(new THREE.ConeGeometry(0.045 * L, 0.02 * L, 26, 1, true).rotateX(-Math.PI / 2), dark, 0, 0, -0.004 * L, spin);
+  const flashCap = add(new THREE.CircleGeometry(0.016 * L, 16), core, 0, 0, 0.004 * L, spin);
+  void flashCap;
+  // the burst ring in front of the cone (the muzzle flash)
+  const flash = new THREE.Mesh(new THREE.RingGeometry(0.03 * L, 0.07 * L, 24), new THREE.MeshBasicMaterial({ color: '#bffcff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  flash.position.set(0, cy, bz + 0.045 * L); flash.visible = false; g.add(flash);
+  add(new THREE.BoxGeometry(0.03 * L, 0.045 * L, 0.05 * L), dark, 0, -0.005 * L, 0);
+  return { group: g, spin, flash, core, len: bz + 0.05 * L };
+}
+
+export interface SkateProp { group: THREE.Group; wheels: THREE.Mesh[]; glow: THREE.MeshStandardMaterial }
+/** a mag-skate: a gold-trimmed white chassis clamped under the shoe with four glowing sky-blue wheels */
+export function buildMagSkate(modelHeight: number): SkateProp {
+  const L = modelHeight;
+  const white = new THREE.MeshStandardMaterial({ color: '#f4f6fa', metalness: 0.3, roughness: 0.35 });
+  const gold = new THREE.MeshStandardMaterial({ color: '#d9a441', metalness: 0.85, roughness: 0.3 });
+  const glow = new THREE.MeshStandardMaterial({ color: '#c9fbff', emissive: new THREE.Color('#39d6ff'), emissiveIntensity: 2.2, roughness: 0.3 });
+  const g = new THREE.Group();
+  // the chassis wraps the sole: longer and wider than the shoe, so the wheels show front and back
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.078 * L, 0.022 * L, 0.2 * L), white); frame.position.set(0, 0.034 * L, 0.02 * L); g.add(frame);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.082 * L, 0.006 * L, 0.2 * L), gold); rail.position.set(0, 0.047 * L, 0.02 * L); g.add(rail);
+  for (const sx of [1, -1]) { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.004 * L, 0.01 * L, 0.18 * L), glow); strip.position.set(sx * 0.041 * L, 0.034 * L, 0.02 * L); g.add(strip); }
+  const wheels: THREE.Mesh[] = [];
+  const wg = new THREE.CylinderGeometry(0.024 * L, 0.024 * L, 0.022 * L, 18).rotateZ(Math.PI / 2);
+  for (let k = 0; k < 4; k++) { const w = new THREE.Mesh(wg, glow); w.position.set(0, 0.022 * L, -0.068 * L + k * 0.058 * L); g.add(w); wheels.push(w); }
+  return { group: g, wheels, glow };
+}

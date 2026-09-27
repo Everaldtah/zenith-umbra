@@ -78,4 +78,24 @@ for hid, (pk, kk) in FIX.items():
             box = (max(0, cx - tw // 2), max(0, y0 - pad), min(im.width, cx + tw // 2), min(im.height, y1 + pad))
             im = im.crop(box)
         save(im, f'img/key_{hid}.webp', 82); n += 1
+# Gantetsu (concept on Modal: modal_concept.py -> work/ow/gantetsu_keyart.png): key art framed on the figure, portrait
+# cropped round the head and shoulders like the rest of the roster
+GK = os.path.join(HERE, '..', 'work', 'ow', 'gantetsu_keyart.png')
+if os.path.exists(GK):
+    import numpy as np
+    im = Image.open(GK).convert('RGB')
+    a = np.asarray(im).astype(int); mask = np.abs(a - a[5, 5]).sum(2) > 60
+    ys, xs = np.where(mask)
+    x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
+    save(im.crop((max(0, x0 - 30), max(0, y0 - 30), min(im.width, x1 + 30), min(im.height, y1 + 30))), 'img/key_gantetsu.webp', 82)
+    hx = (x0 + x1) // 2 + int(0.035 * im.width); s = int(im.width * 0.46)
+    save(im.crop((hx - s // 2, max(0, y0 - 12), hx + s // 2, max(0, y0 - 12) + s)), 'img/portrait_gantetsu.webp', 85, (512, 512)); n += 2
 print('published', n)
+# Hibiki (Kaggle: assetgen/hibiki + hibikipose): key art from the anime key-visual pick, portrait from the model render
+HK = os.path.join(HERE, 'out', 'hibiki', 'img', 'key_hibiki_3.png')
+HM = os.path.join(HERE, 'out', 'hibikipose', 'img', 'model_hibiki_10.png')
+if os.path.exists(HK): save(Image.open(HK).convert('RGB'), 'img/key_hibiki.webp', 82); n += 1
+if os.path.exists(HM):
+    im = Image.open(HM).convert('RGB'); W, H = im.size
+    s = int(W * 0.37); cx = W // 2; y0 = 0
+    save(im.crop((cx - s // 2, y0, cx + s // 2, y0 + s)), 'img/portrait_hibiki.webp', 85, (512, 512)); n += 1

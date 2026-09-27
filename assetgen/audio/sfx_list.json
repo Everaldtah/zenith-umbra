@@ -1,0 +1,968 @@
+[
+ {
+  "id": "chaingun",
+  "prompt": "a single heavy rotary cannon round fired, deep punchy mechanical thump with a metallic clank, close",
+  "secs": 0.45,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "chaingun2",
+  "prompt": "a single sharp heavy machine gun round fired, bright crack with a metallic rattle, close",
+  "secs": 0.45,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "spinup",
+  "prompt": "the barrels of an electric rotary minigun spinning up fast, rising motor whirr",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "spindown",
+  "prompt": "rotary minigun barrels spinning down after firing, falling mechanical whirr with a rattle",
+  "secs": 1.1,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "cannon",
+  "prompt": "a big sci-fi energy cannon shot, deep boom with a sizzling energy whoosh",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "blaster",
+  "prompt": "a sci-fi laser pistol shot, sharp bright zap with a punchy low thump",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "shotgun",
+  "prompt": "a heavy combat shotgun blast, huge punchy boom with a metallic echo",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "sonic",
+  "prompt": "a punchy electronic bass blaster shot, a short deep synth pulse zap",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "star",
+  "prompt": "a magical crystal projectile launched, bright shimmering chime with a soft airy whoosh",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "talisman",
+  "prompt": "a paper charm thrown hard, quick papery whoosh with a small magic chime",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "katana",
+  "prompt": "a katana slash, a sharp metallic swish cutting the air",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "thunder",
+  "prompt": "an electric thunder strike, crackling lightning zap with a heavy boom",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "bow",
+  "prompt": "a powerful bow releasing an arrow, deep string twang and a fast whoosh",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "bowdraw",
+  "prompt": "a bow string drawn back slowly, creaking wood and rising string tension",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "note",
+  "prompt": "a haunting magical sung note fired as a projectile, eerie female choir shimmer",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "needle",
+  "prompt": "a small sharp needle dart fired, quick metallic whistle",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "kunai",
+  "prompt": "a throwing knife thrown fast, sharp metallic swish",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "fang",
+  "prompt": "a dark blade slash with a demonic whoosh",
+  "secs": 0.45,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "flamestart",
+  "prompt": "a gas burner igniting into a big flame whoosh",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "flame",
+  "prompt": "a flamethrower roaring continuously",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "punch",
+  "prompt": "a heavy punch landing on a body, deep thump",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "hammer",
+  "prompt": "a giant rocket hammer swinging, rocket thruster roar into a heavy whoosh",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "whiff",
+  "prompt": "a fast empty swing whooshing through the air",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "reload",
+  "prompt": "a futuristic gun reload, magazine sliding out and in with mechanical clicks",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "healbeam",
+  "prompt": "a soothing magical healing beam, warm humming shimmer, continuous",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "healbeam2",
+  "prompt": "a low pulsing dark magic energy beam humming, continuous",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "hit",
+  "prompt": "a crisp short hit confirmation tick, clean and satisfying",
+  "secs": 0.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "crit",
+  "prompt": "a bright metallic headshot ding, crisp ringing and satisfying",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "kill",
+  "prompt": "a satisfying video game reward chime, a bright two-note ding",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "impact_stone",
+  "prompt": "a bullet hitting stone, sharp crack with debris",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "impact_metal",
+  "prompt": "a bullet hitting sheet metal, sharp ricochet ping",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "impact_wood",
+  "prompt": "a bullet hitting a wooden plank, dull thwack with splinters",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "impact_body",
+  "prompt": "a bullet hitting armor on a body, dull thud with a metallic tick",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "boom",
+  "prompt": "a large explosion, deep boom with scattering debris",
+  "secs": 1.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "barrierup",
+  "prompt": "an energy shield powering up, rising electric hum",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "barrierhit",
+  "prompt": "an energy shield absorbing a bullet, electric hum ping",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "barrierbreak",
+  "prompt": "an energy shield shattering like glass with an electric burst",
+  "secs": 1.1,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "healhit",
+  "prompt": "a soft magical healing chime",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "healthpack",
+  "prompt": "a health pack picked up, bright rising sci-fi chime",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "down",
+  "prompt": "a person collapsing to the ground, body fall with gear rattling",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "mechdown",
+  "prompt": "a giant robot collapsing and exploding, huge metallic crash and explosion",
+  "secs": 2.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "botdown",
+  "prompt": "a small robot powering down, electronic whine with sparks",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "eject",
+  "prompt": "a pilot ejection seat firing, a rocket blast whoosh",
+  "secs": 1.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "ignite",
+  "prompt": "something catching fire suddenly, a burst of flames whoosh",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "burn",
+  "prompt": "fire crackling and burning steadily",
+  "secs": 1.5,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "step_stone",
+  "prompt": "a single footstep on stone pavement, boot, dry and close",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 6
+ },
+ {
+  "id": "step_wood",
+  "prompt": "a single footstep on a wooden floor, boot, dry and close",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 6
+ },
+ {
+  "id": "step_metal",
+  "prompt": "one footstep on a metal floor, metallic clank",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 6
+ },
+ {
+  "id": "step_heavy",
+  "prompt": "one heavy footstep of a giant on stone, deep thud",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "mechstep",
+  "prompt": "a giant robot footstep, heavy metallic stomp with hydraulic hiss",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "skate",
+  "prompt": "an inline skater pushing off, wheels rolling on pavement",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "skate_roll",
+  "prompt": "inline skates rolling smoothly on pavement, continuous",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "grind",
+  "prompt": "skates grinding along a metal rail, continuous metallic scraping",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "jump",
+  "prompt": "a quick jump off the ground, cloth rustle and gear jingle",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "land",
+  "prompt": "landing on the ground after a jump, thud with gear rattle",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "land_heavy",
+  "prompt": "landing hard after a long fall, heavy thud and scrape",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "mechjump",
+  "prompt": "a giant robot jumping with jet thrusters firing",
+  "secs": 1.0,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "mechland",
+  "prompt": "a giant robot landing heavily, huge metallic slam and rumble",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "doublejump",
+  "prompt": "a magical double jump, airy whoosh with an electric crackle",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "dash",
+  "prompt": "a fast dash, a sharp whoosh",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "flashstep",
+  "prompt": "a lightning fast teleport dash, electric crackle and whoosh",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "wind",
+  "prompt": "strong wind blowing past fast, whooshing gusts",
+  "secs": 2.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "wings",
+  "prompt": "large wings flapping once, heavy feathery whoosh",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "swoop",
+  "prompt": "a magical angelic swoop, fast airy whoosh with a rising chime",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "body_slam",
+  "prompt": "a person slamming into a wall, heavy body impact thud",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "pad",
+  "prompt": "a jump pad launching someone into the air, sci-fi boing with a whoosh",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "casing",
+  "prompt": "a brass bullet casing dropping on concrete, small metallic tinkle",
+  "secs": 0.35,
+  "kind": "event",
+  "take": 6
+ },
+ {
+  "id": "rocketfist",
+  "prompt": "a rocket-propelled fist launched, rocket roar and whoosh",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "anchorhit",
+  "prompt": "a heavy metal anchor hitting and grabbing, deep clang",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "sunburst",
+  "prompt": "a radiant burst of holy light, bright shimmering whoosh",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "ultcall",
+  "prompt": "a dramatic power surge, rising energy whoosh into a heavy hit",
+  "secs": 1.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "slam",
+  "prompt": "a massive ground slam impact, huge boom and rumbling debris",
+  "secs": 1.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "constellation",
+  "prompt": "magical starlight connecting, shimmering chimes rising",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "wish",
+  "prompt": "a magical protective bubble forming, warm shimmering hum",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "nova",
+  "prompt": "a heavenly choir swell with a burst of magical light",
+  "secs": 2.0,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "spiritstep",
+  "prompt": "a fast ghostly whoosh with a soft temple bell",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "seal",
+  "prompt": "a deep gong hit with a magical shimmer",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "sanctuary",
+  "prompt": "a sacred barrier rising, deep temple bells and a holy hum",
+  "secs": 1.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "parrystance",
+  "prompt": "a sword raised to parry, a metallic ring",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "parry",
+  "prompt": "a sword parry, bright metallic clang with sparks",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "thunderclap",
+  "prompt": "a colossal thunderclap, lightning crack and rolling thunder",
+  "secs": 1.6,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "chainlightning",
+  "prompt": "crackling electricity arcing and zapping between metal",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "sunhop",
+  "prompt": "a quick bounce jump with a bright magical twang",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "reveal",
+  "prompt": "a bright magical arrow shot with a ringing bell chime",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "arrowrain",
+  "prompt": "a rain of arrows falling from the sky, many whooshes",
+  "secs": 2.5,
+  "kind": "ambient",
+  "take": 4
+ },
+ {
+  "id": "arrowhit",
+  "prompt": "an arrow thudding into the ground",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "plating",
+  "prompt": "heavy metal armor plates clanking and locking into place",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "charge",
+  "prompt": "a giant robot charging forward, roaring engines and heavy stomps",
+  "secs": 1.1,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "pin",
+  "prompt": "a heavy body slammed against a wall, crunchy impact",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "lance",
+  "prompt": "a powerful dark energy spear launched, deep electric zap with a whoosh",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "singularity",
+  "prompt": "a black hole forming, deep sucking rumble and swirling wind",
+  "secs": 2.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "implode",
+  "prompt": "a black hole collapsing, huge implosion boom",
+  "secs": 1.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "silence",
+  "prompt": "a magical silencing scream wave, sharp high whine fading",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "bloodpact",
+  "prompt": "a dark blood magic spell, low eerie pulse",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "requiem",
+  "prompt": "a haunting gothic choir requiem swelling",
+  "secs": 2.2,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "strings",
+  "prompt": "magical puppet strings shooting out, taut twangs",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "yank",
+  "prompt": "a rope yanked hard, quick twang and whoosh",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "throw",
+  "prompt": "a quick whoosh of an object thrown hard through the air",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "hexburst",
+  "prompt": "a burst of dark cursed magic, distorted crackling zap",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "theater",
+  "prompt": "a creepy music box melody with eerie whispers",
+  "secs": 1.4,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "shadowstep",
+  "prompt": "a shadow teleport, dark whoosh with a hiss",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "veil",
+  "prompt": "going invisible, a soft dark shimmer fading",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "unveil",
+  "prompt": "a quick magical shimmer sparkle appearing",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "cut",
+  "prompt": "a fast blade cut, sharp slash",
+  "secs": 0.3,
+  "kind": "event",
+  "take": 4,
+  "hf": true
+ },
+ {
+  "id": "chainthrow",
+  "prompt": "a heavy chain thrown, rattling links flying",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "chainhit",
+  "prompt": "a chain wrapping around someone, clanking links",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "brand",
+  "prompt": "a burning brand pressed, sizzling flames and a dark boom",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "taiko",
+  "prompt": "two big taiko drum strikes, deep booming",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "taikobeat",
+  "prompt": "a single big taiko drum strike, deep boom",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "dohyo",
+  "prompt": "a ceremonial sumo ring ritual, two hand claps then a long deep drum roll",
+  "secs": 1.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "roar",
+  "prompt": "a huge stadium crowd cheering and roaring",
+  "secs": 2.2,
+  "kind": "ambient",
+  "take": 4
+ },
+ {
+  "id": "blessing",
+  "prompt": "a gentle holy blessing spell, warm chime with a soft rising shimmer",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "stitch",
+  "prompt": "a magic needle and thread stitching quickly, sharp zip with a twang",
+  "secs": 0.5,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "decoy",
+  "prompt": "a doll decoy bursting into cloth and stuffing with a puff of magic",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "track_heal",
+  "prompt": "a DJ record scratch transition into a mellow warm groove",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "track_speed",
+  "prompt": "a DJ record scratch transition into a fast energetic beat",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "amp",
+  "prompt": "a DJ volume boost, a rising filter sweep ending in a punchy bass hit",
+  "secs": 0.9,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "scratch",
+  "prompt": "a turntable record scratch blasted out with a deep bass whump",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "scratch_big",
+  "prompt": "a huge turntable record scratch blast with a massive bass whump and distortion",
+  "secs": 0.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "pumped",
+  "prompt": "a short DJ air horn",
+  "secs": 0.7,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "bassrise",
+  "prompt": "a rising white noise sweep riser getting louder, electronic music build up",
+  "secs": 1.0,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "bassdrop",
+  "prompt": "a massive electronic dance music bass drop impact, huge sub bass boom",
+  "secs": 1.8,
+  "kind": "event",
+  "take": 4
+ },
+ {
+  "id": "groove_heal",
+  "prompt": "a mellow lo-fi hip hop beat with a warm bassline and soft keys, 90 bpm",
+  "secs": 4.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "groove_speed",
+  "prompt": "an energetic drum and bass breakbeat with a driving bassline, 174 bpm",
+  "secs": 4.0,
+  "kind": "ambient",
+  "take": 4,
+  "loop": true
+ },
+ {
+  "id": "amb_amatsu",
+  "prompt": "a mountain shrine at dawn, gentle wind, wind chimes and distant birds",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_kurogane",
+  "prompt": "a rainy cyberpunk city street at night, steady rain, distant traffic and neon hum",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_hangar",
+  "prompt": "a large empty factory hall ambience, low machine hum and distant clanks, echoing",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_cathedral",
+  "prompt": "a dark gothic cathedral at night, howling wind and a distant bell",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_rift",
+  "prompt": "an eerie alien void, deep drones and faint whispers",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_hanabi",
+  "prompt": "a harbor festival at night, distant crowd, water lapping and fireworks far away",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_cloudstep",
+  "prompt": "high mountain terraces above the clouds, strong wind and birds",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_kagura",
+  "prompt": "a Japanese festival street, distant taiko drums and crowd chatter",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_training",
+  "prompt": "a quiet training facility, soft electronic hum",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ }
+]

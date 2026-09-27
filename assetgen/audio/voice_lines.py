@@ -1,0 +1,281 @@
+"""Every spoken line in ZENITH//UMBRA (desktop edition), per voice. All original writing.
+
+Keys are the stimuli the game's VoiceDirector (src/audio/Voice.ts) reacts to, after Overwatch's "play by sound" dialog
+system (GDC 2016): each stimulus has a category (critical / death / pain / exert / chatter) that decides priority, who
+hears it and how often. Ultimates have two lines: `ult` is what ENEMIES (and the caster) hear - the loud, iconic
+warning - and `ult_ally` is what the caster's team hears.
+
+Per line, the delivery drives Chatterbox: "calm" / "firm" / "shout" / "scream" / "effort" (exaggeration + cfg).
+Mech pilots speak for their frames: Tenkai-Oh uses Haruto's bank, Gorgoth uses Vorn's (radio-filtered in game).
+"""
+
+# Kokoro base voice (lang a = American, b = British), pitch shift in semitones applied to the reference before cloning,
+# and the reference read (neutral, ~10 s) that sets the character's timbre for Chatterbox.
+CAST = {
+    "haruto":   ("am_puck",    "a",  0.0, "Tenkai-Oh and I were built for mornings like this. Stay behind me, keep your head down, and let the sun do the talking."),
+    "mirei":    ("af_heart",   "a",  0.0, "The stars are still out there, even when the sky goes dark. Stay close to me. I'll sing you back every single time."),
+    "kaien":    ("bm_george",  "b", -1.0, "I kept the gate for nine long years. Breathe slowly, stand where the seals are warm, and nothing will cross this line."),
+    "raijin":   ("am_michael", "a",  0.0, "You want a duel? Fine. One blade, one strike, one winner. The storm already picked a side, and it isn't yours."),
+    "yuzu":     ("af_bella",   "a",  0.0, "Three hundred metres, moving target, crosswind from the left. Easy. Just give me one clean line of sight."),
+    "hibiki":   ("am_fenrir",  "a",  1.0, "Neo-Kurogane, you're live on the night frequency. Keep your volume up, keep your feet moving, and never miss the drop."),
+    "vorn":     ("bm_daniel",  "b", -2.0, "Discipline is the only weapon that never runs dry. I taught that boy everything. Today I teach him the last lesson."),
+    "nocturne": ("bf_emma",    "b", -0.5, "Hush now, darlings. Every song ends, and every singer falls silent. Mine simply lasts a little longer than yours."),
+    "hex":      ("bm_fable",   "b",  0.0, "Hold still, my dear. The stitches only hurt for a moment, and then you'll be perfect. Obedient. Forever mine."),
+    "kagemaru": ("am_echo",    "a", -0.5, "They gave the seal to him and left me the shadows. Fine. The shadows are everywhere. The seal is just paper."),
+    "enra":     ("am_onyx",    "a", -3.0, "A thousand years beneath the stone. A thousand years of listening to you little things scurry. Now I am awake."),
+    "gantetsu": ("am_santa",   "a", -1.5, "Ha! Listen to that crowd! Every ring in this city banned me, and still they come to hear the Iron Yokozuna roar!"),
+    "announcer": ("bf_isabella", "b", 0.0, "Welcome to the arena. Prepare for combat. The objective will unlock shortly. All combatants, stand by."),
+}
+
+# delivery -> Chatterbox (exaggeration, cfg_weight)
+DELIVERY = {"calm": (0.4, 0.5), "firm": (0.6, 0.45), "shout": (0.95, 0.3), "scream": (1.3, 0.25), "effort": (1.1, 0.3)}
+
+C, F, S, X, E = "calm", "firm", "shout", "scream", "effort"
+
+# shared efforts (per voice, same words; the delivery and the voice make them the character's own)
+def efforts(big=False):
+    return {
+        "pain": [("Ugh!", E), ("Agh!", E), ("Hngh!", E), ("Nngh!", E)],
+        "pain_big": [("Aaagh!", X), ("Gaaah!", X)],
+        "death": [("Aaaaagh...!", X), ("No... not like this...", X), ("Hhhhk... aaah...", X)],
+        "jump": [("Hup!", E), ("Hah!", E)],
+        "land": [("Oof!", E)] if not big else [("Hrrmph!", E)],
+        "burn": [("Hot, hot, hot!", S)],
+    }
+
+
+def common(low, thanks, respawn, ult_ready, attack, defend, push, contest, reload):
+    return {
+        "low_hp": [(low[0], S), (low[1], S)],
+        "thanks": [(thanks[0], F), (thanks[1], F)],
+        "respawn": [(respawn[0], F), (respawn[1], F)],
+        "ult_ready": [(ult_ready, F)],
+        "attack_point": [(attack, S)],
+        "defend_point": [(defend, S)],
+        "push": [(push, S)],
+        "contest": [(contest, S)],
+        "reload": [(reload, F)],
+    }
+
+
+LINES = {
+    "haruto": {
+        **efforts(), **common(("Tenkai-Oh's taking a beating, I need repairs!", "Hull's cracking, somebody heal me!"),
+                              ("Thanks, that's the stuff!", "Appreciate it!"), ("Tenkai-Oh, back on its feet!", "Round two. Let's go!"),
+                              "Tenkai-Oh's reactor is full. Say the word!", "Everyone on me, we're taking that point!",
+                              "Hold the point, nobody gets past the sun!", "Get that Mikoshi moving, I'll cover you!",
+                              "They're on the point, get in there!", "Reloading!"),
+        "select": [("Tenkai-Oh, rise with the sun!", S), ("Pilot Haruto Daimon, synchronised and ready!", F)],
+        "ult": [("Dawn Colossus... AWAKEN!", X)],
+        "ult_ally": [("Tenkai-Oh, full power! Stay behind me!", S)],
+        "a1": [("Charging in!", S), ("Out of my way!", S)],
+        "a2": [("Solar Shatter!", S)],
+        "alt": [("Shield up!", F), ("Behind the bulwark!", F)],
+        "kill": [("Got one!", S), ("That's how it's done!", S), ("Down you go!", S)],
+        "kill_rival": [("You taught me never to hold back, Vorn. I listened.", S)],
+        "eject": [("Tenkai-Oh's down, but I'm not done yet!", X)],
+        "ult_pilot": [("Tenkai-Oh, come to me!", X)],
+        "ult_pilot_ally": [("Reactor's back online! Tenkai-Oh, drop in!", S)],
+    },
+    "mirei": {
+        **efforts(), **common(("I need healing, anyone!", "I can't keep singing like this, help me!"),
+                              ("Thank you, truly.", "You're a star."), ("Back among the stars.", "I'm still singing!"),
+                              "My requiem is ready. Say when.", "Let's take the point together!",
+                              "Stay on the point, I've got you all!", "Move the Mikoshi, I'll keep you standing!",
+                              "Contest the point, I'm right behind you!", "Just a moment!"),
+        "select": [("The stars are listening.", C), ("Stay close. I'll keep you shining.", C)],
+        "ult": [("Let the stars sing!", X)],
+        "ult_ally": [("Rise, all of you! The stars aren't finished with you!", S)],
+        "a1": [("Linked!", F), ("I've got your back!", F)],
+        "a2": [("Make a wish!", F)],
+        "swoop": [("I've got you!", S), ("Hold on, I'm coming!", S), ("On my way!", S)],
+        "revive": [("Not yet. Come back to us.", F)],
+        "kill": [("Rest now.", C), ("I'm sorry.", C), ("Go back to the dark.", F)],
+        "kill_rival": [("I learned the song, teacher. You forgot it.", F)],
+    },
+    "kaien": {
+        **efforts(), **common(("I am wounded. Healing, please.", "My seals are fading, I need aid!"),
+                              ("My thanks.", "Gratitude, friend."), ("The gate still stands.", "I return."),
+                              "The sanctuary is ready.", "Advance. The point is ours to take.",
+                              "Hold this ground. Nothing crosses.", "Carry the Mikoshi. I will ward the way.",
+                              "The point is contested. Stand on it!", "Replenishing talismans."),
+        "select": [("The gate is kept.", C), ("Walk in peace, or not at all.", C)],
+        "ult": [("Ten thousand seals. None shall pass.", S)],
+        "ult_ally": [("Stand within the sanctuary!", S)],
+        "a1": [("The spirit walks.", F)],
+        "a2": [("Sealed.", F), ("Warded.", F)],
+        "kill": [("Be at peace.", C), ("Your path ends here.", F), ("Rest.", C)],
+        "kill_rival": [("Come home, little brother.", F)],
+    },
+    "raijin": {
+        **efforts(), **common(("I need a patch-up, now!", "Getting cut to ribbons here, heal me!"),
+                              ("Thanks. I owe you one.", "Nice. I feel sharp again."), ("Miss me?", "The storm's back."),
+                              "My blade is humming. Ultimate ready.", "Let's cut through them and take the point!",
+                              "Hold the point, I'll handle the fancy ones!", "Push the Mikoshi, I'm on flank!",
+                              "They're on the point, go, go!", "Reloading... not that I need it."),
+        "select": [("One blade. One strike.", F), ("The storm picked a side.", F)],
+        "ult": [("Thunder JUDGES YOU!", X)],
+        "ult_ally": [("The storm's on our side! Push in!", S)],
+        "a1": [("Too slow!", S), ("Blink and you miss it!", S)],
+        "a2": [("Go on, hit me!", S)],
+        "kill": [("Next!", S), ("Outclassed.", F), ("Stay down.", F)],
+        "kill_rival": [("That's for my district, oni.", S)],
+    },
+    "yuzu": {
+        **efforts(), **common(("I'm hit bad, need healing!", "Someone patch me up, I can't aim like this!"),
+                              ("Thanks! Back in the fight!", "Perfect, thank you!"), ("Top of the class, back on the field.", "Round two, fresh quiver!"),
+                              "A hundred suns, locked and loaded!", "Moving up, taking the point!",
+                              "Defend the point, I've got overwatch!", "Keep the Mikoshi moving, I'll pick them off!",
+                              "Enemy on the point, clear them!", "Nocking fresh arrows!"),
+        "select": [("One clean line of sight. That's all I need.", F), ("Class is in session.", F)],
+        "ult": [("A hundred suns! Nowhere to hide!", X)],
+        "ult_ally": [("Heads down, suns incoming!", S)],
+        "a1": [("Hup!", E)],
+        "a2": [("I see you!", S), ("Revealed!", S)],
+        "kill": [("Bullseye!", S), ("Clean shot.", F), ("Top of the class.", F)],
+        "kill_rival": [("Give my brother back!", X)],
+    },
+    "hibiki": {
+        **efforts(), **common(("My mix is fading, need healing!", "Losing the beat here, heal me up!"),
+                              ("Aw, thanks! You're a legend!", "That's what I'm talking about!"), ("And we're back on the decks!", "Back on air, Neo-Kurogane!"),
+                              "Bass drop is loaded. Just say when!", "Let's crash that point, everybody move!",
+                              "Hold the point! I'll keep the groove going!", "Push the Mikoshi, I'll keep you rolling!",
+                              "They're on our stage! Get on the point!", "Swapping records!"),
+        "select": [("Neo-Kurogane, you're live with Hibiki!", S), ("Let's turn this city up!", S)],
+        "ult": [("Here comes the drop!", X)],
+        "ult_ally": [("Everybody close! Bass drop incoming!", S)],
+        "heal_track": [("Healing groove, coming up!", F), ("Switching to the healing track!", F)],
+        "speed_track": [("Tempo up, let's move!", S), ("Speeding it up!", S)],
+        "a2": [("Turn it up!", S), ("Max volume!", S)],
+        "alt": [("Back it up!", S), ("Scratch that!", S)],
+        "grind": [("Grinding!", S), ("Woo! Riding the wall!", S)],
+        "kill": [("Off beat!", S), ("That's a mic drop.", F), ("Encore? Nah.", F)],
+        "kill_rival": [("Your rhythm's all wrong, big guy!", S)],
+    },
+    "vorn": {
+        **efforts(big=True), **common(("Gorgoth's hull is failing. Repair it.", "I require support. Now."),
+                                      ("Adequate.", "Acknowledged."), ("Gorgoth rises again.", "The Syndicate endures."),
+                                      "The singularity is primed.", "Take the point. Crush anything standing on it.",
+                                      "Hold. No retreat.", "Drive the Mikoshi forward. Leave nothing standing.",
+                                      "They dare stand on our point. Remove them.", "Reloading."),
+        "select": [("Discipline never runs dry.", F), ("Gorgoth, awaken.", F)],
+        "ult": [("Kneel before the Eclipse.", S)],
+        "ult_ally": [("Drive them together. The singularity comes.", S)],
+        "a1": [("Nowhere to run.", F)],
+        "a2": [("Pierce.", F)],
+        "alt": [("Plating.", F)],
+        "kill": [("Weak.", F), ("Remember this lesson.", F), ("Dismissed.", F)],
+        "kill_rival": [("I taught you better, Haruto.", F)],
+        "eject": [("Gorgoth has fallen. I have not!", X)],
+        "ult_pilot": [("Gorgoth, to me!", X)],
+        "ult_pilot_ally": [("Gorgoth returns. Clear the landing zone.", S)],
+    },
+    "nocturne": {
+        **efforts(), **common(("Someone attend to me. At once!", "My voice is breaking, darlings, heal me!"),
+                              ("How thoughtful.", "You may continue."), ("Did you miss me, darlings?", "The diva returns."),
+                              "My requiem awaits its audience.", "Take the stage, darlings. The point is ours.",
+                              "Hold the stage. No one steals my spotlight.", "Carry the Mikoshi, and do try to keep up.",
+                              "Uninvited guests on the point. Remove them.", "A moment to breathe."),
+        "select": [("Hush now, darlings.", C), ("The Crimson Moon is listening.", C)],
+        "ult": [("Hear my requiem, darlings!", X)],
+        "ult_ally": [("Sing with me, my children!", S)],
+        "a1": [("Hush.", F), ("Silence.", F)],
+        "a2": [("A pact in blood.", F)],
+        "kill": [("Such a short song.", C), ("Encore? No.", C), ("Silence suits you.", C)],
+        "kill_rival": [("You still sing flat, little bird.", F)],
+    },
+    "hex": {
+        **efforts(), **common(("My stitches are coming loose! Mend me!", "Someone fix me, I'm unravelling!"),
+                              ("How very kind.", "Mmm. Better."), ("Did you think a doll could break?", "Stitched and whole again."),
+                              "The theater is ready for its performance.", "The point, my dolls. Take it.",
+                              "Hold the point. Let them come to the strings.", "Push the Mikoshi, my puppets. Dance for me.",
+                              "Intruders on the point. Let's play with them.", "Threading the needle."),
+        "select": [("Hold still, my dear.", C), ("Let's play dolls.", C)],
+        "ult": [("Curtain up! Dance, my dolls!", X)],
+        "ult_ally": [("The theater opens. Watch them dance.", S)],
+        "a1": [("Strings attached.", F)],
+        "a2": [("Wither.", F), ("Hexed.", F)],
+        "kill": [("Another doll for the collection.", C), ("Stitched shut.", C), ("Perfect. Still.", C)],
+        "kill_rival": [("Your brother sends his regards.", F)],
+    },
+    "kagemaru": {
+        **efforts(), **common(("I'm bleeding out here. Heal me.", "Need healing. Now."),
+                              ("Hmph. Thanks.", "Fine. I owe you."), ("The shadows spat me back out.", "Again."),
+                              "A thousand cuts are ready.", "I'll cut a path. Take the point.",
+                              "Hold the point. I'll hunt anyone who comes.", "Push the Mikoshi. I'll take care of their backline.",
+                              "Enemy on the point. Deal with it.", "Sharpening."),
+        "select": [("The shadows are everywhere.", C), ("Seals are just paper.", C)],
+        "ult": [("A thousand cuts. Count them.", S)],
+        "ult_ally": [("Blind them. I'll do the rest.", F)],
+        "a1": [("Behind you.", C)],
+        "a2": [("Into the veil.", C)],
+        "kill": [("Too slow.", C), ("Seals mean nothing.", F), ("Gone.", C)],
+        "kill_rival": [("Where's your seal now, brother?", S)],
+    },
+    "enra": {
+        **efforts(big=True), **common(("The oni bleeds! Feed me!", "HEAL ME, or burn with me!"),
+                                      ("Hah. Good.", "More!"), ("You cannot seal me twice!", "The oni returns!"),
+                                      "The Asura hungers. Unleash it?", "Take the point! Burn everything on it!",
+                                      "This point is my hunting ground!", "Drag the Mikoshi forward, or I drag you!",
+                                      "Prey on the point! Crush them!", "Reloading my fury!"),
+        "select": [("A thousand years, and I am AWAKE!", S), ("Who wants to burn first?", S)],
+        "ult": [("BURN! THE ASURA WAKES!", X)],
+        "ult_ally": [("Stand back! The oni is hungry!", S)],
+        "a1": [("COME HERE!", X)],
+        "a2": [("Branded!", S)],
+        "kill": [("Ha! Kindling.", S), ("Weak!", S), ("Ashes!", S)],
+        "kill_rival": [("Your mother's blade was sharper, boy.", S)],
+    },
+    "gantetsu": {
+        **efforts(big=True), **common(("Even a champion needs a doctor! Heal me!", "The crowd's worried, patch me up!"),
+                                      ("Ha! You're in my corner now!", "That's the spirit!"), ("The champion returns to the ring!", "Round two! The crowd wants more!"),
+                                      "The grand dohyo is ready! Who wants a show?", "Into the ring, everybody! Take the point!",
+                                      "Hold the ring! Nobody pushes us out!", "Heave! Push the Mikoshi, festival style!",
+                                      "They're in our ring! Throw them out!", "Hot barrels, fresh drums!"),
+        "select": [("The Iron Yokozuna has arrived!", S), ("Listen to that crowd!", S)],
+        "ult": [("Into the ring! Nobody leaves!", X)],
+        "ult_ally": [("Grand dohyo! Let's give them a show!", S)],
+        "a1": [("Hakkeyoi!", X), ("Charge!", S)],
+        "a2": [("Feel the drums!", S)],
+        "kill": [("Out of the ring!", S), ("The crowd goes wild!", S), ("Ha! Next challenger!", S)],
+        "kill_rival": [("Big machine, bigger fall!", S)],
+    },
+    "announcer": {
+        "match_start": [("Prepare for combat.", F)],
+        "point_open": [("The objective is now open.", F)],
+        "we_capture": [("We are capturing the objective.", F)],
+        "they_capture": [("The enemy is capturing the objective.", F)],
+        "point_taken": [("Objective secured.", F)],
+        "point_lost": [("We have lost the objective.", F)],
+        "overtime": [("Overtime!", S)],
+        "round_won": [("Round won.", F)],
+        "round_lost": [("Round lost.", F)],
+        "round_2": [("Round two.", F)],
+        "round_3": [("Final round.", F)],
+        "victory": [("Victory!", S)],
+        "defeat": [("Defeat.", F)],
+        "float_moving": [("The Mikoshi is moving.", F)],
+        "float_enemy": [("The enemy is pushing the Mikoshi.", F)],
+        "float_contested": [("The Mikoshi is contested.", F)],
+        "float_unlock": [("The Mikoshi rises. Push it through the enemy gate.", F)],
+        "thirty": [("Thirty seconds remaining.", F)],
+        "count_3": [("Three.", F)], "count_2": [("Two.", F)], "count_1": [("One.", F)],
+    },
+}
+
+# Tenkai-Oh and Gorgoth speak through their pilots
+BANK_OF = {"tenkai": "haruto", "gorgoth": "vorn"}
+
+
+def jobs():
+    """(voice, key, index, text, delivery) for every line."""
+    out = []
+    for v, keys in LINES.items():
+        for k, lines in keys.items():
+            for i, (text, d) in enumerate(lines):
+                out.append((v, k, i, text, d))
+    return out
+
+
+if __name__ == "__main__":
+    j = jobs(); print(len(j), "lines,", len(LINES), "voices")

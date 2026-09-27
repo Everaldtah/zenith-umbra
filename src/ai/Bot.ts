@@ -138,6 +138,7 @@ export class Bot {
     if (a.def.id === 'tenkai') return 9;
     if (a.def.id === 'yuzu') return 26;
     if (a.def.id === 'kagemaru') return 11;
+    if (a.def.id === 'hibiki') return 10;          // inside his team's 12m aura, close enough to scratch divers off them
     return 15;
   }
 
@@ -198,7 +199,7 @@ export class Bot {
       const want = !!tg && tg.alive && up > 2.2 && near < 9 && a.flight > 12 && (a.flying || a.flight > 55);
       i.jumpHeld = want ? up > 0.8 : i.jump;
       if (want && a.grounded) i.jump = true;
-    } else i.jumpHeld = i.jump;
+    } else i.jumpHeld = i.jump || t < (a.sv.botGrind ?? 0);
     // unstick
     if (t - this.stuck.t > 1.2) {
       const moved = Math.hypot(a.pos.x - this.stuck.x, a.pos.z - this.stuck.z);
@@ -447,6 +448,28 @@ export class Bot {
         if (tg && d > 16 && rdy('veil') && !a.has('stealth', t)) { this.castAt('a2'); break; }
         if (tg && d > 5 && d < 15 && rdy('shadowstep') && vis(tg)) { this.castAt('a1', tg.pos); break; }
         if (ultReady && (near(a.pos, 14, foes).length >= 2 || (tg && tg.health < 130 && d < 14))) this.castAt('ult');
+        break;
+      }
+      case 'hibiki': {
+        // the track: heal when anyone near is hurt, tempo when the team is healthy and on the move (or chasing / escaping)
+        const inAura = allies.filter(x => dist3(x.pos, a.pos) < 12);
+        const hurt = inAura.filter(x => x.health / x.maxHp < 0.7);
+        const wantHeal = hurt.length > 0 || a.health / a.maxHp < 0.6;
+        if (rdy('crossmix') && (wantHeal ? a.sv.track === 1 : a.sv.track !== 1 && (!tg || d > 18) && inAura.length >= 2)) { this.castAt('a1'); break; }
+        // Max Volume: a burst of healing when several are low, or a sprint when the whole team is pushing in
+        if (rdy('maxvolume') && ((!a.sv.track && hurt.filter(x => x.health / x.maxHp < 0.5).length >= 2) || (a.sv.track === 1 && tg && d < 16 && inAura.length >= 3))) { this.castAt('a2'); break; }
+        // Scratch Wave: knock divers off him and his healers, or off a ledge
+        const diver = foes.find(x => dist3(x.pos, a.pos) < 5.5 && vis(x));
+        if (rdy('scratch') && diver) { this.castAt('alt', diver.center); break; }
+        // Bass Drop: the team is taking a beating together, or an enemy ultimate just went up close by
+        const enemyUlt = foes.some(x => t - x.anim.castAt < 1.5 && x.anim.castId === x.def.ult.id && dist3(x.pos, a.pos) < 25);
+        if (ultReady && (near(a.pos, 25, allies).filter(x => x.health / x.maxHp < 0.55).length >= 2 || (enemyUlt && near(a.pos, 25, allies).length >= 2))) { this.castAt('ult'); break; }
+        // Mag-Grind: moving between fights with a wall alongside, jump on it and ride
+        if (!tg && a.grounded && Math.hypot(a.vel.x, a.vel.z) > 4 && t > (a.sv.botGrind ?? 0) + 3 && Math.random() < 0.05) {
+          const hs = Math.hypot(a.vel.x, a.vel.z), vx = a.vel.x / hs, vz = a.vel.z / hs;
+          const wall = [[-vz, vx], [vz, -vx]].some(([x, z]) => { const h = w.level.ray({ x: a.pos.x, y: a.pos.y + 1, z: a.pos.z }, { x, y: 0, z }, 1.6); return h && Math.abs(h.ny) < 0.3; });
+          if (wall) { a.input.jump = true; a.sv.botGrind = t + 1.2 + Math.random() * 1.5; }
+        }
         break;
       }
       case 'gantetsu': {

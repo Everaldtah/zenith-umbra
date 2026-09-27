@@ -2,14 +2,15 @@
 // site stays light and the full game stays a download. The desktop packager (desktop/build.mjs) runs `vite build`
 // itself and keeps everything.
 //   - anim/            the clip library and first-person clips (the web edition animates procedurally)
-//   - Gantetsu         (desktop roster)
+//   - sfx/             the recorded sound bank and voice lines (the web edition synthesises its sounds)
+//   - Gantetsu, Hibiki (desktop roster)
 //   - the new maps     props, skies, textures, key art for Hanabi Harbor, Cloudstep Terraces, Kagura Avenue
 import fs from 'node:fs';
 import path from 'node:path';
 
 const DIST = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'dist');
 const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura'];
-const FULL_HEROES = ['gantetsu'];
+const FULL_HEROES = ['gantetsu', 'hibiki'];
 const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_' };
 
 let bytes = 0, files = 0;
@@ -22,6 +23,7 @@ const rm = p => {
 const each = (dir, test) => { const d = path.join(DIST, dir); if (fs.existsSync(d)) for (const f of fs.readdirSync(d)) if (test(f)) rm(path.join(d, f)); };
 
 rm(path.join(DIST, 'anim'));
+rm(path.join(DIST, 'sfx'));
 each('models', f => FULL_HEROES.some(h => f.startsWith(h + '.') || f.startsWith(h + '_')) || Object.values(PROP_PREFIX).some(p => f.startsWith(p)));
 each('env', f => FULL_MAPS.some(m => f.includes(`_${m}`)));
 each('img', f => FULL_MAPS.some(m => f === `map_${m}.webp`) || FULL_HEROES.some(h => f.includes(h)));

@@ -31,7 +31,7 @@ export const PACK = { small: { hp: 75, respawn: 10 }, big: { hp: 250, respawn: 1
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
-  | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; side?: number; actor?: Actor; target?: Actor }
+  | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; side?: number; actor?: Actor; target?: Actor; mat?: string; n?: V3 }
   | { t: 'dmg'; src: Actor | null; tgt: Actor; amt: number; crit: boolean; heal?: boolean; pos: V3 }
   | { t: 'kill'; src: Actor | null; tgt: Actor }
   | { t: 'demech'; src: Actor | null; tgt: Actor }
@@ -637,6 +637,8 @@ export class World {
     if (per('hot') && a.src.hot) this.heal(a.src.hot, a, (a.sv.hot ?? 0) * dt, true);
     if (per('burning')) this.damage(a.src.burning ?? null, a, 16 * dt, { kind: 'dot', noLifesteal: true });
     if (a.def.id === 'gantetsu') { const s = a.shields.find(x => x.kind === 'roar'); if (s && t - (a.sv.roarAt ?? 0) > 2) s.amt -= 12 * dt; }
+    // Bass Drop's temporary health holds for a beat, then fades out over 6s
+    { const s = a.shields.find(x => x.kind === 'bassdrop'); if (s && t - (a.sv.bassAt ?? 0) > 0.8) s.amt -= 750 / 6 * dt; }
     if (per('linked') && a.src.linked) this.heal(a.src.linked, a, 25 * dt, true);
     if (a.def.id === 'enra' && t - a.lastDamagedAt > 3 && a.hp < a.def.hp) a.hp = Math.min(a.def.hp, a.hp + 12 * dt);
     if (a.isRobot && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
@@ -729,7 +731,7 @@ export class World {
         }
       }
       // Mirei - Starwing Swoop: the swoop drives her velocity this step (flight, steering and gravity sit it out)
-      const swooping = this.swoopStep(a, dt);
+      const swooping = this.swoopStep(a, dt) || this.grindStep(a, dt, spd, rooted);
       // flight
       const canFly = (d.frame === 'flyer' || d.frame === 'drone' || !!d.jets) && !a.has('grounded', t) && !rooted && !swooping;
       if (d.frame === 'drone') a.flying = true;
@@ -835,6 +837,72 @@ export class World {
    * up as she goes; SPACE mid-swoop slingshots her onward with the swoop's momentum, CTRL launches her straight up.
    * Weapons and the heal beam keep working throughout. Returns true while the swoop owns her velocity this step.
    */
+  /**
+   * Hibiki - Mag-Grind (wall ride): airborne with SPACE held beside a wall, he locks onto it and grinds along at +30%
+   * speed without falling. Releasing SPACE kicks him off the wall (up and away); the wall ending, landing, a knockback
+   * or pushing away from the wall just drops him off. Grinding charges his empowered Scratch Wave (abilities.ts).
+   */
+  private grindStep(a: Actor, dt: number, spd: number, rooted: boolean): boolean {
+    const t = this.time, L = this.level, inp = a.input;
+    if (a.def.id !== 'hibiki') return false;
+    const on = a.has('grinding', t);
+    const off = (kick: boolean) => {
+      a.clear('grinding'); a.sv.grindCd = t + 0.3;
+      if (kick) {
+        a.vel.x += (a.sv.grindNx ?? 0) * 5.5; a.vel.z += (a.sv.grindNz ?? 0) * 5.5; a.vel.y = 6.2;
+        a.anim.jumpAt = t; this.sfx('jump', a.pos, a); this.fx('doublejump', a.pos, { color: a.def.glow });
+      }
+      return false;
+    };
+    if (a.grounded || rooted || a.forced || a.has('stun', t)) return on ? off(false) : false;
+    if (!inp.jumpHeld) return on ? off(true) : false;
+    const y = a.pos.y + a.height * 0.5, reach = a.radius + 0.6;
+    const probe = (nx: number, nz: number) => {
+      const h = L.ray({ x: a.pos.x, y, z: a.pos.z }, { x: nx, y: 0, z: nz }, reach);
+      return h && Math.abs(h.ny) < 0.35 ? h : null;
+    };
+    const hs = Math.hypot(a.vel.x, a.vel.z);
+    if (!on) {
+      // latch: some air under him, moving, a vertical wall at his side (or ahead of him)
+      if (t < (a.sv.grindCd ?? 0) || hs < 1.5 || a.pos.y - L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.2) < 0.5) return false;
+      const vx = a.vel.x / hs, vz = a.vel.z / hs;
+      let best: { t: number; nx: number; nz: number } | null = null;
+      for (const [dx, dz] of [[-vz, vx], [vz, -vx], [vx * 0.7 - vz * 0.7, vz * 0.7 + vx * 0.7], [vx * 0.7 + vz * 0.7, vz * 0.7 - vx * 0.7]]) {
+        const l = Math.hypot(dx, dz), h = probe(dx / l, dz / l);
+        if (h && (!best || h.t < best.t)) { const nl = Math.hypot(h.nx, h.nz) || 1; best = { t: h.t, nx: h.nx / nl, nz: h.nz / nl }; }
+      }
+      if (!best) return false;
+      a.sv.grindNx = best.nx; a.sv.grindNz = best.nz;
+      // ride in the direction he was already travelling along the wall
+      const along = a.vel.x * -best.nz + a.vel.z * best.nx;
+      a.sv.grindDir = along >= 0 ? 1 : -1;
+      this.sfx('grindstart', a.pos, a);
+    } else {
+      // still a wall there? (corners and wall ends drop him off with his momentum)
+      const h = probe(-(a.sv.grindNx ?? 0), -(a.sv.grindNz ?? 0));
+      if (!h) return off(false);
+      const nl = Math.hypot(h.nx, h.nz) || 1; a.sv.grindNx = h.nx / nl; a.sv.grindNz = h.nz / nl;
+    }
+    const nx = a.sv.grindNx, nz = a.sv.grindNz, dir = a.sv.grindDir ?? 1;
+    // steering: pushing away from the wall lets go; pushing back along it reverses the ride
+    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), rx = -Math.cos(a.yaw), rz = Math.sin(a.yaw);
+    const ix = fx * inp.mz + rx * inp.mx, iz = fz * inp.mz + rz * inp.mx;
+    if (ix * nx + iz * nz > 0.75) return off(false);
+    const tx = -nz * dir, tz = nx * dir;
+    if (ix * tx + iz * tz < -0.7) a.sv.grindDir = -dir;
+    const sp = spd * 1.3, cur = a.vel.x * tx + a.vel.z * tz;
+    const v = cur + (sp - cur) * Math.min(1, dt * 6);
+    // a light pull toward the wall keeps the skates on it
+    const gap = (probe(-nx, -nz)?.t ?? reach) - a.radius;
+    const pull = Math.max(0, gap - 0.05) * 6;
+    a.vel.x = tx * v - nx * pull; a.vel.z = tz * v - nz * pull;
+    a.vel.y += (0 - a.vel.y) * Math.min(1, dt * 12);
+    a.set('grinding', t, 0.15); a.flying = false;
+    // which side the wall is on relative to where he's facing (the animator leans away from it)
+    a.sv.grindSide = (nx * rx + nz * rz) > 0 ? -1 : 1;
+    return true;
+  }
+
   private swoopStep(a: Actor, dt: number): boolean {
     const t = this.time;
     if (a.def.id !== 'mirei' || !this.full) return false;
@@ -893,6 +961,13 @@ export class World {
       if (a.pos.y < z.y - 2 || a.pos.y > z.y + RING_H) continue;
       const dx = a.pos.x - z.x, dz = a.pos.z - z.z, d = Math.hypot(dx, dz) || 1e-3;
       const inside = (z.data?.trapped as number[] | undefined)?.includes(a.id);
+      if (inside && a.has('tempo', this.time) && (a.sv.speed ?? 1) >= 1.5) {
+        // COUNTER (Hibiki): an amped Tempo Rush carries trapped heroes straight through the rope wall
+        z.data.trapped = (z.data.trapped as number[]).filter(id => id !== a.id);
+        const h = this.actors.find(x => x.def.id === 'hibiki' && x.team === a.team && x.alive);
+        if (h && !z.data.broke) { z.data.broke = 1; this.emit({ t: 'counter', actor: h, target: z.owner, text: 'Tempo Rush breaks out of the Grand Dohyo' }); }
+        continue;
+      }
       const lim = inside ? z.r - a.radius : z.r + a.radius;
       if (inside ? d <= lim : d >= lim) continue;
       a.pos.x = z.x + dx / d * lim; a.pos.z = z.z + dz / d * lim;

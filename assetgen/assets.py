@@ -248,3 +248,22 @@ MIREI_V2 = [
      "white armored boots and gauntlets, " + REAL_STYLE, REAL_NEG, 832, 1216, 4),
 ]
 def jobs5(): return MIREI_V2
+
+
+# ---- Hibiki, The Street Frequency: an original support - a Black street DJ from Neo-Kurogane on glowing mag-skates.
+# Model renders keep EMPTY hands (his Subwoofer Blaster is a procedural prop fitted to the right forearm in game).
+HIBIKI_DESIGN = ("energetic street DJ hero named Hibiki, young adult Black man with dark brown skin, friendly confident grin, "
+                 "short twisted locs with gold-dyed tips tied up high on his head, large white over-ear DJ headphones with glowing sky blue "
+                 "speaker rings resting around his neck, cropped white and gold tech bomber jacket with sky blue equalizer bar stripes on the "
+                 "sleeves, fitted black shirt, gold chain with a small vinyl record pendant, black athletic joggers with white knee guards, "
+                 "chunky white and gold inline skate boots with glowing sky blue light-up wheels, a compact glowing turntable speaker rig "
+                 "strapped to his back, black fingerless gloves")
+HIBIKI = [
+    ("model_hibiki", "model", HIBIKI_DESIGN + ", empty open hands, " + REAL_STYLE,
+     REAL_NEG + ", weapon, gun, holding an object, microphone, bare feet, sneakers without wheels", 832, 1216, 6),
+    ("key_hibiki", "keyart", "anime key visual illustration, a Black street DJ hero named Hibiki grinding along a neon-lit wall on glowing "
+     "inline skates at night in a rainy cyberpunk Japanese city, gold-tipped twisted locs, white headphones with glowing sky blue rings, "
+     "white and gold tech bomber jacket, a sonic blaster with a glowing speaker cone on his right forearm, rings of sound waves and "
+     "equalizer light bars around him, dynamic action pose, big grin, " + KEY_STYLE, NEG_ART, 832, 1216, 4),
+]
+def jobs6(): return HIBIKI

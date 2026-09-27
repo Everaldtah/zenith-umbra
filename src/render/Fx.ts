@@ -4,10 +4,12 @@ import * as THREE from 'three';
 import { RING_H, type GameEvent, type Proj, type World, type Zone } from '../game/World';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from '../game/Actor';
+import { WeaponFx } from './WeaponFx';
+import { FULL } from '../edition';
 
 const FXCOL: Record<string, string> = {
   sun: '#ffd76a', star: '#bfe8ff', talisman: '#ffe28a', bolt: '#8ad8ff', void: '#ff2244', blood: '#ff2d55', hex: '#c77dff',
-  shadow: '#9d7bff', flame: '#ff6a2a', fist: '#ffd76a', reveal: '#fff2b0', hexbomb: '#c77dff', chain: '#ff6a2a',
+  shadow: '#9d7bff', flame: '#ff6a2a', fist: '#ffd76a', reveal: '#fff2b0', hexbomb: '#c77dff', chain: '#ff6a2a', sonic: '#7dfcff',
 };
 
 class Particles {
@@ -81,9 +83,15 @@ export class Fx {
   shake = 0;
   private sphere = new THREE.SphereGeometry(1, 12, 8);
 
+  /** desktop edition: travelling tracers, muzzle flashes, sparks, scorch marks, brass (WeaponFx.ts) */
+  wfx: WeaponFx | null = null;
+  /** Game: where the local player's rounds leave the gun in first person (the viewmodel's muzzle, not the body's) */
+  muzzleFor: ((a: Actor, from: V3) => V3) | null = null;
+
   constructor(scene: THREE.Scene, cap = 6000) {
     this.parts = new Particles(cap);
     this.group.add(this.parts.points);
+    if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); }
     this.flash = new THREE.PointLight('#ffffff', 0, 18, 2);
     this.group.add(this.flash);
     scene.add(this.group);
@@ -119,11 +127,20 @@ export class Fx {
     const lod = near > 60 ? 0.35 : near > 30 ? 0.7 : 1;
     const n = (k: number) => Math.max(1, Math.round(k * lod));
     switch (e.kind) {
-      case 'hit': P.emit(p, n(8), c, { speed: 5, life: 0.25, size: 0.18 }); break;
-      case 'impact': P.emit(p, n(6), c, { speed: 3, life: 0.3, size: 0.15, grav: 6 }); break;
+      case 'hit': P.emit(p, n(8), c, { speed: 5, life: 0.25, size: 0.18 }); if (this.wfx) this.wfx.impact(p, undefined, e.color ?? '#fff', now); break;
+      case 'impact': if (this.wfx) this.wfx.impact(p, e.n, e.color ?? '#fff', now); else P.emit(p, n(6), c, { speed: 3, life: 0.3, size: 0.15, grav: 6 }); break;
       case 'healhit': P.emit(p, n(10), new THREE.Color('#9dffb0'), { speed: 2, life: 0.6, size: 0.2, up: 2 }); break;
       case 'burst': P.emit(p, n(30), c, { speed: 7, life: 0.45, size: 0.35 }); this.ring(p, (e.r ?? 2) * 1.2, e.color ?? '#fff', now, 0.35, false); this.light(p, e.color ?? '#fff', 25, now); this.shake = Math.max(this.shake, 0.12 / (1 + near / 10)); break;
-      case 'tracer': if (e.to) this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.025); break;
+      case 'tracer': if (e.to) {
+        if (!this.wfx) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.025); break; }
+        const a = e.actor, from = a && this.muzzleFor ? this.muzzleFor(a, p) : p;
+        // heavy rotary rounds: fat orange-white tracers, big flashes, brass; everything else a lean rail round
+        const heavy = !!a?.def.dualGuns;
+        this.wfx.tracer(from, e.to, e.color ?? '#fff', now, heavy ? { w: 0.16, len: 5.5, speed: 150 } : { w: 0.08, len: 3.5, speed: 220 });
+        this.wfx.muzzle(from, e.color ?? '#fff', now, heavy ? 0.85 : 0.5, heavy);
+        if (heavy && a) { const f = a.forward(); this.wfx.casing({ x: a.pos.x + f.x * 0.6 - f.z * 0.5, y: a.pos.y + a.height * 0.45, z: a.pos.z + f.z * 0.6 + f.x * 0.5 }, { x: -f.z, y: 0, z: f.x }, now); }
+        if (a && near < 25) this.light(from, e.color ?? '#fff', heavy ? 10 : 6, now, 0.04);
+      } break;
       case 'slash': case 'swing': {
         if (e.kind === 'slash') P.emit(p, n(12), c, { speed: 6, life: 0.3, size: 0.22 });
         else if (e.actor) {
@@ -233,6 +250,23 @@ export class Fx {
       case 'swoopburst': this.ring(p, 2.2, e.color ?? '#bfe8ff', now, 0.35); P.emit(p, n(34), new THREE.Color('#fff4d6'), { speed: 6, life: 0.55, size: 0.3, spread: 0.6 }); this.light(p, e.color ?? '#bfe8ff', 25, now); break;
       // ---- Gantetsu
       case 'healthpack': this.ring({ x: p.x, y: p.y - 0.45, z: p.z }, (e.r ?? 1) * 1.6, '#29f0a0', now, 0.45); P.emit(p, n(26), new THREE.Color('#7dffb0'), { speed: 2.5, life: 0.7, size: 0.28, up: 3, spread: 0.6 }); this.light(p, '#29f0a0', 18, now); break;
+      // Hibiki: track swap (a ring sweeping out to the aura edge in the new track's colour), Max Volume (rings pumping out),
+      // Scratch Wave (a cone of sound rings), Bass Drop (a stadium-wide shockwave), the drop's shield on each ally
+      case 'crossmix': this.ring(p, e.r ?? 12, e.color ?? '#7dffcf', now, 0.55); P.emit(p, n(24), c, { speed: 4, life: 0.5, size: 0.25, up: 1 }); break;
+      case 'amp': for (let i = 0; i < 3; i++) this.ring({ x: p.x, y: p.y - 0.8 + i * 0.5, z: p.z }, (e.r ?? 12) * (0.5 + i * 0.25), e.color ?? '#7dffcf', now, 0.5 + i * 0.12); P.emit(p, n(40), c, { speed: 6, life: 0.6, size: 0.3 }); this.light(p, e.color ?? '#7dffcf', 30, now); break;
+      case 'scratchwave': if (e.actor) {
+        const f = e.actor.forward(), big = e.side === 1;
+        for (let i = 0; i < 4; i++) {
+          const d = 1.2 + i * 1.7, q = { x: p.x + f.x * d, y: p.y - 0.3, z: p.z + f.z * d };
+          const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: e.color ?? '#9ef6ff', transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+          m.position.set(q.x, q.y, q.z); m.lookAt(q.x + f.x, q.y, q.z + f.z);
+          this.add(m, 'ring', now + i * 0.03, 0.32, { r: (0.8 + i * 0.9) * (big ? 1.3 : 1) });
+        }
+        P.emit({ x: p.x + f.x * 3, y: p.y - 0.3, z: p.z + f.z * 3 }, n(big ? 40 : 24), c, { speed: 7, life: 0.35, size: 0.25, dir: { x: f.x, y: 0.05, z: f.z } });
+        this.shake = Math.max(this.shake, big ? 0.12 : 0.06);
+      } break;
+      case 'bassdrop': this.ring(p, e.r ?? 30, e.color ?? '#7dffcf', now, 0.9); this.ring(p, (e.r ?? 30) * 0.5, '#ffffff', now, 0.6); P.emit(p, n(120), c, { speed: 12, life: 0.8, size: 0.4, spread: 1.5, up: 1 }); this.light(p, e.color ?? '#7dffcf', 140, now, 0.3); this.shake = Math.max(this.shake, 0.5 / (1 + near / 20)); break;
+      case 'bassshield': P.emit(p, n(18), new THREE.Color('#bffcff'), { speed: 2, life: 0.6, size: 0.3, up: 1.5, spread: 0.8 }); break;
       case 'ringhit': P.emit(p, n(8), new THREE.Color('#ffe6a8'), { speed: 3, life: 0.3, size: 0.2 }); P.emit(p, n(3), new THREE.Color('#ffffff'), { speed: 1.5, life: 0.8, size: 0.22, grav: 3 }); break;
       case 'ignite': this.ring(p, 1.1, '#ff8a3d', now, 0.3, false); P.emit(p, n(26), new THREE.Color('#ff8a3d'), { speed: 3, life: 0.6, size: 0.35, up: 2.5, spread: 0.5 }); break;
       case 'taiko': case 'taikopulse': {
@@ -272,6 +306,7 @@ export class Fx {
   // ------------------------------------------------------------------ per-frame sync
   update(dt: number, w: World, now: number) {
     this.parts.update(dt);
+    if (this.wfx) { this.wfx.ground ??= (x, z, y) => w.level.groundAt(x, z, y); this.wfx.update(now, dt); }
     if (now > this.flashUntil) this.flash.intensity *= 0.8;
     this.shake *= Math.pow(0.02, dt);
     // timed objects
@@ -311,9 +346,15 @@ export class Fx {
         core.scale.setScalar(r); glow.scale.setScalar(r * 2.6);
         if (['sun', 'reveal', 'shadow', 'hex', 'bolt'].includes(p.fx) && !p.splash) core.scale.set(r * 0.8, r * 0.8, r * 5);
         m.add(core, glow);
+        if (p.fx === 'sonic') {
+          core.scale.set(0.07, 0.07, 0.2); glow.scale.setScalar(0.2);
+          const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+          ring.name = 'ring'; ring.scale.setScalar(0.22); m.add(ring);
+        }
         this.group.add(m); this.projMeshes.set(p.id, m);
       }
       m.position.set(p.pos.x, p.pos.y, p.pos.z);
+      if (p.fx === 'sonic') { const rg = m.getObjectByName('ring'); if (rg) rg.scale.setScalar(0.2 + 0.08 * Math.sin(now * 60 + p.id)); }
       const v = new THREE.Vector3(p.vel.x, p.vel.y, p.vel.z);
       if (v.lengthSq() > 0.01) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), v.normalize());
       if (Math.random() < 0.6) this.parts.emit(p.pos, 1, col, { speed: 0.5, life: 0.25, size: p.splash ? 0.3 : 0.14 });
@@ -525,6 +566,17 @@ export class Fx {
       if (a.has('burning', now) && Math.random() < 0.7 * k) this.parts.emit(c, 1, new THREE.Color(Math.random() < 0.6 ? '#ff8a3d' : '#ffd27a'), { speed: 0.8, life: 0.5, size: 0.32, up: 2.4, spread: a.radius * 1.2 });
       if (a.has('tachiai', now) && a.grounded && Math.random() < 0.9 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + 0.2, z: a.pos.z }, 2, new THREE.Color('#9c8f7c'), { speed: 1.5, life: 0.6, size: 0.5, up: 1, spread: a.radius * 1.5 });
       if (a.has('taiko', now) && Math.random() < 0.4 * k) this.parts.emit(c, 1, new THREE.Color('#ffb35c'), { speed: 0.6, life: 0.7, size: 0.28, up: 1.2, spread: a.radius * 1.8 });
+      // Hibiki: allies inside his track glow at the feet (green groove / gold tempo); his skates spark on the wall
+      if ((a.has('groove', now) || a.has('tempo', now)) && Math.random() < 0.35 * k) {
+        const amp = ((a.has('tempo', now) ? a.sv.tempo : a.sv.groove) ?? 1) > 1, t0 = Math.random() * 6.28;
+        this.parts.emit({ x: a.pos.x + Math.cos(t0) * a.radius * 1.2, y: a.pos.y + 0.12, z: a.pos.z + Math.sin(t0) * a.radius * 1.2 }, amp ? 2 : 1,
+          new THREE.Color(a.has('tempo', now) ? '#ffd23f' : '#7dffcf'), { speed: 0.3, life: 0.6, size: amp ? 0.3 : 0.22, up: amp ? 2.2 : 1.2 });
+      }
+      if (a.has('grinding', now) && Math.random() < 0.9 * k) {
+        const nx = a.sv.grindNx ?? 0, nz = a.sv.grindNz ?? 0;
+        this.parts.emit({ x: a.pos.x - nx * a.radius, y: a.pos.y + 0.15, z: a.pos.z - nz * a.radius }, 2, new THREE.Color(Math.random() < 0.5 ? '#bffcff' : '#ffffff'), { speed: 2.5, life: 0.25, size: 0.14, grav: 8, dir: { x: -a.vel.x * 0.15, y: 0.4, z: -a.vel.z * 0.15 } });
+      }
+      if (a.has('pumped', now) && Math.random() < 0.25 * k) this.parts.emit(c, 1, new THREE.Color('#ffd23f'), { speed: 0.5, life: 0.5, size: 0.2, up: 1, spread: a.radius });
       if (a.def.frame === 'mech' && a.forced && Math.random() < 0.8) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z }, 2, new THREE.Color('#ffb040'), { speed: 2, life: 0.3, size: 0.35, dir: { x: -a.vel.x * 0.1, y: -0.5, z: -a.vel.z * 0.1 } });
     }
   }

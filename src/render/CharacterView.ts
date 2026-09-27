@@ -5,7 +5,7 @@ import type { Actor } from '../game/Actor';
 import { Animator, type AnimState } from './Animator';
 import { heroModel } from './Assets';
 import { animLib, animLibrary } from './ClipLibrary';
-import { buildHammer, buildBlaster, buildChaingun, type HammerProp, type ChaingunProp } from './Hammer';
+import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
@@ -256,9 +256,22 @@ export class CharacterView {
   }
 
   /** twin chainguns: model-space props the animator lays along the forearms each frame */
+  skates: SkateProp[] = [];
   private attachGuns(anim: Animator, root: THREE.Object3D) {
     for (const g of this.guns) g.group.parent?.remove(g.group);
-    this.guns = [];
+    for (const s of this.skates) s.group.parent?.remove(s.group);
+    this.guns = []; this.skates = []; anim.feet = null;
+    if (this.actor.def.id === 'hibiki' && anim.ok) {
+      // Hibiki: the Subwoofer Blaster on the right forearm (an empty mount on the left), mag-skates on both feet
+      const mount = new THREE.Group(), amp = buildSonicAmp(anim.height);
+      this.guns = [{ group: mount, spin: new THREE.Group(), flash: new THREE.Mesh(), core: amp.core, len: 0 }, amp];
+      root.add(mount); root.add(amp.group);
+      anim.guns = [mount, amp.group];
+      this.skates = [buildMagSkate(anim.height), buildMagSkate(anim.height)];
+      for (const s of this.skates) root.add(s.group);
+      anim.feet = [this.skates[0].group, this.skates[1].group];
+      return;
+    }
     if (!this.actor.def.dualGuns || !anim.ok) { anim.guns = null; return; }
     this.guns = [buildChaingun(anim.height, 'L'), buildChaingun(anim.height, 'R')];
     for (const g of this.guns) g.group.scale.setScalar(1.25);          // concept-sized: they're half as long as he is tall
@@ -270,6 +283,18 @@ export class CharacterView {
   updateGuns(dt: number, time: number) {
     if (!this.guns.length) return;
     const a = this.actor;
+    if (a.def.id === 'hibiki') {
+      // the woofer pumps on each round of the burst; the equaliser and wheels glow the colour of the track
+      const g = this.guns[1], age = time - a.anim.attackAt;
+      g.spin.position.z = g.len - 0.032 * this.anim.height + (age < 0.06 ? 0.01 * this.anim.height * (1 - age / 0.06) : 0);
+      g.flash.visible = age < 0.05 && a.alive && a.anim.attackKind !== 'punch';
+      if (g.flash.visible) g.flash.scale.setScalar(0.8 + age * 12);
+      const col = a.sv.track ? '#ffd23f' : '#39d6ff', amp = a.has('amp', time) ? 1.6 : 1;
+      g.core.emissive.set(col); g.core.emissiveIntensity = 2.2 * amp;
+      const roll = Math.hypot(a.vel.x, a.vel.z) * dt / (0.016 * this.anim.height);
+      for (const s of this.skates) { s.glow.emissive.set(col); s.glow.emissiveIntensity = (a.has('grinding', time) ? 3.2 : 2) * amp; for (const w of s.wheels) w.rotation.x += roll; }
+      return;
+    }
     for (let i = 0; i < 2; i++) {
       const g = this.guns[i], spin = (i === 0 ? a.sv.spin1 : a.sv.spin2) ?? 0, age = time - (i === 0 ? a.anim.fireL : a.anim.fireR);
       this.spinA[i] += dt * spin * 38 * (i === 0 ? 1 : -1);
@@ -426,6 +451,7 @@ export class CharacterView {
       hitDir: this.hitDir(), knocked: !!a.forced && (a.forced.kind === 'knock' || a.forced.kind === 'pull'),
       swoop: a.has('swoop', time) ? a.sv.swoopProg ?? 0 : -1, swoopFlare: a.has('swoopflare', time) ? 0.4 - (a.st.swoopflare - time) : 9,
       superjump: a.has('superjump', time), slingshot: a.has('slingshot', time), rush: a.has('tachiai', time),
+      skate: a.def.id === 'hibiki', grind: a.has('grinding', time) ? (a.sv.grindSide ?? 1) : 0,
       dual: a.def.dualGuns ? { fireL: time - a.anim.fireL, fireR: time - a.anim.fireR } : undefined,
       reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
       attackTime: an.attackKind === 'primary' ? 1 / Math.max(0.1, p.rate) : 'rate' in a.def.secondary ? 1 / Math.max(0.1, a.def.secondary.rate) : 0.6,

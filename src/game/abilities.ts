@@ -486,7 +486,74 @@ const I: Record<string, Impl> = {
     w.emit({ t: 'msg', text: 'GANTETSU · GRAND DOHYO', color: a.def.color });
     return true;
   },
+  // ================================================================ Hibiki
+  crossmix(w, a) {
+    // swap tracks: 0 = Healing Groove, 1 = Tempo Rush (an amped track stays amped through the swap)
+    a.sv.track = a.sv.track ? 0 : 1;
+    w.fx('crossmix', a.center, { actor: a, color: a.sv.track ? '#ffd23f' : '#7dffcf', r: AURA_R });
+    w.sfx(a.sv.track ? 'track_speed' : 'track_heal', a.center, a);
+    return true;
+  },
+  maxvolume(w, a) {
+    a.set('amp', w.time, 3);
+    w.fx('amp', a.center, { actor: a, color: a.sv.track ? '#ffd23f' : '#7dffcf', r: AURA_R });
+    w.sfx('amp', a.center, a);
+    return true;
+  },
+  scratch(w, a) {
+    const t = w.time, f = a.forward(), pumped = a.has('pumped', t);
+    const dmg = pumped ? 52.5 : 35, push = pumped ? 1.25 : 1;
+    let n = 0;
+    for (const x of w.enemies(a)) {
+      const v = { x: x.pos.x - a.pos.x, y: x.center.y - a.eye.y, z: x.pos.z - a.pos.z }, l = Math.hypot(v.x, v.z);
+      if (l > 8 + x.radius || Math.abs(v.y) > 3.5) continue;
+      if ((v.x * f.x + v.z * f.z) / (l || 1) < 0.5 && l > x.radius + 0.5) continue;
+      if (!w.level.lineOfSight(a.eye, x.center)) continue;
+      w.damage(a, x, dmg, { kind: 'ability' }); n++;
+      if (ccBlocked(w, x) || x.def.frame === 'mech' || x.isBoss || x.has('tachiai', t)) continue;
+      const nx = l > 0.1 ? v.x / l : f.x, nz = l > 0.1 ? v.z / l : f.z;
+      x.vel.y = Math.max(x.vel.y, 3.2 * push); x.grounded = false; x.lastGroundedAt = -9;
+      x.forced = { vx: nx * 13 * push, vy: 0, vz: nz * 13 * push, until: t + 0.32, kind: 'knock' };
+    }
+    if (pumped) a.clear('pumped');
+    a.sv.grind = 0;
+    w.fx('scratchwave', a.eye, { actor: a, color: pumped ? '#ffd23f' : '#9ef6ff', r: 8, side: pumped ? 1 : 0 });
+    w.sfx(pumped ? 'scratch_big' : 'scratch', a.center, a);
+    if (n) a.hits++;
+    a.shots++;
+    return true;
+  },
+  bassdrop(w, a) {
+    // the leap: straight up; the drop lands when he touches down (or at the top of the arc if he's airborne)
+    const t = w.time;
+    a.vel.y = Math.max(a.vel.y, 8.5); a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
+    a.set('dropair', t, 1.2); a.sv.dropArmed = 1; a.sv.dropAt = t;
+    w.fx('ultflash', a.center, { color: a.def.glow, actor: a });
+    w.sfx('ultcall', a.center, a); w.sfx('bassrise', a.center, a);
+    return true;
+  },
 };
+
+/** Hibiki's aura reach (Crossmix / Max Volume) */
+export const AURA_R = 12;
+const BASS_HP = 750, BASS_R = 30;
+
+/** Bass Drop lands: every ally in range he can see gets the drop's temporary health (it fades over 6s after a beat) */
+function bassDrop(w: World, a: Actor) {
+  const t = w.time, p = { ...a.pos };
+  let n = 0;
+  for (const x of w.allies(a)) {
+    if (dist3(x.pos, p) > BASS_R || (x !== a && !w.level.lineOfSight(a.eye, x.center))) continue;
+    x.shields = x.shields.filter(s => s.kind !== 'bassdrop');
+    x.shields.push({ amt: BASS_HP, until: t + 7, kind: 'bassdrop', src: a });
+    x.sv.bassAt = t; n++;
+    w.fx('bassshield', x.center, { actor: x, color: a.def.glow });
+  }
+  a.stats.bassdrop = (a.stats.bassdrop ?? 0) + n;
+  w.fx('bassdrop', p, { r: BASS_R, color: a.def.glow, actor: a }); w.fx('slam', p, { r: 7, color: '#9ef6ff', actor: a });
+  w.sfx('bassdrop', p, a); w.sfx('slam', p, a);
+  w.emit({ t: 'msg', text: 'HIBIKI · BASS DROP', color: a.def.color });
+}
 
 /** Shiko Stomp: the leap out of a Tachiai Rush lands - everyone close is launched into the air and set alight */
 function shikoStomp(w: World, a: Actor) {
@@ -640,6 +707,30 @@ export function tickAbilities(w: World, dt: number) {
     if (a.has('taiko', t)) {
       for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 12) x.set('lifesteal', t, 0.3, x === a ? 0.4 : 0.3);
       if (t - (a.sv.taikoBeat ?? 0) > 0.5) { a.sv.taikoBeat = t; w.fx('taikopulse', a.center, { actor: a, color: '#ffb35c', r: 12 }); w.sfx('taikobeat', a.center, a); }
+    }
+  }
+  // Hibiki: the track he's playing reaches every ally within 12m he can see; Max Volume cranks it; the drop lands
+  for (const a of w.actors) {
+    if (a.def.id !== 'hibiki') continue;
+    if (!a.alive) { a.sv.dropArmed = 0; continue; }
+    const amp = a.has('amp', t), speedTrack = !!a.sv.track;
+    for (const x of w.allies(a)) {
+      if (dist3(x.pos, a.pos) > AURA_R || (x !== a && !w.level.lineOfSight(a.eye, x.center))) continue;
+      if (speedTrack) {
+        const k = amp ? 1.6 : 1.25;
+        x.sv.speed = x.has('speed', t) && x.sv.speedFrom !== a.id ? Math.max(x.sv.speed ?? 1, k) : k;
+        x.sv.speedFrom = a.id; x.set('speed', t, 0.3); x.set('tempo', t, 0.3, amp ? 2 : 1);
+      } else {
+        w.heal(a, x, (amp ? 52 : 16) * (x === a ? 0.7 : 1) * dt, true); x.set('groove', t, 0.3, amp ? 2 : 1);
+      }
+    }
+    if (a.has('grinding', t)) {
+      a.sv.grind = (a.sv.grind ?? 0) + dt;
+      if (a.sv.grind >= 5 && !a.has('pumped', t)) { a.set('pumped', t, 30); w.sfx('pumped', a.center, a); }
+    }
+    if (a.sv.dropArmed) {
+      const since = t - (a.sv.dropAt ?? t);
+      if ((a.grounded && since > 0.12) || (a.vel.y < 0 && since > 0.35) || !a.has('dropair', t)) { a.sv.dropArmed = 0; a.clear('dropair'); bassDrop(w, a); }
     }
   }
   for (const z of w.zones) if (z.kind === 'dohyo' && !z.owner.alive) z.until = t;

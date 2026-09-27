@@ -21,6 +21,8 @@ export interface WeaponDef {
   heal?: boolean;        // beam / projectile heals allies instead of hurting enemies
   sweep?: boolean;       // melee: a wide two-handed arc (alternating swing sides) instead of a thrust
   delay?: number;        // melee: seconds from the button press to the blow landing (heavy weapons wind up)
+  burst?: number;        // rounds per trigger pull (fired burstGap seconds apart); rate is then bursts per second
+  burstGap?: number;
   sfx: string;
   fx: string;            // colour key for projectile / beam effect
 }
@@ -218,6 +220,19 @@ export const HEROES: HeroDef[] = [
     lore: 'Gantetsu was the youngest grand champion the festival rings of Neo-Kurogane ever crowned - until he threw a title bout rather than let the Syndicate fix it, and was banished from every dohyo in the city. Now he fights in the Syndicate\'s underground arenas for the only thing they cannot take from him: the roar of the crowd. He still bows before every fight. He still laughs through every one.',
     inspiration: 'Festival sumo champions, taiko drummers and big-hearted brawler rivals of shonen tournament arcs.',
     voice: [85, 0.85], dualGuns: true, full: true,
+  },
+  {
+    id: 'hibiki', name: 'Hibiki', title: 'The Street Frequency', team: 'zenith', role: 'support', frame: 'human', rival: 'gantetsu',
+    hp: 225, armor: 0, speed: 6.1, height: 1.82, radius: 0.42, color: '#39d6ff', glow: '#7dffcf',
+    primary: { kind: 'projectile', name: 'Subwoofer Blaster', damage: 20, rate: 1.15, burst: 4, burstGap: 0.065, range: 40, speed: 52, ammo: 20, reload: 1.5, sfx: 'sonic', fx: 'sonic' },
+    secondary: { id: 'scratch', name: 'Scratch Wave', key: 'RMB', cooldown: 4, desc: 'Scratch a shockwave off the deck: enemies in an 8m cone in front of you take 35 damage and are knocked back hard. After 5s of Mag-Grinding the next Scratch Wave is empowered (+50% damage, +25% knockback).' },
+    ability1: { id: 'crossmix', name: 'Crossmix', key: 'SHIFT', cooldown: 0.4, desc: 'Swap tracks. Healing Groove: allies within 12m you can see heal 16 HP/s (you 11 HP/s). Tempo Rush: they move 25% faster.', counter: 'Max Volume on Tempo Rush lets allies break out of the Grand Dohyo.' },
+    ability2: { id: 'maxvolume', name: 'Max Volume', key: 'E', cooldown: 12, desc: 'Crank the current track for 3s: Healing Groove heals 52 HP/s, Tempo Rush becomes +60% speed.' },
+    ult: { id: 'bassdrop', name: 'Bass Drop', key: 'Q', cooldown: 0, charge: 2300, desc: 'Leap up and slam the drop: every ally within 30m you can see gains 750 temporary health that fades away over 6s.' },
+    passive: { name: 'Mag-Grind', desc: 'Jump at a wall and hold SPACE to grind along it on your mag-skates (+30% speed, no falling). Release SPACE to launch off it. 5s of grinding empowers your next Scratch Wave.' },
+    lore: "Hibiki ran pirate radio out of a flooded subway car under Neo-Kurogane - the Night Frequency, the only station the Syndicate could never find or silence. When the Eclipse cut the city's power he wired his decks to a stolen Zenith reactor cell and discovered that the right bassline could knit bone and put wings on a tired runner's feet. Now the Vanguard's street team has a DJ, and every fight has a soundtrack.",
+    inspiration: 'Street DJs, jet-set rollerblade culture, pirate radio and the healers of shonen team battles who fight with rhythm.',
+    voice: [150, 0.55], full: true,
   },
 ];
 

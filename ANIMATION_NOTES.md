@@ -28,6 +28,18 @@ Pitfalls from this session:
 - Push maps have no point meshes, so `MapScene.update` must skip them.
 - Bright daylight maps bloom white walls at threshold 0.82, so `Game.start` raises it for them.
 
+## 0b. Session 4 (2026-09-27): Hibiki, the sound bank, weapon VFX
+
+- **Hibiki** (support) was modelled on Kaggle:
+  - The SDXL concept is `assetgen/hibiki`; a pose-locked model sheet comes from an OpenPose ControlNet on a drawn A-pose skeleton (`assetgen/hibikipose`). Plain SDXL only drew waist-up portraits.
+  - TRELLIS.2 ran on Kaggle, then the usual `ow_finish` face/paint pass and a UniRig skin.
+  - Skating is procedural (the clip layer steps aside while `s.skate` and moving). There is no planted foot, because the wheels roll. Each foot pushes out and back on the diagonal and glides home, and a push counts as a footfall.
+  - Mag-Grind (`World.grindStep`) gives the animator `s.grind` (the wall side). It crouches onto the wall and banks away from it by about 0.42 rad.
+  - Props: `buildSonicAmp` sits on the right forearm (the woofer pumps with each round) and `buildMagSkate` sits under each foot (`Animator.placeFeet`; the wheels spin with speed and glow the track's colour).
+- **Weapon VFX** (`WeaponFx.ts`, desktop): tracers are camera-facing ribbons on an `InstancedMesh`, alpha-blended so they read on white floors.
+  - Pitfall: a Mesh with a custom `InstancedBufferGeometry` and a ShaderMaterial drew nothing at all on ANGLE/D3D11. `InstancedMesh` works.
+  - In first person the rounds leave the viewmodel's muzzle (`Fx.muzzleFor`).
+
 ## 0. Session 2 (2026-09-25, evening): what changed
 
 **Clip library is live** (`public/anim`): Quaternius UAL1 + UAL2 *Standard* (the free tier: 43 clips each) and 38 Mixamo

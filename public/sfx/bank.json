@@ -1,0 +1,880 @@
+{
+ "sfx": {
+  "chaingun": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "chaingun2": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "spinup": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "spindown": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "cannon": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "blaster": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "shotgun": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "star": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "talisman": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "katana": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "thunder": {
+   "n": 3,
+   "cat": "weapon"
+  },
+  "bow": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "bowdraw": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "note": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "needle": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "kunai": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "fang": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "flamestart": {
+   "n": 3,
+   "cat": "weapon"
+  },
+  "flame": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "punch": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "hammer": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "whiff": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "reload": {
+   "n": 1,
+   "cat": "weapon"
+  },
+  "healbeam": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "healbeam2": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "crit": {
+   "n": 1,
+   "cat": "feedback"
+  },
+  "kill": {
+   "n": 1,
+   "cat": "feedback"
+  },
+  "impact_stone": {
+   "n": 3,
+   "cat": "impact"
+  },
+  "impact_metal": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "impact_wood": {
+   "n": 2,
+   "cat": "impact"
+  },
+  "impact_body": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "boom": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "barrierup": {
+   "n": 1,
+   "cat": "feedback"
+  },
+  "barrierhit": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "barrierbreak": {
+   "n": 3,
+   "cat": "impact"
+  },
+  "healhit": {
+   "n": 2,
+   "cat": "feedback"
+  },
+  "healthpack": {
+   "n": 1,
+   "cat": "feedback"
+  },
+  "down": {
+   "n": 2,
+   "cat": "impact"
+  },
+  "mechdown": {
+   "n": 2,
+   "cat": "impact"
+  },
+  "botdown": {
+   "n": 2,
+   "cat": "impact"
+  },
+  "eject": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "ignite": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "burn": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "step_stone": {
+   "n": 3,
+   "cat": "step"
+  },
+  "step_wood": {
+   "n": 1,
+   "cat": "step"
+  },
+  "step_metal": {
+   "n": 1,
+   "cat": "step"
+  },
+  "step_heavy": {
+   "n": 3,
+   "cat": "step"
+  },
+  "mechstep": {
+   "n": 1,
+   "cat": "step"
+  },
+  "skate": {
+   "n": 2,
+   "cat": "step"
+  },
+  "skate_roll": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "grind": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "jump": {
+   "n": 1,
+   "cat": "move"
+  },
+  "land": {
+   "n": 2,
+   "cat": "move"
+  },
+  "land_heavy": {
+   "n": 1,
+   "cat": "move"
+  },
+  "mechjump": {
+   "n": 3,
+   "cat": "move"
+  },
+  "mechland": {
+   "n": 2,
+   "cat": "move"
+  },
+  "doublejump": {
+   "n": 2,
+   "cat": "move"
+  },
+  "dash": {
+   "n": 3,
+   "cat": "move"
+  },
+  "flashstep": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "wind": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "wings": {
+   "n": 2,
+   "cat": "move"
+  },
+  "swoop": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "body_slam": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "pad": {
+   "n": 2,
+   "cat": "move"
+  },
+  "casing": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "rocketfist": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "anchorhit": {
+   "n": 3,
+   "cat": "impact"
+  },
+  "sunburst": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "ultcall": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "slam": {
+   "n": 2,
+   "cat": "impact"
+  },
+  "constellation": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "wish": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "nova": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "spiritstep": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "seal": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "sanctuary": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "parrystance": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "parry": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "thunderclap": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "chainlightning": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "sunhop": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "reveal": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "arrowrain": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "arrowhit": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "plating": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "charge": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "pin": {
+   "n": 1,
+   "cat": "impact"
+  },
+  "lance": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "singularity": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "implode": {
+   "n": 3,
+   "cat": "impact"
+  },
+  "silence": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "bloodpact": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "requiem": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "strings": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "yank": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "throw": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "hexburst": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "theater": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "shadowstep": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "veil": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "unveil": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "cut": {
+   "n": 2,
+   "cat": "weapon"
+  },
+  "chainthrow": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "chainhit": {
+   "n": 3,
+   "cat": "impact"
+  },
+  "brand": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "taiko": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "taikobeat": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "dohyo": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "roar": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "blessing": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "stitch": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "decoy": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "track_heal": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "track_speed": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "amp": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "scratch": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "scratch_big": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "pumped": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "bassrise": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "bassdrop": {
+   "n": 2,
+   "cat": "ability"
+  },
+  "groove_heal": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "groove_speed": {
+   "n": 1,
+   "cat": "loop",
+   "loop": true
+  },
+  "amb_amatsu": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_kurogane": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_hangar": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_cathedral": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_rift": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_hanabi": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_cloudstep": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_kagura": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "amb_training": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true
+  },
+  "sonic": {
+   "n": 3,
+   "cat": "weapon"
+  }
+ },
+ "vo": {
+  "haruto": {
+   "a1": 2,
+   "a2": 1,
+   "alt": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "eject": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_pilot": 1,
+   "ult_pilot_ally": 1,
+   "ult_ready": 1
+  },
+  "mirei": {
+   "a1": 2,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "revive": 1,
+   "select": 2,
+   "swoop": 3,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "kaien": {
+   "a1": 1,
+   "a2": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "raijin": {
+   "a1": 2,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "yuzu": {
+   "a1": 1,
+   "a2": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "hibiki": {
+   "a2": 2,
+   "alt": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "grind": 2,
+   "heal_track": 2,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "speed_track": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "vorn": {
+   "a1": 1,
+   "a2": 1,
+   "alt": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "eject": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_pilot": 1,
+   "ult_pilot_ally": 1,
+   "ult_ready": 1
+  },
+  "nocturne": {
+   "a1": 2,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "hex": {
+   "a1": 1,
+   "a2": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "kagemaru": {
+   "a1": 1,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "enra": {
+   "a1": 1,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "gantetsu": {
+   "a1": 2,
+   "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "announcer": {
+   "count_1": 1,
+   "count_2": 1,
+   "count_3": 1,
+   "defeat": 1,
+   "float_contested": 1,
+   "float_enemy": 1,
+   "float_moving": 1,
+   "float_unlock": 1,
+   "match_start": 1,
+   "overtime": 1,
+   "point_lost": 1,
+   "point_open": 1,
+   "point_taken": 1,
+   "round_2": 1,
+   "round_3": 1,
+   "round_lost": 1,
+   "round_won": 1,
+   "they_capture": 1,
+   "thirty": 1,
+   "victory": 1,
+   "we_capture": 1
+  }
+ },
+ "banks": {
+  "tenkai": "haruto",
+  "gorgoth": "vorn"
+ }
+}

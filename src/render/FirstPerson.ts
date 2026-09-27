@@ -34,6 +34,7 @@ export const FP_STYLE: Record<string, Style> = {
   tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
   gantetsu: { grip: 'dual', R: [0.44, -0.3, 0.42], L: [-0.44, -0.3, 0.42], recoil: 0.03, push: 0.08 },
+  hibiki: { grip: 'pistol', R: [0.25, -0.17, 0.52], L: [-0.24, -0.3, 0.4], recoil: 0.05 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -329,7 +330,7 @@ export class FirstPersonArms {
     const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L) : null, toM(R)];
     const prop = S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
     // twin chainguns converge on a point well past the reticle (hip-held guns never follow the bent forearms)
-    const gunAim = S.grip === 'dual' ? toM([0, 0, 14]) : undefined;
+    const gunAim = an.guns ? toM([0, 0, 14]) : undefined;
     an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop, gunAim });
     this.source = `proc:${src}`;
   }

@@ -3,7 +3,7 @@
 import type { Box, MapDef, Pad } from '../data/maps';
 
 export interface V3 { x: number; y: number; z: number; }
-export interface RayHit { t: number; nx: number; ny: number; nz: number; }
+export interface RayHit { t: number; nx: number; ny: number; nz: number; mat?: string; }
 interface Solid { x: number; z: number; r: number; y0: number; y1: number; }
 
 export const STEP = 0.55;
@@ -40,6 +40,14 @@ export class Level {
     else if (b.ramp === 'z+') f = (z - (b.z - hz)) / b.d;
     else f = ((b.z + hz) - z) / b.d;
     return y0 + b.h * Math.min(1, Math.max(0, f));
+  }
+
+  /** the material of the surface groundAt() would stand on (footsteps and landings sound like what they hit) */
+  matAt(x: number, z: number, fromY: number): string | undefined {
+    let g = -Infinity, m: string | undefined;
+    const lim = fromY + STEP;
+    for (const b of [...this.floors, ...this.boxes]) { const t = Level.top(b, x, z); if (t !== null && t <= lim && t > g) { g = t; m = b.mat ?? 'ground'; } }
+    return m;
   }
 
   /** highest walkable surface at (x,z) not above `fromY` + STEP (so you can't snap onto a roof from below). -Infinity = void. */
@@ -118,11 +126,11 @@ export class Level {
           const t = h.t + (Math.min(h.tExit, best ? best.t : max) - h.t) * (i / n);
           const px = o.x + d.x * t, py = o.y + d.y * t, pz = o.z + d.z * t;
           const top = Level.top(b, px, pz);
-          if (top !== null && py <= top) { best = { t, nx: 0, ny: 1, nz: 0 }; return; }
+          if (top !== null && py <= top) { best = { t, nx: 0, ny: 1, nz: 0, mat: b.mat }; return; }
         }
         return;
       }
-      best = { t: h.t, nx: h.nx, ny: h.ny, nz: h.nz };
+      best = { t: h.t, nx: h.nx, ny: h.ny, nz: h.nz, mat: b.mat };
     };
     for (const b of this.boxes) test(b, 0);
     for (const f of this.floors) test(f, 1.5);

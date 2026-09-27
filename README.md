@@ -12,6 +12,13 @@ One codebase, two editions (`src/edition.ts`):
   - The Overwatch 2-style **Tab screen**: E / A / D / DMG / H / MIT for everyone, plus your weapon accuracy, crit accuracy, objective time, streak, ults and hero stats.
   - **8 maps built from buildings**: interiors, upper floors and walkable roofs, two-door spawn rooms, and small / large **health packs** inside and outside. That's the 5 rebuilt arenas plus **Hanabi Harbor**, **Cloudstep Terraces** and **Kagura Avenue**.
   - **Gantetsu**, the Iron Yokozuna (tank, dual chainguns).
+  - **Hibiki**, the Street Frequency (support): a street DJ on glowing mag-skates.
+    - **SHIFT** Crossmix swaps his aura track between Healing Groove (heal) and Tempo Rush (+25% speed).
+    - **E** Max Volume cranks the current track.
+    - **RMB** Scratch Wave is a knockback cone.
+    - **Mag-Grind** rides walls while you hold SPACE; five seconds of grinding empowers his next Scratch Wave.
+    - **Q** Bass Drop gives nearby allies 750 decaying overhealth.
+  - **Recorded sound and voice** (see *Sound* below), plus travelling tracer rounds, muzzle flashes, impact sparks, scorch marks and brass casings.
   - Mirei's guardian-angel flight and **swoop**.
   - The animation performance layer (see `ANIMATION_NOTES.md`), Stadium and the Starfall campaign.
 - **Lite: the website**. You play vs AI on the original five arenas with the original ten heroes, using procedural animation and legacy single-round rules. `npm run build` runs `scripts/lite-strip.mjs`, which removes everything desktop-only from `dist/`. The URL can't switch the site to the full edition. On the dev server, `?edition=lite` previews it.
@@ -29,11 +36,34 @@ WASD move · Space jump / hold to fly (Mirei, Nocturne) · F swoop to an ally (M
 ## Play
 - Web: `npm i && npm run dev`, then open `/play.html`. The landing page with the animatic is `/`.
 - Windows app (Ultra graphics, 2K textures, 120 Hz physics): `cd desktop && npm i && node build.mjs --installer`
+- Sound and effects: `node tests/e2e/audio_check.mjs 5199 gantetsu hanabi` (bank loaded, which ids play recorded vs synth, threat mix), `node tests/e2e/vfx_wall.mjs 5199 gantetsu`, `node tests/e2e/hibiki_play.mjs 5199`
 - Screens: `node tests/e2e/ui_tour.mjs 5199` (menus, a live match, Tab screen, Mikoshi Rush, results, every map, the lite title), `node tests/e2e/lite_check.mjs 5199` (web edition)
 - Tests: `npm test` (map / Control / Mikoshi Rush / health pack / rank rules in `tests/unit/modes.test.ts`, hero kits in `kit.test.ts`, headless 5v5 simulations of every map + campaign levels beaten by an AI squad), `node tests/e2e/lab.mjs <url>` (AI Test Lab report: animation states, foot sliding, wall penetration, physics, effects, sounds, perf)
 
 ## Online
 `api/net.js` is a Node function on Vercel. It handles presence, squad listing and WebRTC signalling for the campaign co-op, for both the web build and the Windows app. Gameplay traffic goes peer-to-peer over WebRTC data channels, with a host-authoritative simulation and client-side prediction. If a direct connection can't be made, traffic is relayed through the Vercel node at a reduced rate. Lobby state lives in the function's memory, or in Upstash Redis when `KV_REST_API_URL` / `KV_REST_API_TOKEN` are set. If the node can't be reached, the client falls back to public MQTT brokers.
+
+## Sound (desktop edition)
+The Windows app plays a recorded bank (`public/sfx`, about 11 MB): 132 sound effects and 469 voice lines. They are mixed the way Blizzard described Overwatch's "Play by Sound" design (GDC 2016):
+- **Threat buckets**: 1 high, 2 normal, 4–10 low, the rest culled. An enemy's loudness depends on whether they're looking at you, near you, shooting, hurting you, or using an ultimate. Enemy footsteps are louder than friendly ones.
+- **Occlusion** muffles sounds behind walls, and more so across floors.
+- **Distance air absorption**, and HRTF panning up close.
+- **Space**: a per-map reverb that crossfades to a room when there's a roof overhead, plus **quad-delay** wall reflections.
+- **Physics sounds**: footsteps by surface and weight, bullet impacts by material, brass casings, skates, grinding, wind.
+
+**Voice lines are stimulus-driven.** Each stimulus has a category, and the category decides who hears the line:
+- **Critical** (ults): enemies and the caster hear the warning line; allies hear the caster's own line.
+- **Death**: everyone.
+- **Pain**: only the heroes involved.
+- **Chatter**: the hero's team.
+- **Exert** (jump/land grunts): only the player.
+
+Lines also follow priority, cooldown and interrupt rules. Mech pilots speak over cockpit radio, and an announcer calls the objective.
+
+How it was made:
+- **Sound effects**: MOSS-SoundEffect (Apache 2.0) on Modal. The takes are ranked by LAION-CLAP, then trimmed, given back their high end, looped and loudness-matched (`assetgen/modal_sfx.py`, `audio/sfx_list.py`, `audio_finish.py`).
+- **Voices**: each character's timbre comes from Kokoro-82M (Apache 2.0) and is performed by Chatterbox (MIT). Whisper transcribes every take so the best one per line is picked (`assetgen/modal_voice.py`, `audio/voice_lines.py`).
+- **Web edition**: keeps the small synthesised recipes in `src/audio/Sfx.ts`.
 
 ## How the art was made (all original, generated for this project)
 `assetgen/` is the whole pipeline:

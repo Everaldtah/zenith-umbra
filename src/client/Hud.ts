@@ -10,7 +10,7 @@ import { FULL } from '../edition';
 import { ROUNDS_TO_WIN } from '../game/World';
 
 /** hero-specific lines on the Tab screen (Overwatch 2 shows each hero's own numbers) */
-const HERO_STAT: Record<string, string> = { swoops: 'Starwing Swoops', ignites: 'Enemies Ignited', volatile: 'Volatile Crits', roar: 'Crowd-Roar Health', packs: 'Health Packs Used', healAssists: 'Healing Assists' };
+const HERO_STAT: Record<string, string> = { swoops: 'Starwing Swoops', ignites: 'Enemies Ignited', volatile: 'Volatile Crits', roar: 'Crowd-Roar Health', packs: 'Health Packs Used', healAssists: 'Healing Assists', bassdrop: 'Allies Bass-Dropped' };
 const QNAME: Record<string, string> = { quickplay: 'QUICK PLAY', competitive: 'COMPETITIVE', practice: 'AI QUICK MATCH', skirmish: 'PLAY VS AI', spectate: 'WATCH', aitest: 'AI LAB' };
 
 const el = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
@@ -112,12 +112,20 @@ export class Hud {
         : me.def.dualGuns ? (me.has('dohyo', t) ? '<b>∞</b><small> | </small><b>∞</b>' : me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small> | </small><b>${me.sv.ammo2 ?? 0}</b>`)
         : P.ammo ? (me.reloadUntil ? '<b>RELOADING</b>' : `<b>${me.ammo}</b><small>/${me.maxAmmo}</small>`) : '<b>∞</b>';
       const flies = me.def.frame === 'flyer' || !!me.def.jets;
-      this.flight.style.display = flies ? '' : 'none';
+      const dj = me.def.id === 'hibiki';
+      this.flight.style.display = flies || dj ? '' : 'none';
+      // Hibiki: the Mag-Grind charge (5s of grinding pumps the next Scratch Wave) and the track he's playing
+      if (dj) {
+        const pumped = me.has('pumped', t), g = pumped ? 100 : Math.min(100, (me.sv.grind ?? 0) / 5 * 100);
+        const tr = me.sv.track ? ['TEMPO RUSH', '#ffd23f'] : ['HEALING GROOVE', '#7dffcf'];
+        this.flight.innerHTML = `<div class="fb"><i style="height:${g}%;background:${pumped ? '#ffd23f' : '#9ef6ff'}"></i></div><span>${pumped ? 'PUMPED' : 'MAG-GRIND'}</span>`
+          + `<span class="sw on" style="color:${tr[1]};border-color:${tr[1]}">${tr[0]}${me.has('amp', t) ? ' · MAX' : ''}</span>`;
+      }
       // Mirei: the swoop's cooldown sits under the flight gauge (F)
       const swoop = me.def.id === 'mirei' ? (me.has('swoop', t) ? 'SWOOP' : me.cdLeft('swoop', t) > 0 ? `F ${me.cdLeft('swoop', t).toFixed(1)}` : 'F SWOOP') : '';
-      if (flies) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>${swoop ? `<span class="sw${me.ready('swoop', t) ? ' on' : ''}">${swoop}</span>` : ''}`;
+      if (flies && !dj) this.flight.innerHTML = `<div class="fb"><i style="height:${me.flight}%"></i></div><span>${me.has('grounded', t) ? 'GROUNDED' : me.def.jets ? 'THRUSTERS' : 'FLIGHT'}</span>${swoop ? `<span class="sw${me.ready('swoop', t) ? ' on' : ''}">${swoop}</span>` : ''}`;
       const st: string[] = [];
-      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'LIFESTEAL', '#ff2d55'], ['burning', 'BURNING', '#ff8a3d'], ['tachiai', 'UNSTOPPABLE', '#34d1bf'], ['taiko', 'TAIKO HEARTBEAT', '#ffb35c'], ['dohyo', 'GRAND DOHYO', '#ffe6a8']];
+      const S2: [string, string, string][] = [['stun', 'STUNNED', '#ffee58'], ['root', 'ROOTED', '#c77dff'], ['silence', 'SILENCED', '#ff4d6d'], ['grounded', 'GROUNDED', '#ff4d6d'], ['antiheal', 'GRIEVOUS HEX', '#b56dff'], ['brand', 'ECLIPSE BRAND', '#ff6a2a'], ['tethered', 'STRUNG', '#c77dff'], ['linked', 'LINKED', '#bfe8ff'], ['ccimmune', 'PURIFIED', '#ffd76a'], ['stealth', 'VEILED', '#9d7bff'], ['revealed', 'REVEALED', '#ffd27a'], ['sealed', 'SEALED', '#ffe28a'], ['undying', 'SANCTUARY', '#ffe28a'], ['dmgamp', 'NOVA +30%', '#bfe8ff'], ['vuln', 'PUPPETED +30%', '#c77dff'], ['judgment', "RAIJIN'S JUDGMENT", '#8ad8ff'], ['asura', 'ASURA', '#ff6a2a'], ['lifesteal', 'LIFESTEAL', '#ff2d55'], ['burning', 'BURNING', '#ff8a3d'], ['tachiai', 'UNSTOPPABLE', '#34d1bf'], ['taiko', 'TAIKO HEARTBEAT', '#ffb35c'], ['dohyo', 'GRAND DOHYO', '#ffe6a8'], ['tempo', 'TEMPO RUSH', '#ffd23f'], ['groove', 'HEALING GROOVE', '#7dffcf'], ['amp', 'MAX VOLUME', '#39d6ff'], ['pumped', 'PUMPED', '#ffd23f'], ['grinding', 'MAG-GRIND', '#9ef6ff']];
       for (const [k, n, c] of S2) if (me.has(k, t)) st.push(`<span style="--c:${c}">${n}</span>`);
       this.status.innerHTML = st.join('');
       this.root.classList.toggle('dead', !me.alive);

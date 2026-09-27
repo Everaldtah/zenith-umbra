@@ -1,0 +1,162 @@
+"""Every sampled sound in the desktop edition, keyed by the game's sfx ids (src/audio/Sfx.ts recipes are the fallback).
+
+kind: "event" (MOSS sound_event) or "ambient" (ambient_sound: loops, beds). secs: target length. take: takes to render.
+Prompts describe the sound, not the source game: all original. `hf` adds a synthesised high-frequency transient layer in
+audio_finish.py (MOSS renders at 24 kHz, so crisp cracks above 12 kHz are added back by hand); `loop` makes it seamless.
+"""
+import json, os
+
+S = []
+
+
+def s(id, prompt, secs=0.6, kind="event", take=4, **kw):
+    S.append({"id": id, "prompt": prompt, "secs": secs, "kind": kind, "take": take, **kw})
+
+
+# ---------------------------------------------------------------- weapons (one-shots, close perspective)
+s("chaingun", "a single heavy rotary cannon round fired, deep punchy mechanical thump with a metallic clank, close", 0.45, hf=True)
+s("chaingun2", "a single sharp heavy machine gun round fired, bright crack with a metallic rattle, close", 0.45, hf=True)
+s("spinup", "the barrels of an electric rotary minigun spinning up fast, rising motor whirr", 0.6)
+s("spindown", "rotary minigun barrels spinning down after firing, falling mechanical whirr with a rattle", 1.1)
+s("cannon", "a big sci-fi energy cannon shot, deep boom with a sizzling energy whoosh", 0.8, hf=True)
+s("blaster", "a sci-fi laser pistol shot, sharp bright zap with a punchy low thump", 0.4, hf=True)
+s("shotgun", "a heavy combat shotgun blast, huge punchy boom with a metallic echo", 0.9, hf=True)
+s("sonic", "a punchy electronic bass blaster shot, a short deep synth pulse zap", 0.35, hf=True)
+s("star", "a magical crystal projectile launched, bright shimmering chime with a soft airy whoosh", 0.5)
+s("talisman", "a paper charm thrown hard, quick papery whoosh with a small magic chime", 0.4)
+s("katana", "a katana slash, a sharp metallic swish cutting the air", 0.4, hf=True)
+s("thunder", "an electric thunder strike, crackling lightning zap with a heavy boom", 0.9, hf=True)
+s("bow", "a powerful bow releasing an arrow, deep string twang and a fast whoosh", 0.5)
+s("bowdraw", "a bow string drawn back slowly, creaking wood and rising string tension", 0.8)
+s("note", "a haunting magical sung note fired as a projectile, eerie female choir shimmer", 0.5)
+s("needle", "a small sharp needle dart fired, quick metallic whistle", 0.3)
+s("kunai", "a throwing knife thrown fast, sharp metallic swish", 0.35)
+s("fang", "a dark blade slash with a demonic whoosh", 0.45)
+s("flamestart", "a gas burner igniting into a big flame whoosh", 0.7)
+s("flame", "a flamethrower roaring continuously", 2.0, kind="ambient", loop=True)
+s("punch", "a heavy punch landing on a body, deep thump", 0.4)
+s("hammer", "a giant rocket hammer swinging, rocket thruster roar into a heavy whoosh", 0.8)
+s("whiff", "a fast empty swing whooshing through the air", 0.3)
+s("reload", "a futuristic gun reload, magazine sliding out and in with mechanical clicks", 0.9)
+s("healbeam", "a soothing magical healing beam, warm humming shimmer, continuous", 2.0, kind="ambient", loop=True)
+s("healbeam2", "a low pulsing dark magic energy beam humming, continuous", 2.0, kind="ambient", loop=True)
+# ---------------------------------------------------------------- impacts & feedback
+s("hit", "a crisp short hit confirmation tick, clean and satisfying", 0.2)
+s("crit", "a bright metallic headshot ding, crisp ringing and satisfying", 0.4, hf=True)
+s("kill", "a satisfying video game reward chime, a bright two-note ding", 0.6)
+s("impact_stone", "a bullet hitting stone, sharp crack with debris", 0.4, hf=True)
+s("impact_metal", "a bullet hitting sheet metal, sharp ricochet ping", 0.6, hf=True)
+s("impact_wood", "a bullet hitting a wooden plank, dull thwack with splinters", 0.4)
+s("impact_body", "a bullet hitting armor on a body, dull thud with a metallic tick", 0.3)
+s("boom", "a large explosion, deep boom with scattering debris", 1.6)
+s("barrierup", "an energy shield powering up, rising electric hum", 0.7)
+s("barrierhit", "an energy shield absorbing a bullet, electric hum ping", 0.3)
+s("barrierbreak", "an energy shield shattering like glass with an electric burst", 1.1, hf=True)
+s("healhit", "a soft magical healing chime", 0.4)
+s("healthpack", "a health pack picked up, bright rising sci-fi chime", 0.6)
+s("down", "a person collapsing to the ground, body fall with gear rattling", 0.8)
+s("mechdown", "a giant robot collapsing and exploding, huge metallic crash and explosion", 2.2)
+s("botdown", "a small robot powering down, electronic whine with sparks", 0.8)
+s("eject", "a pilot ejection seat firing, a rocket blast whoosh", 1.2)
+s("ignite", "something catching fire suddenly, a burst of flames whoosh", 0.7)
+s("burn", "fire crackling and burning steadily", 1.5, kind="ambient", loop=True)
+# ---------------------------------------------------------------- movement & physics
+s("step_stone", "a single footstep on stone pavement, boot, dry and close", 0.35, take=6)
+s("step_wood", "a single footstep on a wooden floor, boot, dry and close", 0.35, take=6)
+s("step_metal", "one footstep on a metal floor, metallic clank", 0.35, take=6)
+s("step_heavy", "one heavy footstep of a giant on stone, deep thud", 0.5, take=5)
+s("mechstep", "a giant robot footstep, heavy metallic stomp with hydraulic hiss", 0.7, take=5)
+s("skate", "an inline skater pushing off, wheels rolling on pavement", 0.6, take=5)
+s("skate_roll", "inline skates rolling smoothly on pavement, continuous", 2.0, kind="ambient", loop=True)
+s("grind", "skates grinding along a metal rail, continuous metallic scraping", 2.0, kind="ambient", loop=True)
+s("jump", "a quick jump off the ground, cloth rustle and gear jingle", 0.3)
+s("land", "landing on the ground after a jump, thud with gear rattle", 0.4)
+s("land_heavy", "landing hard after a long fall, heavy thud and scrape", 0.6)
+s("mechjump", "a giant robot jumping with jet thrusters firing", 1.0)
+s("mechland", "a giant robot landing heavily, huge metallic slam and rumble", 0.9)
+s("doublejump", "a magical double jump, airy whoosh with an electric crackle", 0.4)
+s("dash", "a fast dash, a sharp whoosh", 0.4)
+s("flashstep", "a lightning fast teleport dash, electric crackle and whoosh", 0.5, hf=True)
+s("wind", "strong wind blowing past fast, whooshing gusts", 2.0, kind="ambient", loop=True)
+s("wings", "large wings flapping once, heavy feathery whoosh", 0.6)
+s("swoop", "a magical angelic swoop, fast airy whoosh with a rising chime", 0.8)
+s("body_slam", "a person slamming into a wall, heavy body impact thud", 0.5)
+s("pad", "a jump pad launching someone into the air, sci-fi boing with a whoosh", 0.6)
+s("casing", "a brass bullet casing dropping on concrete, small metallic tinkle", 0.35, take=6)
+# ---------------------------------------------------------------- abilities
+s("rocketfist", "a rocket-propelled fist launched, rocket roar and whoosh", 0.8)
+s("anchorhit", "a heavy metal anchor hitting and grabbing, deep clang", 0.5)
+s("sunburst", "a radiant burst of holy light, bright shimmering whoosh", 0.9)
+s("ultcall", "a dramatic power surge, rising energy whoosh into a heavy hit", 1.2)
+s("slam", "a massive ground slam impact, huge boom and rumbling debris", 1.5)
+s("constellation", "magical starlight connecting, shimmering chimes rising", 0.9)
+s("wish", "a magical protective bubble forming, warm shimmering hum", 0.8)
+s("nova", "a heavenly choir swell with a burst of magical light", 2.0)
+s("spiritstep", "a fast ghostly whoosh with a soft temple bell", 0.6)
+s("seal", "a deep gong hit with a magical shimmer", 0.9)
+s("sanctuary", "a sacred barrier rising, deep temple bells and a holy hum", 1.6)
+s("parrystance", "a sword raised to parry, a metallic ring", 0.4)
+s("parry", "a sword parry, bright metallic clang with sparks", 0.5, hf=True)
+s("thunderclap", "a colossal thunderclap, lightning crack and rolling thunder", 1.6, hf=True)
+s("chainlightning", "crackling electricity arcing and zapping between metal", 0.5, hf=True)
+s("sunhop", "a quick bounce jump with a bright magical twang", 0.4)
+s("reveal", "a bright magical arrow shot with a ringing bell chime", 0.7)
+s("arrowrain", "a rain of arrows falling from the sky, many whooshes", 2.5, kind="ambient")
+s("arrowhit", "an arrow thudding into the ground", 0.3)
+s("plating", "heavy metal armor plates clanking and locking into place", 0.7)
+s("charge", "a giant robot charging forward, roaring engines and heavy stomps", 1.1)
+s("pin", "a heavy body slammed against a wall, crunchy impact", 0.4)
+s("lance", "a powerful dark energy spear launched, deep electric zap with a whoosh", 0.6)
+s("singularity", "a black hole forming, deep sucking rumble and swirling wind", 2.5)
+s("implode", "a black hole collapsing, huge implosion boom", 1.2)
+s("silence", "a magical silencing scream wave, sharp high whine fading", 0.8)
+s("bloodpact", "a dark blood magic spell, low eerie pulse", 0.7)
+s("requiem", "a haunting gothic choir requiem swelling", 2.2)
+s("strings", "magical puppet strings shooting out, taut twangs", 0.6)
+s("yank", "a rope yanked hard, quick twang and whoosh", 0.4)
+s("throw", "a quick whoosh of an object thrown hard through the air", 0.3)
+s("hexburst", "a burst of dark cursed magic, distorted crackling zap", 0.7)
+s("theater", "a creepy music box melody with eerie whispers", 1.4)
+s("shadowstep", "a shadow teleport, dark whoosh with a hiss", 0.5)
+s("veil", "going invisible, a soft dark shimmer fading", 0.7)
+s("unveil", "a quick magical shimmer sparkle appearing", 0.3)
+s("cut", "a fast blade cut, sharp slash", 0.3, hf=True)
+s("chainthrow", "a heavy chain thrown, rattling links flying", 0.6)
+s("chainhit", "a chain wrapping around someone, clanking links", 0.5)
+s("brand", "a burning brand pressed, sizzling flames and a dark boom", 0.8)
+s("taiko", "two big taiko drum strikes, deep booming", 0.9)
+s("taikobeat", "a single big taiko drum strike, deep boom", 0.6, take=5)
+s("dohyo", "a ceremonial sumo ring ritual, two hand claps then a long deep drum roll", 1.8)
+s("roar", "a huge stadium crowd cheering and roaring", 2.2, kind="ambient")
+s("blessing", "a gentle holy blessing spell, warm chime with a soft rising shimmer", 0.6)
+s("stitch", "a magic needle and thread stitching quickly, sharp zip with a twang", 0.5)
+s("decoy", "a doll decoy bursting into cloth and stuffing with a puff of magic", 0.6)
+# ---------------------------------------------------------------- Hibiki
+s("track_heal", "a DJ record scratch transition into a mellow warm groove", 0.9)
+s("track_speed", "a DJ record scratch transition into a fast energetic beat", 0.9)
+s("amp", "a DJ volume boost, a rising filter sweep ending in a punchy bass hit", 0.9)
+s("scratch", "a turntable record scratch blasted out with a deep bass whump", 0.6)
+s("scratch_big", "a huge turntable record scratch blast with a massive bass whump and distortion", 0.8)
+s("pumped", "a short DJ air horn", 0.7)
+s("bassrise", "a rising white noise sweep riser getting louder, electronic music build up", 1.0)
+s("bassdrop", "a massive electronic dance music bass drop impact, huge sub bass boom", 1.8)
+s("groove_heal", "a mellow lo-fi hip hop beat with a warm bassline and soft keys, 90 bpm", 4.0, kind="ambient", loop=True)
+s("groove_speed", "an energetic drum and bass breakbeat with a driving bassline, 174 bpm", 4.0, kind="ambient", loop=True)
+# ---------------------------------------------------------------- map ambience beds (loops)
+for m, p in {
+    "amatsu": "a mountain shrine at dawn, gentle wind, wind chimes and distant birds",
+    "kurogane": "a rainy cyberpunk city street at night, steady rain, distant traffic and neon hum",
+    "hangar": "a large empty factory hall ambience, low machine hum and distant clanks, echoing",
+    "cathedral": "a dark gothic cathedral at night, howling wind and a distant bell",
+    "rift": "an eerie alien void, deep drones and faint whispers",
+    "hanabi": "a harbor festival at night, distant crowd, water lapping and fireworks far away",
+    "cloudstep": "high mountain terraces above the clouds, strong wind and birds",
+    "kagura": "a Japanese festival street, distant taiko drums and crowd chatter",
+    "training": "a quiet training facility, soft electronic hum",
+}.items():
+    s(f"amb_{m}", p, 8.0, kind="ambient", take=3, loop=True)
+
+if __name__ == "__main__":
+    out = os.path.join(os.path.dirname(__file__), "sfx_list.json")
+    json.dump(S, open(out, "w", encoding="utf-8"), indent=1)
+    print(len(S), "sounds,", sum(x["take"] for x in S), "takes ->", out)
