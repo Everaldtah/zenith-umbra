@@ -38,6 +38,21 @@ def trim(a, sr):
     env = np.abs(a); thr = max(1e-4, env.max() * 0.02); idx = np.where(env > thr)[0]
     if not len(idx): return a
     return a[max(0, idx[0] - int(0.01 * sr)): min(len(a), idx[-1] + int(0.12 * sr))]
+def first_burst(x, sr, max_s):
+    """efforts ("Ugh!"): Chatterbox often keeps babbling for seconds after the grunt - keep the first voiced burst only
+    (up to the first 120 ms of quiet), faded out"""
+    w = int(sr * 0.02)
+    env = np.array([np.sqrt(np.mean(x[i:i + w] ** 2)) for i in range(0, max(1, len(x) - w), w)])
+    if not len(env): return x
+    thr, on, gap, end = env.max() * 0.12, False, 0, len(x)
+    for i, v in enumerate(env > thr):
+        if v: on, gap = True, 0
+        elif on:
+            gap += 1
+            if gap * 0.02 >= 0.12: end = (i - gap + 1) * w + int(0.08 * sr); break
+    y = x[:min(end, int(max_s * sr))].copy()
+    f = min(len(y), int(0.04 * sr)); y[len(y) - f:] *= np.linspace(1, 0, f)
+    return y
 for job in JOBS:
     vid, (kvoice, lang, pitch, reftext) = job["vid"], job["cast"]
     out = f"/kaggle/working/voice/{vid}"; os.makedirs(out, exist_ok=True)
@@ -47,14 +62,17 @@ for job in JOBS:
     n = 0
     for key, idx, text, dl in job["lines"]:
         ex, cfg = DELIVERY[dl]
-        for t in range(3):
+        effort = dl == "effort" or (len(norm(text).split()) <= 1 and "!" in text and dl in ("effort", "scream"))
+        for t in range(5 if effort else 3):
             torch.manual_seed(1000 * idx + 77 * t + len(key))
             try:
                 w = tts.generate(text, audio_prompt_path=ref, exaggeration=ex, cfg_weight=cfg)
             except Exception as e:
                 publish("gen-fail", key=key, err=str(e)[:300]); continue
-            sr = tts.sr; x = trim(w.squeeze(0).cpu().numpy().astype(np.float32), sr); dur = len(x) / sr
-            if dl == "effort" or (len(norm(text).split()) <= 1 and "!" in text and dl in ("effort", "scream")):
+            sr = tts.sr; x = trim(w.squeeze(0).cpu().numpy().astype(np.float32), sr)
+            if effort: x = first_burst(x, sr, 1.4 if dl == "scream" else 1.0)
+            dur = len(x) / sr
+            if effort:
                 rms = float(np.sqrt(np.mean(x ** 2)) + 1e-9)
                 score = max(0.0, 1.0 - abs(dur - 0.45) / 1.2) * 0.7 + min(1.0, rms * 8) * 0.3
             else:

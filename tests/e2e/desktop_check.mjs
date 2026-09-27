@@ -20,9 +20,12 @@ await new Promise(r => setTimeout(r, 5000));
 const info = await p.evaluate(f0 => { const g = window.__zu.game; const c = g.renderer.getContext(); const e = c.getExtension('WEBGL_debug_renderer_info');
   return { fps: (g.framesRendered - f0) / 5, preset: g.settings.preset, pixelRatio: g.renderer.getPixelRatio(), size: [innerWidth, innerHeight], gpu: e ? c.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?', shadows: g.renderer.shadowMap.enabled, url: location.href }; }, f0);
 console.log(JSON.stringify(info, null, 1));
-// the recorded sound bank decodes in the packaged app; Hibiki and Gantetsu are on the roster with their portraits
+// the recorded sound bank decodes in the packaged app; Hibiki, Gantetsu and Tomoe are on the roster with their portraits, and
+// Tomoe's model, weapon props, sounds and voice ship
 console.log('sound', await p.evaluate(async () => { const s = window.__zu.sfx; const img = async id => (await fetch(`img/portrait_${id}.webp`)).ok;
-  return JSON.stringify({ clips: !!(await window.__zu.anim), ctx: s.ctx?.state, bank: s.bank.ready, sfx: Object.keys(s.bank.info?.sfx ?? {}).length, voices: Object.keys(s.bank.info?.vo ?? {}).length, hibiki: await img('hibiki'), gantetsu: await img('gantetsu') }); }));
+  return JSON.stringify({ clips: !!(await window.__zu.anim), ctx: s.ctx?.state, bank: s.bank.ready, sfx: Object.keys(s.bank.info?.sfx ?? {}).length, voices: Object.keys(s.bank.info?.vo ?? {}).length, hibiki: await img('hibiki'), gantetsu: await img('gantetsu'), tomoe: await img('tomoe'),
+    tomoeModel: (await fetch('models/tomoe.glb')).ok, tomoeProps: (await Promise.all(['axe', 'blade', 'shotgun'].map(async n => (await fetch(`models/prop_tomoe_${n}.glb`)).ok))).every(Boolean),
+    tomoeSfx: ['scattergun', 'warcall', 'reaping', 'fangreturn'].every(k => s.bank.has(k)), tomoeVoice: s.bank.hasLine('tomoe', 'ult') }); }));
 console.log('match', JSON.stringify(await p.evaluate(() => { const w = window.__zu.game.match.world; return { map: w.map.id, rules: w.rules, packs: w.packs.length, me: w.actors.find(a => a === window.__zu.game.match.player)?.def.id }; })), 'errors', errs.slice(0, 3));
 const ft = await p.evaluate(() => new Promise(res => { const d = []; let last = performance.now(); const f = t => { d.push(t - last); last = t; if (d.length < 300) requestAnimationFrame(f); else res(d); }; requestAnimationFrame(f); }));
 ft.sort((a, b) => a - b);
