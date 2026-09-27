@@ -729,7 +729,10 @@
    "jump": 1,
    "kill": 3,
    "kill_rival": 1,
+   "land": 1,
    "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
    "push": 1,
    "reload": 1,
    "respawn": 2,
@@ -908,7 +911,10 @@
    "reload": 1,
    "respawn": 2,
    "select": 2,
-   "thanks": 2
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
   },
   "announcer": {
    "count_1": 1,
@@ -1416,9 +1422,22 @@
    "kill_rival": [
     "Your rhythm's all wrong, big guy!"
    ],
+   "land": [
+    "Oof!"
+   ],
    "low_hp": [
     "My mix is fading, need healing!",
     "Losing the beat here, heal me up!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Hngh!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
    ],
    "push": [
     "Push the Mikoshi, I'll keep you rolling!"
@@ -2029,6 +2048,15 @@
    "thanks": [
     "Good. Now keep it coming.",
     "That's the stuff."
+   ],
+   "ult": [
+    "Out of my way! This is my warpath!"
+   ],
+   "ult_ally": [
+    "Stay behind me! I'm clearing a road!"
+   ],
+   "ult_ready": [
+    "Warpath is ready. Point me at them."
    ]
   },
   "announcer": {
