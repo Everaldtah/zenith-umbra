@@ -129,9 +129,12 @@ def main():
         aid, p, kind, h = j
         hero = aid in HERO_IDS
         big = aid.startswith('boss_') or hero                # heroes: faces and painted detail need the 2K texture on the web too
+        # a hero's held weapon (prop_<hero>_*): every copy of the hero carries it - pre-decimated to its budget in Blender
+        # (blender/decimate_prop.py: meshopt can't collapse TRELLIS's seam-split meshes), so no further simplify here
+        held = kind == 'prop' and any(aid.startswith(f'prop_{x}_') for x in HERO_IDS)
         # web: props are background dressing -> heavy decimation; desktop keeps far more detail
-        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' else 512, 0.3 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.005)
-        gltf(p, HQ / f'{aid}.glb', 4096 if hero else 2048 if kind != 'prop' else 1024, 0.45 if kind == 'prop' else 0.7 if kind == 'static' else None)
+        ok = gltf(p, PUB / f'{aid}.glb', 2048 if big else 1024 if kind != 'prop' or held else 512, None if held else 0.3 if kind == 'prop' else 0.5 if kind == 'static' else None, 0.005)
+        gltf(p, HQ / f'{aid}.glb', 4096 if hero else 2048 if kind != 'prop' or held else 1024, None if held else 0.45 if kind == 'prop' else 0.7 if kind == 'static' else None)
         print(f"{'ok ' if ok else 'ERR'} {aid:24s} {(PUB / f'{aid}.glb').stat().st_size / 1e6 if ok else 0:5.2f} MB", flush=True)
         return j, ok
     with ThreadPoolExecutor(4) as ex:

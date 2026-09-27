@@ -84,7 +84,7 @@ WASD move · Space jump / hold to fly (Mirei, Nocturne) · F swoop to an ally (M
 `api/net.js` is a Node function on Vercel. It handles presence, squad listing and WebRTC signalling for the campaign co-op, for both the web build and the Windows app. Gameplay traffic goes peer-to-peer over WebRTC data channels, with a host-authoritative simulation and client-side prediction. If a direct connection can't be made, traffic is relayed through the Vercel node at a reduced rate. Lobby state lives in the function's memory, or in Upstash Redis when `KV_REST_API_URL` / `KV_REST_API_TOKEN` are set. If the node can't be reached, the client falls back to public MQTT brokers.
 
 ## Sound (desktop edition)
-The Windows app plays a recorded bank (`public/sfx`, about 14 MB): 138 sound effects and 496 voice lines. They are mixed the way Blizzard described Overwatch's "Play by Sound" design (GDC 2016):
+The Windows app plays a recorded bank (`public/sfx`, about 14 MB): 138 sound effects and 497 voice lines. They are mixed the way Blizzard described Overwatch's "Play by Sound" design (GDC 2016):
 - **Threat buckets**: 1 high, 2 normal, 4–10 low, the rest culled. An enemy's loudness depends on whether they're looking at you, near you, shooting, hurting you, or using an ultimate. Enemy footsteps are louder than friendly ones.
 - **Occlusion** muffles sounds behind walls, and more so across floors.
 - **Distance air absorption**, and HRTF panning up close.

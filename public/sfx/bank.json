@@ -907,7 +907,7 @@
    "push": 1,
    "reload": 1,
    "respawn": 2,
-   "select": 1,
+   "select": 2,
    "thanks": 2
   },
   "announcer": {
