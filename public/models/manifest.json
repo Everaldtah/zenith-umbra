@@ -267,6 +267,12 @@
   },
   "prop_tomoe_axe": {
    "height": 1
+  },
+  "prop_tomoe_blade": {
+   "height": 1
+  },
+  "prop_tomoe_shotgun": {
+   "height": 1
   }
  },
  "textures": [
