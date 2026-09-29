@@ -9,7 +9,7 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p 
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--window-size=1600,900'], defaultViewport: { width: 1600, height: 900 } });
 const p = await b.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 200)); });
-await p.goto(`http://localhost:5199/play.html${query}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+await p.goto(`http://localhost:${process.env.ZU_PORT ?? 5199}/play.html${query}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await p.waitForFunction(() => !!window.__zu?.menu, { timeout: 60000 });
 await p.evaluate(() => window.__zu.menu.viewer());
 await p.waitForFunction(() => !!window.__zu?.viewer, { timeout: 30000 });
@@ -17,7 +17,7 @@ await p.waitForFunction(() => !!window.__zu?.viewer, { timeout: 30000 });
 await p.evaluate(() => { window.__zu.viewer.select('kaien'); });
 await p.waitForFunction(() => !!window.__zu?.anim || location.search.includes('procedural'), { timeout: 90000 }).catch(() => {});
 fs.mkdirSync('tests/e2e/shots/anim', { recursive: true });
-const tmp = 'tests/e2e/shots/strip';
+const tmp = `tests/e2e/shots/strip_${process.pid}`;          // per run: other sessions capture at the same time
 for (const id of heroes.split(',')) {
   for (const mode of modes.split(',')) {
     fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
@@ -31,9 +31,10 @@ for (const id of heroes.split(',')) {
       await new Promise(r => setTimeout(r, +every));
     }
     const out = `tests/e2e/shots/anim/${id}_${mode}${query.includes('procedural') ? '_proc' : ''}.png`;
-    execFileSync('python', ['tests/e2e/tile.py', out, N, '300']);
+    execFileSync('python', ['tests/e2e/tile.py', out, N, '300', tmp]);
     console.log(out, [...clips].join(' | '));
   }
 }
+fs.rmSync(tmp, { recursive: true, force: true });
 console.log('errors', errs.slice(0, 6));
 await b.close();
