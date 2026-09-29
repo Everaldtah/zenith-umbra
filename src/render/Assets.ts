@@ -48,6 +48,8 @@ function load(url: string): Promise<GLTF | null> {
 const DEV = !!(import.meta as any).env?.DEV;
 /** dev only: ?hd puts every hero in high detail (captures, benchmarks) */
 const HD_ALL = DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('hd');
+/** dev only: ?nohd keeps even the close-ups on the match models (before / after comparisons) */
+const HD_OFF = DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('nohd');
 /** the desktop edition's high-detail heroes (manifest `hd`): the Windows app ships them in models/hd, the dev server reads
  * them where the publisher writes them */
 const hdUrl = (id: string) => DEV ? `${BASE}assetgen/out/models_hd/${id}.glb` : `${BASE}models/hd/${id}.glb`;
@@ -59,7 +61,7 @@ const hdUrl = (id: string) => DEV ? `${BASE}assetgen/out/models_hd/${id}.glb` : 
 export async function heroModel(id: string, hd = false): Promise<THREE.Object3D | null> {
   await loadManifest();
   if (!hasModel(id)) return null;
-  const wantHd = FULL && (hd || HD_ALL) && !!(manifest?.models[id] as { hd?: boolean } | undefined)?.hd;
+  const wantHd = FULL && !HD_OFF && (hd || HD_ALL) && !!(manifest?.models[id] as { hd?: boolean } | undefined)?.hd;
   const g = (wantHd ? await load(hdUrl(id)) : null) ?? await load(`${BASE}models/${id}.glb`);
   if (!g) return null;
   const c = SkeletonUtils.clone(g.scene);
