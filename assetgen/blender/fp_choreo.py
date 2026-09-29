@@ -159,39 +159,58 @@ def base_wrist(C, base, ch="Rr"):
     return C
 
 
+# Hanzo's first-person bow, measured frame by frame (docs/research/archer_fp_study.md, section 1): the bow lies nearly
+# FLAT across the bottom of the view - upper limb out to the right and receding, lower limb off the bottom-left corner
+# (the roll and tilt are the bow prop's: FirstPerson bowCant / bowTilt) - the left fist at bottom-centre, the nocked
+# arrow a short spike above it pointing down the view. The string hand is OUT of frame: low behind the camera holding
+# the nock at rest, at the jaw at full draw. The upper 55-60% of the screen stays clear except for the reach back from
+# the quiver. Timing: draw 450-500 ms (ease out, most of it in the first 200); loose -> nocked 530 ms = 330 ms of
+# follow-through (the bow kicks down and flattens, no camera kick) + a 170 ms reach from over the right shoulder
+ARCH_JAW = (0.05, -0.12, 0.0)          # full draw: the string hand at the jaw, behind the lens
+ARCH_BOW_LR = (0, 0, 65)               # the bow fist rolled clockwise with the flat bow (under every Lr key)
+ARCH_FLICK = (0.01, -0.16, 0.2)        # the loose: two open fingertips flick at the bottom-centre edge for ~2 frames
+ARCH_GONE = (0.08, -0.26, 0.06)        # ...and away, low behind the camera
+ARCH_QUIVER = (0.26, 0.18, 0.02)       # behind the right shoulder at the quiver (out of frame)
+ARCH_OVER = (0.27, 0.12, 0.34)         # the new arrow comes in over the shoulder at the top-right edge
+ARCH_NOCK = (0.05, -0.05, 0.36)        # sweeping down-left, just right of the reticle, onto the string
+
+
+def archer_loose(R, L, t0=0):
+    """the loose and the re-nock from frame t0 (loose) to t0 + 16 (nocked): 530 ms"""
+    LD = off(L, 0, 0.04, 0)
+    return [K(t0 + 1, ARCH_FLICK, off(LD, 0, -0.012, 0.02), (-20, -10, 30), (0, 0, 4), "snap"),
+            K(t0 + 3, ARCH_GONE, off(L, 0, 0.012, 0.01), None, (0, 0, 5), "out"),
+            K(t0 + 10, ARCH_QUIVER, L, (60, 20, 20), (0, 0, 0), "io"),
+            K(t0 + 12, ARCH_OVER, None, (40, 20, 20), None, "out"),
+            K(t0 + 14, ARCH_NOCK, None, (10, 5, 5), None, "io"),
+            K(t0 + 16, R, L, (0, 0, 0), (0, 0, 0), "io")]
+
+
 def yuzu(R, L):
-    """YUZU - calm, precise archer, after Hanzo's first-person cycle. Bow in the left hand (canted), the next arrow nocked
-    with the right hand resting on the string beside the grip. fp_draw (scrubbed by charge) pulls the string hand back
-    to the jaw - bottom right of the view, the arrow shaft running from it through the bow. fp_fire: the loose snaps the
-    hand back and open (it stays at the screen's edge, never behind the lens), the bow arm kicks forward, then the hand
-    reaches up over the right shoulder to the quiver (off the top of the view), comes back down with the next arrow and
-    nocks it on the string - all inside the 0.9 s shot cycle (HeldProps.ARROW_GONE hides the arrow from the loose until
-    the grab at the quiver)."""
+    """YUZU - calm, precise archer, after Hanzo's first person (see above). R = the string hand at rest (out of frame,
+    holding the nock), L = the bow fist at bottom-centre. fp_draw is scrubbed by the charge (0.9 s to full): the hand
+    passes the bottom edge, reaches the jaw by ~500 ms and holds there with a faint tremble while the bow lifts into
+    the aim. fp_fire starts at the loose (archer_loose). HeldProps.ARROW_GONE hides the arrow from the loose until the
+    hand comes over the shoulder with the next one."""
     C = {}
-    C["fp_idle"] = idle(R, L, amp=0.004, sway=0.003, Lr=(0, 0, -10))
-    anchor = (0.1, -0.22, 0.16)          # the jaw: the draw hand leaves the frame bottom right, the arrow running up from it
-    snap = (0.3, -0.33, 0.14)            # loosed: the hand flicks back and out through the bottom-right corner
-    quiver = (0.33, -0.34, -0.04)        # the reach back to the quiver - out of the view, never across the lens
-    drawnL = off(L, 0.03, 0.04, 0)       # the bow rises a little into the aim at full draw (Hanzo: grip to (0.40, 0.75))
-    C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -10)), K(20, anchor, drawnL, (0, 12, 0), (0, 0, -15), "out")]}
-    C["fp_fire"] = {"keys": [K(0, anchor, drawnL, (0, 12, 0), (0, 0, -15)),
-                             K(1, snap, off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
-                             K(4, off(snap, 0.01, -0.01, -0.02), off(L, 0, 0.0, 0.02), None, (0, 0, -10), "out"),
-                             K(10, quiver, None, (40, 30, 30), None, "io"),
-                             K(13, off(quiver, -0.01, 0.01, -0.01), None, (45, 30, 30), None, "hold"),
-                             K(19, off(R, 0.12, -0.08, -0.06), None, (10, 10, 10), None, "io"),
-                             K(23, R, L, (0, 0, 0), (0, 0, -10), "io"),
-                             K(27, R, L, (0, 0, 0), (0, 0, -10), "io")]}
-    C["fp_alt"] = {"keys": [K(0, R, L), K(10, off(R, 0, 0.01, -0.01), off(L, 0, 0.01, 0.02), None, None, "io"), K(30, R, L, None, None, "io")]}
+    LD = off(L, 0, 0.04, 0)                # full draw: the bow lifted into the aim (grip (0.47, 0.86) -> (0.47, 0.75))
+    C["fp_idle"] = idle(R, L, amp=0.004, sway=0.003)
+    C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, 0)),
+                             K(5, (0.03, -0.2, 0.13), off(L, 0, 0.015, 0), (0, 0, 0), None, "io"),     # only the fingertips cross the bottom edge
+                             K(15, ARCH_JAW, LD, (0, 10, 0), (0, 0, 0), "out"),
+                             K(27, off(ARCH_JAW, 0, 0.002, 0), off(LD, 0, 0.002, 0), None, None, "io")]}
+    C["fp_fire"] = {"keys": [K(0, ARCH_JAW, LD, (0, 10, 0), (0, 0, 0))] + archer_loose(R, L)}
+    # Hawk Eye (RMB, held zoom): the bow steadies a touch higher, the string hand stays where it is
+    C["fp_alt"] = {"keys": [K(0, R, L), K(10, None, off(L, 0, 0.012, 0.01), None, None, "io"), K(30, R, L, None, None, "io")]}
     C["fp_melee"] = quick_melee(R, L, main_hand_free=True)
-    C["fp_ability1"] = {"keys": [K(0, R, L), K(3, off(R, 0.04, -0.12, -0.04), off(L, -0.02, -0.12, -0.04), (-20, 0, 0), (-20, 0, -10), "snap"),
-                                 K(10, off(R, 0.02, 0.04, 0.02), off(L, 0, 0.05, 0.02), (10, 0, 0), (10, 0, -10), "out"), K(18, R, L, (0, 0, 0), (0, 0, -10), "io")]}
+    C["fp_ability1"] = {"keys": [K(0, R, L), K(3, off(R, 0.04, 0.02, 0.06), off(L, -0.02, -0.12, -0.04), (-20, 0, 0), (-20, 0, 0), "snap"),
+                                 K(10, None, off(L, 0, 0.05, 0.02), None, (10, 0, 0), "out"), K(18, R, L, (0, 0, 0), (0, 0, 0), "io")]}
     C["fp_ability2"] = C["fp_fire"]
     C["fp_ult"] = {"keys": [K(0, R, L), K(4, (0.05, 0.14, 0.3), (0.0, 0.16, 0.4), (60, 0, 0), (60, 0, -10), "snap"),
                             K(18, (0.12, 0.2, 0.1), (0.0, 0.2, 0.42), (70, 10, 10), None, "out"),
-                            K(20, (0.2, 0.18, 0.04), None, (80, 30, 30), None, "snap"), K(32, R, L, (0, 0, 0), (0, 0, -10), "io")]}
-    C["fp_inspect"] = {"keys": [K(0, R, L), K(12, off(R, 0.03, 0.02), (0.02, -0.08, 0.44), None, (0, -30, -40), "io"),
-                                K(32, None, (0.02, -0.075, 0.45), None, (0, -32, -60), "io"), K(48, R, L, (0, 0, 0), (0, 0, -10), "io")]}
+                            K(20, (0.2, 0.18, 0.04), None, (80, 30, 30), None, "snap"), K(32, R, L, (0, 0, 0), (0, 0, 0), "io")]}
+    C["fp_inspect"] = {"keys": [K(0, R, L), K(12, None, (0.02, -0.12, 0.42), None, (0, -30, -40), "io"),
+                                K(32, None, (0.02, -0.115, 0.43), None, (0, -32, -60), "io"), K(48, R, L, (0, 0, 0), (0, 0, 0), "io")]}
     return C
 
 def caster(R, L, who):
@@ -390,18 +409,15 @@ def hayate(R, L):
 
 def seiran(R, L):
     """SEIRAN - the elder brother: Hanzo's cycle as Yuzu has it, carried heavier and stiller (less idle drift). Scatter
-    Current (fp_alt) is a snap draw and loose of the fan of arrows, then the same reach to the quiver and nock. Twin Koi:
-    both hands lift the bow skyward and the release throws both arms wide."""
+    Current (fp_alt) is a snap draw to the jaw in 2 frames and the same loose and re-nock. Twin Koi: both hands lift the
+    bow skyward and the release throws both arms wide."""
     C = yuzu(R, L)
-    C["fp_idle"] = idle(R, L, amp=0.0025, sway=0.002, Lr=(0, 0, -8))
-    anchor, snap, quiver = (0.1, -0.22, 0.16), (0.3, -0.34, 0.14), (0.33, -0.35, -0.04)
-    C["fp_alt"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -8)), K(3, anchor, off(L, 0.03, 0.04, 0), (0, 12, 0), (0, 0, -15), "out"),
-                            K(4, snap, off(L, 0, 0.02, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
-                            K(9, quiver, off(L, 0, 0, 0.01), (40, 30, 30), None, "io"), K(12, None, None, None, None, "hold"),
-                            K(18, off(R, 0.12, -0.08, -0.06), None, (10, 10, 10), None, "io"), K(22, R, L, (0, 0, 0), (0, 0, -8), "io")]}
+    C["fp_idle"] = idle(R, L, amp=0.0025, sway=0.002)
+    LD = off(L, 0, 0.04, 0)
+    C["fp_alt"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, 0)), K(2, ARCH_JAW, LD, (0, 10, 0), (0, 0, 0), "out")] + archer_loose(R, L, t0=2)}
     C["fp_ult"] = {"keys": [K(0, R, L), K(5, (0.04, 0.12, 0.32), (0.0, 0.16, 0.46), (60, 0, 0), (60, 0, -10), "snap"),
                             K(20, (0.1, 0.18, 0.12), (0.0, 0.2, 0.46), (70, 10, 10), None, "out"),
-                            K(22, (0.3, 0.1, 0.1), (-0.1, 0.18, 0.5), (80, 40, 40), None, "snap"), K(38, R, L, (0, 0, 0), (0, 0, -10), "io")]}
+                            K(22, (0.3, 0.1, 0.1), (-0.1, 0.18, 0.5), (80, 40, 40), None, "snap"), K(38, R, L, (0, 0, 0), (0, 0, 0), "io")]}
     return C
 
 def build(hero, R, L):
@@ -414,7 +430,9 @@ def build(hero, R, L):
     C.setdefault("fp_hit", flinch(R, L))
     C.setdefault("fp_land", land(R, L))
     C.setdefault("fp_equip", equip(R, L, 1 if hero != "yuzu" else -1))
-    if hero in ("yuzu", "seiran"): base_wrist(C, REST_RR)
+    if hero in ("yuzu", "seiran"):
+        base_wrist(C, REST_RR)
+        base_wrist(C, ARCH_BOW_LR, "Lr")     # the bow fist rolled with the flat bow (thumb along the upper limb)
     # a pistol grip: palm to the grip, the back of the hand toward the lens (the forearm-following rest shows the palm)
     if hero == "haruto": base_wrist(C, (0, 0, -90))
     return C

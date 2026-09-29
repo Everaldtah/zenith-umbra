@@ -293,6 +293,8 @@ export class Animator {
   arrowSlot: [boolean, boolean] = [false, false];
   /** first person: roll a held bow by this much (radians) so it reads canted, the way archers hold it on screen */
   bowCant = 0;
+  /** first person: the bow's canted top limb tipped away into the view (radians about the bow's own side axis) */
+  bowTilt = 0;
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
   gunHide: [boolean, boolean] = [false, false];
   /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
@@ -455,6 +457,10 @@ export class Animator {
       Yv.normalize();
       // an archer's cant in first person: the bow's top limb tipped in toward the reticle
       if (this.gunUpright[i] && this.bowCant) Yv.applyAxisAngle(Zv, -this.bowCant).normalize();
+      if (this.gunUpright[i] && this.bowTilt) {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(Yv, Zv).normalize(), this.bowTilt);
+        Yv.applyQuaternion(q).normalize(); Zv.applyQuaternion(q).normalize();
+      }
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));

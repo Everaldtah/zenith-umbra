@@ -29,6 +29,8 @@ ap.add_argument("--hd-late", action="store_true")
 # generation (no whole-body decimation: every finger keeps the generation's detail), each finger joint re-skinned from
 # the finger bones' geometry, then capped at --tris
 ap.add_argument("--fp-arms", action="store_true")
+# --held-cut: hand-owned geometry further than this (x height) from every hand / finger joint is a held object, cut
+ap.add_argument("--held-cut", type=float, default=0.07)
 ap.add_argument("--wings", action="store_true"); ap.add_argument("--chains", action="store_true"); ap.add_argument("--mech", action="store_true")
 # --chains: skirt panels + cape / coat tails; --hair: long hanging hair (colour-matched to the scalp, grown from the head
 # so torso armour and robes never join it); --crown: hair piled on the head (topknot, buns, dreadlocks) as an upright
@@ -253,6 +255,34 @@ def decimate(obj, tris):
     bpy.context.view_layer.objects.active = obj; bpy.ops.object.modifier_apply(modifier=dm.name)
 
 
+HELD_OUT = np.zeros(0, bool)
+_ISL = None
+
+
+def islands():
+    """connected-component label per vertex of `body` (union-find over its edges), cached"""
+    global _ISL
+    if _ISL is not None and len(_ISL) == len(body.data.vertices): return _ISL
+    nv = len(body.data.vertices)
+    ev = np.empty(len(body.data.edges) * 2, dtype=np.int64); body.data.edges.foreach_get("vertices", ev); ev = ev.reshape(-1, 2)
+    par = np.arange(nv)
+    def find(x):
+        r = x
+        while par[r] != r: r = par[r]
+        while par[x] != r: par[x], x = r, par[x]
+        return r
+    for u, v in ev.tolist():
+        ru, rv = find(u), find(v)
+        if ru != rv: par[ru] = rv
+    _ISL = np.array([find(i) for i in range(nv)])
+    return _ISL
+
+
+def D_all_min(region, D):
+    """per vertex: its distance to the nearest hand / finger joint (inf outside the hand's region)"""
+    out = np.full(len(region), np.inf); out[np.where(region)[0]] = D.min(1); return out
+
+
 def reskin_hands(W):
     """hand + finger weights rebuilt from the bones: each vertex the hand owns goes to its two nearest joints (the hand
     bone or a finger segment), falling off with distance - clean finger separation whatever the retopo's hands were
@@ -275,6 +305,19 @@ def reskin_hands(W):
         G = np.where(mask, G, 0.0); G /= G.sum(1, keepdims=True)
         Wr = W[region]; Wr[:, idx] = G * own[region][:, None]; W[region] = Wr
         LOG[f"fp_hand_{S}"] = int(region.sum())
+        # whatever the hand owns but no finger or palm is near - a staff, a scroll, a blade the generation put in the
+        # fist - isn't hand: it would hang in the view as a wall (Kaien's staff); the game's own props replace it
+        far = np.zeros(len(W), bool); far[np.where(region)[0][D.min(1) > H * a.held_cut]] = True
+        # a held object is usually its own shell in the generation: a shell the hand owns that lies mostly beyond the
+        # hand goes whole (including the part inside the fist - no torn stubs between the fingers); inside hand shells
+        # only clear outliers are cut
+        isl = islands()
+        cut = far & (D_all_min(region, D) > H * a.held_cut * 2)
+        for k in np.unique(isl[region]):
+            m = (isl == k)
+            if (far & m).sum() > 0.4 * (region & m).sum(): cut |= m
+        HELD_OUT[:] = HELD_OUT | cut
+        LOG[f"fp_held_cut_{S}"] = int(cut.sum())
     return W
 
 
@@ -634,14 +677,16 @@ if a.hd and a.hd_late:
     body = hd
     co = np.empty(len(body.data.vertices) * 3); body.data.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
     Wh, LOG["seam_copies_hd"] = weld_weights(read_weights(body))
-    if a.fp_arms: Wh = reskin_hands(Wh)
+    if a.fp_arms:
+        HELD_OUT = np.zeros(len(Wh), bool)
+        Wh = reskin_hands(Wh)
     LOG["unweighted_hd"] = apply_weights(body, Wh)
     if a.fp_arms:
         # arms and hands only (the viewmodel's armsOnly cut, done once here with a margin): shoulders down
         import re, bmesh
         armre = re.compile(r"^(upperarm|forearm|hand|(thumb|index|middle|ring|pinky)\d)_[LR]$")
         ai = [oi[n] for n in names_out if armre.match(n)]
-        drop = np.where(Wh[:, ai].sum(1) <= 0.3)[0]
+        drop = np.where((Wh[:, ai].sum(1) <= 0.3) | HELD_OUT)[0]
         bm = bmesh.new(); bm.from_mesh(body.data); bm.verts.ensure_lookup_table()
         bmesh.ops.delete(bm, geom=[bm.verts[int(i)] for i in drop], context="VERTS")
         bm.to_mesh(body.data); bm.free(); body.data.update()

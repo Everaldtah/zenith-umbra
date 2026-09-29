@@ -40,7 +40,7 @@ export const FP_STYLE: Record<string, Style> = {
   // string hand rests on the nocked arrow beside the grip (Hanzo's ready pose)
   // (work/fp_spec.md, after Hanzo: bow fist low left at (0.37, 0.83), string hand on the arrow at (0.47, 0.89), the bow
   // small enough that its limb never covers the reticle at rest)
-  yuzu: { grip: 'bow', R: [-0.03, -0.19, 0.44], L: [-0.13, -0.18, 0.5], recoil: 0, clip: 0.12, gunScale: 0.6 },
+  yuzu: { grip: 'bow', R: [0.06, -0.24, 0.1], L: [-0.03, -0.18, 0.5], recoil: 0, clip: 0.12, gunScale: 0.8 },
   // the wide kimono sleeves are squeezed into slim tubes for the viewmodel (they'd fill the screen), hands well forward
   kaien: { grip: 'caster', R: [0.21, -0.2, 0.44], L: [-0.21, -0.17, 0.46], recoil: 0.03, keep: 0.97, squeeze: 0.12 },
   mirei: { grip: 'caster', R: [0.22, -0.2, 0.42], L: [-0.19, -0.24, 0.4], recoil: 0.02 },
@@ -64,7 +64,7 @@ export const FP_STYLE: Record<string, Style> = {
   hayate: { grip: 'kunai', R: [0.17, -0.17, 0.4], L: [-0.17, -0.18, 0.4], recoil: 0, keep: 0.9 },
   // the Riverbow in the left hand, the draw hand on the right
   // his robe sleeves squeezed to slim tubes and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
-  seiran: { grip: 'bow', R: [-0.03, -0.19, 0.44], L: [-0.13, -0.18, 0.5], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.58 },
+  seiran: { grip: 'bow', R: [0.06, -0.24, 0.1], L: [-0.03, -0.18, 0.5], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.8 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -404,7 +404,8 @@ export class FirstPersonArms {
         an.bones.head?.scale.setScalar(1e-3);
         if (an.prop) an.prop.visible = true;
         // held weapons (Raijin's katana, the bows, Hayate's nodachi) follow the clip's hands; bows canted in
-        an.bowCant = this.style.grip === 'bow' ? 0.38 : 0;
+        // (Hanzo's hold: the bow rolled nearly flat, upper limb to the right, tilted so that limb recedes into the view)
+        an.bowCant = this.style.grip === 'bow' ? -1.35 : 0; an.bowTilt = this.style.grip === 'bow' ? 0.35 : 0;
         an.placeGunsFromBones();
         driveFingers(this.view.fingers, a, t, dt, { fp: true });
         this.source = `clip:${want}`;

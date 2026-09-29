@@ -22,7 +22,7 @@ export const HELD: Record<string, HeldSpec> = {
   seiran: { L: { id: 'prop_seiran_bow', kind: 'bow', size: 0.86, color: '#1d2433', glow: '#6fa8ff' }, R: { id: 'prop_seiran_arrow', kind: 'arrow', size: 0.42, color: '#dfe6f0', glow: '#6fa8ff' } },
   // Kaien's ofuda: a paper talisman pinched between the index and middle fingers of the throwing hand (gone for a beat
   // after each throw while the next one is drawn - CARD_GONE)
-  kaien: { R: { id: 'prop_kaien_talisman', kind: 'card', size: 0.12, color: '#f2e6c4', glow: '#ffcf5a' } },
+  kaien: { R: { id: 'prop_kaien_talisman', kind: 'card', size: 0.1, color: '#f2e6c4', glow: '#ffcf5a' } },
 };
 
 /** after a throw the talisman hand is empty until the next card is drawn from the sleeve (seconds after the throw) */
@@ -114,8 +114,8 @@ function buildCard(L: number, it: Item, body: THREE.Group) {
   const len = it.size * L, w = len * 0.36;
   const paper = new THREE.MeshStandardMaterial({ color: it.color, roughness: 0.85, side: THREE.DoubleSide, emissive: new THREE.Color(it.glow), emissiveIntensity: 0.12 });
   const ink = new THREE.MeshStandardMaterial({ color: '#b3202a', roughness: 0.6, side: THREE.DoubleSide });
-  put(body, new THREE.BoxGeometry(w, 0.0015 * L, len), paper, 0, 0, len * 0.5);
-  put(body, new THREE.BoxGeometry(w * 0.55, 0.0018 * L, len * 0.55), ink, 0, 0, len * 0.55);
+  put(body, new THREE.BoxGeometry(w, 0.0015 * L, len), paper, 0, 0.02 * L, len * 0.5);
+  put(body, new THREE.BoxGeometry(w * 0.55, 0.0018 * L, len * 0.55), ink, 0, 0.02 * L, len * 0.55);
 }
 
 export function buildHeld(modelHeight: number, it: Item): HeldProp {
@@ -139,7 +139,7 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
     const wrap = new THREE.Group(); wrap.add(fitted);
     if (it.kind === 'blade') fitted.position.z += len * 0.38;
     // the card: fitted like a blade (length on +Z, width on +Y), rolled flat so its face is up, out past the fingertips
-    else if (it.kind === 'card') { fitted.position.z += len * 0.5; wrap.rotation.z = Math.PI / 2; }
+    else if (it.kind === 'card') { fitted.position.z += len * 0.5; wrap.rotation.z = Math.PI / 2; wrap.position.y = 0.02 * L; }   // up at the fingers
     else wrap.rotation.x = -Math.PI / 2;
     body.clear(); body.position.set(0, 0, 0);
     body.add(wrap);

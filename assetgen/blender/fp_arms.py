@@ -49,7 +49,7 @@ EASE = {"lin": lambda u: u, "io": lambda u: u * u * (3 - 2 * u), "in": lambda u:
 # src/render/FirstPerson.ts so authored clips start from exactly the procedural framing
 STYLE = {
     "raijin": ("katana", (0.21, -0.21, 0.44), (-0.17, -0.24, 0.42), 0.0),
-    "yuzu": ("bow", (-0.03, -0.19, 0.44), (-0.13, -0.18, 0.5), 0.0),
+    "yuzu": ("bow", (0.06, -0.24, 0.1), (-0.03, -0.18, 0.5), 0.0),
     "kaien": ("caster", (0.21, -0.2, 0.44), (-0.21, -0.17, 0.46), 0.03),
     "mirei": ("caster", (0.22, -0.2, 0.42), (-0.19, -0.24, 0.4), 0.02),
     "nocturne": ("caster", (0.17, -0.17, 0.42), (-0.18, -0.19, 0.42), 0.02),
@@ -63,7 +63,7 @@ STYLE = {
     "hibiki": ("pistol", (0.2, -0.2, 0.44), (-0.18, -0.21, 0.4), 0.05),
     "tomoe": ("shotgun", (0.21, -0.2, 0.44), (-0.21, -0.19, 0.38), 0.1),
     "hayate": ("kunai", (0.17, -0.17, 0.4), (-0.17, -0.18, 0.4), 0.0),
-    "seiran": ("bow", (-0.03, -0.19, 0.44), (-0.13, -0.18, 0.5), 0.0),
+    "seiran": ("bow", (0.06, -0.24, 0.1), (-0.03, -0.18, 0.5), 0.0),
 }
 # eye pushed forward past a high collar / bulky coat (metres), as FP_STYLE.push in FirstPerson.ts
 PUSH = {"enra": 0.05, "gantetsu": 0.08, "tomoe": 0.04}

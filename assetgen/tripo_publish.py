@@ -32,6 +32,9 @@ HD_OUT = HERE / 'out' / 'models_hd'
 # first-person hand models: the arms + hands of the full-resolution HD generation (fingers re-skinned per joint), capped
 FP_TRIS = 80000
 FP_OUT = HERE / 'out' / 'models_fp'
+# per hero: how close to the hand joints geometry must be to stay hand (x height; default 0.07 keeps bulky gauntlets) -
+# Kaien's generation holds a paper-hung staff right against his fingers
+FP_HELD_CUT = {'kaien': 0.045}
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
@@ -53,7 +56,7 @@ def rig(aid, hq=False, fp=False):
     hd = SRC / f'{aid}_hd.glb'
     out = RIGGED / f'{aid}_fp.glb' if fp else RIGGED / f'{aid}_hq.glb' if hq else RIGGED / f'{aid}.glb'
     cmd = ['blender', '-b', '-P', str(HERE / 'blender' / 'tripo_rig.py'), '--', '--glb', str(src), '--out', str(out), '--height', str(h), *flags]
-    if fp: cmd += ['--hd', str(hd), '--tris', str(FP_TRIS), '--hd-late', '--fp-arms']
+    if fp: cmd += ['--hd', str(hd), '--tris', str(FP_TRIS), '--hd-late', '--fp-arms', '--held-cut', str(FP_HELD_CUT.get(aid, 0.07))]
     elif hq: cmd += ['--hd', str(hd), '--tris', str(HD_TRIS), '--hd-late']
     elif hd.exists() and '--tris' in flags: cmd += ['--hd', str(hd)]
     elif '--tris' in flags: cmd = [c for i, c in enumerate(cmd) if not (c == '--tris' or (i and cmd[i - 1] == '--tris'))]
