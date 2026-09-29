@@ -143,6 +143,22 @@ def raijin(R, L):
     return C
 
 
+# the archers' string hand: knuckles up, palm to the arrow and the cheek, as Hanzo holds it - a -90 deg roll from simply
+# following the forearm (which leaves the palm up toward the lens). Applied under the whole string-hand track (build):
+# the authored wrist keys are relative to it
+REST_RR = (0, 0, -90)
+
+
+def base_wrist(C, base, ch="Rr"):
+    """every key of one wrist channel turned by a base rotation (roll added; a track with no first key starts from it)"""
+    for clip in {id(c): c for c in C.values()}.values():          # (clips can be shared: fp_ability2 is fp_fire)
+        ks = clip["keys"]
+        if ks and ks[0][ch] is None: ks[0][ch] = (0, 0, 0)
+        for k in ks:
+            if k[ch] is not None: k[ch] = (k[ch][0] + base[0], k[ch][1] + base[1], k[ch][2] + base[2])
+    return C
+
+
 def yuzu(R, L):
     """YUZU - calm, precise archer, after Hanzo's first-person cycle. Bow in the left hand (canted), the next arrow nocked
     with the right hand resting on the string beside the grip. fp_draw (scrubbed by charge) pulls the string hand back
@@ -153,10 +169,10 @@ def yuzu(R, L):
     the grab at the quiver)."""
     C = {}
     C["fp_idle"] = idle(R, L, amp=0.004, sway=0.003, Lr=(0, 0, -10))
-    anchor = (0.08, -0.125, 0.13)        # the jaw: close and low on the right, the arrow running up from it through the bow
-    snap = (0.3, -0.27, 0.12)            # loosed: the hand flicks back and out through the bottom-right corner
+    anchor = (0.1, -0.22, 0.16)          # the jaw: the draw hand leaves the frame bottom right, the arrow running up from it
+    snap = (0.3, -0.33, 0.14)            # loosed: the hand flicks back and out through the bottom-right corner
     quiver = (0.33, -0.34, -0.04)        # the reach back to the quiver - out of the view, never across the lens
-    drawnL = off(L, 0, 0.01, 0.02)
+    drawnL = off(L, 0.03, 0.04, 0)       # the bow rises a little into the aim at full draw (Hanzo: grip to (0.40, 0.75))
     C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -10)), K(20, anchor, drawnL, (0, 12, 0), (0, 0, -15), "out")]}
     C["fp_fire"] = {"keys": [K(0, anchor, drawnL, (0, 12, 0), (0, 0, -15)),
                              K(1, snap, off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
@@ -378,8 +394,8 @@ def seiran(R, L):
     both hands lift the bow skyward and the release throws both arms wide."""
     C = yuzu(R, L)
     C["fp_idle"] = idle(R, L, amp=0.0025, sway=0.002, Lr=(0, 0, -8))
-    anchor, snap, quiver = (0.085, -0.135, 0.13), (0.3, -0.28, 0.12), (0.33, -0.35, -0.04)
-    C["fp_alt"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -8)), K(3, anchor, off(L, 0, 0.01, 0.02), (0, 12, 0), (0, 0, -15), "out"),
+    anchor, snap, quiver = (0.1, -0.22, 0.16), (0.3, -0.34, 0.14), (0.33, -0.35, -0.04)
+    C["fp_alt"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -8)), K(3, anchor, off(L, 0.03, 0.04, 0), (0, 12, 0), (0, 0, -15), "out"),
                             K(4, snap, off(L, 0, 0.02, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
                             K(9, quiver, off(L, 0, 0, 0.01), (40, 30, 30), None, "io"), K(12, None, None, None, None, "hold"),
                             K(18, off(R, 0.12, -0.08, -0.06), None, (10, 10, 10), None, "io"), K(22, R, L, (0, 0, 0), (0, 0, -8), "io")]}
@@ -398,4 +414,5 @@ def build(hero, R, L):
     C.setdefault("fp_hit", flinch(R, L))
     C.setdefault("fp_land", land(R, L))
     C.setdefault("fp_equip", equip(R, L, 1 if hero != "yuzu" else -1))
+    if hero in ("yuzu", "seiran"): base_wrist(C, REST_RR)
     return C
