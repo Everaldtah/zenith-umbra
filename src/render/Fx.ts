@@ -8,6 +8,7 @@ import { WeaponFx } from './WeaponFx';
 import { FULL } from '../edition';
 import { fangPos } from '../game/abilities';
 import { buildFang } from './TomoeProps';
+import { SpiritDragons } from './SpiritDragon';
 
 const FXCOL: Record<string, string> = {
   sun: '#ffd76a', star: '#bfe8ff', talisman: '#ffe28a', bolt: '#8ad8ff', void: '#ff2244', blood: '#ff2d55', hex: '#c77dff',
@@ -94,13 +95,15 @@ export class Fx {
   fpActor: Actor | null = null;
   /** desktop edition: travelling tracers, muzzle flashes, sparks, scorch marks, brass (WeaponFx.ts) */
   wfx: WeaponFx | null = null;
+  /** desktop edition: the Koryu brothers' rigged spirit koi-dragons (SpiritDragon.ts) */
+  dragons: SpiritDragons | null = null;
   /** Game: where the local player's rounds leave the gun in first person (the viewmodel's muzzle, not the body's) */
   muzzleFor: ((a: Actor, from: V3) => V3) | null = null;
 
   constructor(scene: THREE.Scene, cap = 6000) {
     this.parts = new Particles(cap);
     this.group.add(this.parts.points);
-    if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); }
+    if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); this.dragons = new SpiritDragons(this.group); }
     this.flash = new THREE.PointLight('#ffffff', 0, 18, 2);
     this.group.add(this.flash);
     scene.add(this.group);
@@ -193,6 +196,10 @@ export class Fx {
         this.light(p, e.color ?? '#ffd76a', 40, now);
         this.shake = Math.max(this.shake, 0.3 / (1 + near / 12));
       } break;
+      // the Koryu ultimates: Seiran's twin koi (Dragonstrike) and Hayate's koi-dragon (Dragonblade)
+      case 'twinkoi': if (e.to) this.dragons?.twin(p, e.to, now); break;
+      case 'dragoncoil': if (e.actor) this.dragons?.coil(e.actor, now, e.actor === this.fpActor); break;
+      case 'dragoncut': if (e.to) this.dragons?.streak(p, e.to, now); break;
       case 'lightning': if (e.to) { this.zigzag(p, e.to, '#8ad8ff', now); } break;
       case 'parry': this.ring(p, 1.8, '#8ad8ff', now, 0.3, false); P.emit(p, n(16), c, { speed: 8, life: 0.2, size: 0.15 }); this.light(p, '#8ad8ff', 30, now); break;
       case 'decoy': P.emit(p, n(40), c, { speed: 4, life: 0.8, size: 0.3 }); this.ring(p, 2, e.color ?? '#c77dff', now, 0.5, false); break;
@@ -228,7 +235,7 @@ export class Fx {
       case 'wish': case 'voidshield': case 'bloodpact': case 'parrystance': P.emit(p, n(25), c, { speed: 2.5, life: 0.6, size: 0.3 }); break;
       case 'papers': P.emit({ x: p.x, y: p.y + 1, z: p.z }, n(40), new THREE.Color('#fff6d8'), { speed: 4, life: 0.8, size: 0.28, grav: -1, spread: 1 }); break;
       case 'smoke': P.emit({ x: p.x, y: p.y + 1, z: p.z }, n(40), new THREE.Color('#3a2a5a'), { speed: 2.5, life: 1.0, size: 0.8, spread: 1.2, up: 0.5 }); break;
-      case 'flash': case 'chargetrail': if (e.actor) this.add(new THREE.Object3D(), 'trail', now, e.dur ?? 0.3, { actor: e.actor, r: 0 }); (this.timed[this.timed.length - 1].obj as any).__col = c; break;
+      case 'flash': case 'chargetrail': if (e.actor) { this.add(new THREE.Object3D(), 'trail', now, e.dur ?? 0.3, { actor: e.actor, r: 0 }); (this.timed[this.timed.length - 1].obj as any).__col = c; } break;
       case 'lance': case 'soundcone': case 'brandcone': if (e.to) {
         const cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
         const w = e.kind === 'lance' ? 1 : e.kind === 'soundcone' ? 5 : 4;
@@ -343,6 +350,7 @@ export class Fx {
   // ------------------------------------------------------------------ per-frame sync
   update(dt: number, w: World, now: number) {
     this.parts.update(dt);
+    this.dragons?.update(now, (q, c, big) => this.parts.emit(q, big ? 3 : 2, c, { speed: big ? 2.2 : 1.2, life: big ? 0.7 : 0.5, size: big ? 0.55 : 0.4, spread: big ? 0.8 : 0.5 }));
     if (this.wfx) { this.wfx.ground ??= (x, z, y) => w.level.groundAt(x, z, y); this.wfx.update(now, dt); }
     if (now > this.flashUntil) this.flash.intensity *= 0.8;
     this.shake *= Math.pow(0.02, dt);

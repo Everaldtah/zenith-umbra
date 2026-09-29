@@ -278,7 +278,9 @@ const I: Record<string, Impl> = {
     const tgs = w.enemies(a).filter(x => dist3(x.pos, a.pos) < 18 && w.level.lineOfSight(a.eye, x.center)).sort((p, q) => dist3(p.pos, a.pos) - dist3(q.pos, a.pos)).slice(0, 6);
     if (!tgs.length) return false;
     a.set('phased', w.time, tgs.length * 0.18 + 0.1);
-    w.fx('ultflash', a.center, { color: '#4fe3c1', actor: a }); w.sfx('ultcall', a.center, a);
+    w.fx('ultflash', a.center, { color: '#b36bff', actor: a }); w.sfx('ultcall', a.center, a);
+    // the koi-dragon coils up around him as the nodachi is drawn, then streaks through every cut (SpiritDragon.ts)
+    w.fx('dragoncoil', a.center, { actor: a, color: '#b36bff' });
     tgs.forEach((x, i) => w.after(0.12 + i * 0.18, () => {
       if (!a.alive) return;
       const from = { ...a.center };
@@ -291,7 +293,7 @@ const I: Record<string, Impl> = {
         a.clear('phased'); w.damage(a, x, 140, { kind: 'ability' }); a.set('phased', w.time, (tgs.length - i) * 0.18);
         a.anim.attackAt = w.time; a.anim.attackKind = 'secondary';
       }
-      w.fx('cut', from, { to: a.center, color: '#4fe3c1' }); w.sfx('cut', a.center, a);
+      w.fx('cut', from, { to: a.center, color: '#b36bff' }); w.fx('dragoncut', from, { to: a.center, color: '#b36bff' }); w.sfx('cut', a.center, a);
     }));
     return true;
   },
@@ -310,13 +312,16 @@ const I: Record<string, Impl> = {
     return true;
   },
   twinkoi(w, a) {
-    // two spirit koi spiral out along the aim (flat), through walls: each step bites everything within 4.5m of either koi
+    // two giant spirit koi-dragons spiral out along the aim (flat), straight through walls: each step bites everything
+    // within 4.5m of either dragon's head, wherever it is - no line of sight, like Dragonstrike
     const f = a.forward(), dir = norm({ x: f.x, y: 0, z: f.z }), side = { x: -dir.z, y: 0, z: dir.x };
     const o = { x: a.pos.x + dir.x * 1.5, y: a.pos.y + 1.2, z: a.pos.z + dir.z * 1.5 };
     const hitAt = new Map<number, number>();
     w.fx('ultflash', a.center, { color: '#8ec5ff', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('arrowrain', o, a);
+    // the twin koi-dragons pour out of a sigil at o and corkscrew along the same helix the bites follow (SpiritDragon.ts)
+    w.fx('twinkoi', o, { to: { x: o.x + dir.x * 45, y: o.y, z: o.z + dir.z * 45 }, color: '#8ec5ff', actor: a });
     for (let k = 0; k <= 18; k++) w.after(0.25 + k * 0.1, () => {
-      const along = k * 2.5, sw = Math.sin(k * 0.9) * 1.6;
+      const along = k * 2.5, sw = Math.sin(along * TWIN_W) * TWIN_R;
       for (const sg of [1, -1]) {
         const p = { x: o.x + dir.x * along + side.x * sw * sg, y: o.y, z: o.z + dir.z * along + side.z * sw * sg };
         w.fx('flash', p, { color: sg > 0 ? '#8ec5ff' : '#3f7fff', dur: 0.35 });
@@ -674,6 +679,8 @@ const I: Record<string, Impl> = {
 // Tomoe's numbers
 export const FANG_DMG = 55, FANG_WOUND = 30, FANG_SPEED = 42, FANG_RANGE = 30, FANG_BACK = 46, FANG_STICK = 6;
 export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42, TIDE_LEN = 20, TIDE_SPEED = 17;
+/** Twin Koi Torrent's double helix: the giant twin dragons (render/SpiritDragon.ts) and their bites share it - radius (m), turn (rad/m) */
+export const TWIN_R = 2.2, TWIN_W = 0.3;
 
 /** where the Crescent Fang is right now (flying, stuck, riding an enemy or on its way home), or null in her hand */
 export function fangPos(w: World, a: Actor): V3 | null {

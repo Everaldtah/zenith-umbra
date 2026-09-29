@@ -58,6 +58,12 @@ export async function heroModel(id: string): Promise<THREE.Object3D | null> {
   return c;
 }
 
+/** a rebound copy of a rigged effect model in public/models that has no manifest entry (the Koryu spirit dragons) */
+export async function riggedModel(id: string): Promise<THREE.Object3D | null> {
+  const g = await load(`${BASE}models/${id}.glb`);
+  return g ? SkeletonUtils.clone(g.scene) : null;
+}
+
 export async function propModel(id: string): Promise<THREE.Object3D | null> {
   await loadManifest();
   if (!hasProp(id)) return null;
