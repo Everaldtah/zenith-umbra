@@ -9,6 +9,7 @@ import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
 import { HELD, buildHeld, heldVisible, ARROW_GONE } from './HeldProps';
+import { Fingers, driveFingers } from './Fingers';
 import { Ragdoll } from './Ragdoll';
 import type { Level } from '../engine/Physics';
 
@@ -198,6 +199,8 @@ export class CharacterView {
   inner = new THREE.Group();            // death tilt / squash
   model: THREE.Object3D;
   anim: Animator;
+  /** finger curls (Tripo rigs): the hands close around each hero's weapon */
+  fingers: Fingers | null = null;
   rimColor: THREE.Color;
   look: LookUniforms;
   get rim() { return this.look.zuRimStrength; }
@@ -458,6 +461,7 @@ export class CharacterView {
     this.inner.add(wrap);
     this.model = wrap;
     this.anim = anim;
+    this.fingers = Fingers.build(m);
     this.scaleFit = s;
     this.real = true;
     // mid-match arrivals (a hero swap, a pilot ejecting, a new wave): textures uploaded and shaders compiled before the
@@ -506,7 +510,7 @@ export class CharacterView {
     // physics: the body colliders the hair / cloth solver pushes against, measured from this mesh by the rigger;
     // blinking: lids over the painted eyes the rigger found on the face
     const info = modelInfo(mid);
-    if (info?.colliders) anim.colliders = info.colliders as Animator['colliders'];
+    anim.setBody(id, info?.colliders as Animator['colliders'] | undefined);
     this.lids?.dispose(); this.lids = null;
     this.eyeGlow?.dispose(); this.eyeGlow = null;
     if (info?.eyes?.length === 2 && anim.bones.head) this.lids = new Eyelids(m, anim.bones.head, info.eyes, BRIGHT_SUITS.has(id) ? 0.04 : 0.16);
@@ -656,6 +660,8 @@ export class CharacterView {
     this.group.rotation.y = a.yaw;
     this.inner.scale.setScalar(a.scale); this.inner.quaternion.identity(); this.inner.position.set(0, 0, 0);
     this.look.zuSmear.value.set(0, 0, 0);
+    // fingers are local curls on the hands: independent of the body's pose source (procedural, clip, ragdoll)
+    driveFingers(this.fingers, a, time, dt, { drawW: this.anim.drawW });
     // death: a ragdoll thrown by the killing blow (desktop), else a death clip when the library has one (the body
     // crumples, then sinks), else tip over and sink
     if (!a.alive && this.deathRagdoll(dt, time)) return;
@@ -670,7 +676,6 @@ export class CharacterView {
       for (const j of this.jets) j.visible = false;
       this.anim.update({ ...this.animState(dt, time), vel: new THREE.Vector3(), dead: true, deathAge: age, grounded: true, flying: false });
       this.lids?.update(time, a.anim.hitAt, true);
-    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
       this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
       return;
     }

@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
+import { driveFingers } from './Fingers';
 
 type V = [number, number, number];     // view space metres: right, up, forward (from the eye)
 type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun' | 'dual';
@@ -105,7 +106,7 @@ export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0, squeeze 
   model.traverse(o => {
     const m = o as THREE.SkinnedMesh;
     if (!m.isSkinnedMesh || (m.userData.fpArms as boolean)) return;
-    const bones = m.skeleton.bones, arm = bones.map(b => /^(upperarm|forearm|hand)_[LR]$/.test(b.name));
+    const bones = m.skeleton.bones, arm = bones.map(b => /^(upperarm|forearm|hand|(thumb|index|middle|ring|pinky)\d)_[LR]$/.test(b.name));
     const g = m.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
     if (!si || !sw) return;
     const n = si.count, w = new Float32Array(n);
@@ -297,12 +298,14 @@ export class FirstPersonArms {
         // held weapons (Raijin's katana, the bows, Hayate's nodachi) follow the clip's hands; bows canted in
         an.bowCant = this.style.grip === 'bow' ? 0.38 : 0;
         an.placeGunsFromBones();
+        driveFingers(this.view.fingers, a, t, dt, { fp: true });
         this.source = `clip:${want}`;
         return;
       }
     }
     // ---- 2. procedural personality
     this.proc(t, newAttack);
+    driveFingers(this.view.fingers, a, t, dt, { fp: true });
   }
 
   private proc(t: number, _newAttack: boolean) {

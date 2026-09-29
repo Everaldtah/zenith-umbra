@@ -26,16 +26,35 @@ export { BONES };
  *   stiff / drag: fraction per 1/60 s toward the animated pose / of velocity lost; grav: g multiplier; maxA: radians
  */
 type DynKind = 'hair' | 'tuft' | 'skirt' | 'cape' | 'sleeve';
-const DYN: Record<DynKind, { stiff: number; drag: number; grav: number; maxA: number; wind: number; cols: BoneName[] }> = {
-  hair: { stiff: 0.09, drag: 0.06, grav: 0.55, maxA: 1.0, wind: 1, cols: ['head', 'neck', 'chest', 'spine', 'upperarm_L', 'upperarm_R'] },
-  // hair standing up off the head (topknot, buns, dreadlocks): springy, holds its shape against gravity, bounces with the head.
+// stiff / drag: [root, tip] per 1/60 s along the chain (roots hold the silhouette, tips carry the motion). inertT /
+// inertR: how much of the character's own world move / turn the chain feels (1 = fully world space - at Hibiki's groove
+// speed or a 180-degree flick that slammed every strand to its limit and through the colliders; Kawaii Physics' world
+// damping). simW: sim vs the animated pose, a final blend (Blizzard's Ana coat: sim that still stays on-model).
+// maxA: angular limit off the animated pose. Values: work/research_ow_dynamics.md (OW2: motion accents starts, stops,
+// jumps and hits and settles within ~0.4 s; nothing crosses the face)
+interface Dyn { stiff: [number, number]; drag: [number, number]; grav: number; maxA: number; wind: number; inertT: number; inertR: number; simW: number; cols: BoneName[] }
+const DYN: Record<DynKind, Dyn> = {
+  hair: { stiff: [0.26, 0.08], drag: [0.08, 0.11], grav: 0.6, maxA: 0.75, wind: 0.35, inertT: 0.55, inertR: 0.45, simW: 1, cols: ['head', 'neck', 'chest', 'spine', 'upperarm_L', 'upperarm_R'] },
+  // hair standing up off the head (topknot, buns, dreadlocks): holds its shape against gravity, bounces with the head.
   // Solid masses (a bun is one lump of mesh): a small, stiff bounce - past ~15 degrees the mesh folds where the chain bends
-  tuft: { stiff: 0.42, drag: 0.12, grav: 0.1, maxA: 0.26, wind: 0.3, cols: ['head'] },
+  tuft: { stiff: [0.5, 0.3], drag: [0.12, 0.14], grav: 0.12, maxA: 0.26, wind: 0.15, inertT: 0.8, inertR: 0.7, simW: 1, cols: ['head'] },
   // wide sleeves: hang and swing off the forearm, can't pass through the torso, the thighs or the arm itself
-  sleeve: { stiff: 0.11, drag: 0.06, grav: 0.95, maxA: 1.1, wind: 0.8, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'forearm_L', 'forearm_R'] },
-  skirt: { stiff: 0.16, drag: 0.06, grav: 0.9, maxA: 0.7, wind: 0.5, cols: ['hips', 'spine', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R'] },
-  cape: { stiff: 0.1, drag: 0.05, grav: 1, maxA: 0.9, wind: 1, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'upperarm_L', 'upperarm_R'] },
+  sleeve: { stiff: [0.3, 0.09], drag: [0.08, 0.1], grav: 0.95, maxA: 0.8, wind: 0.4, inertT: 0.6, inertR: 0.5, simW: 0.85, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'forearm_L', 'forearm_R'] },
+  skirt: { stiff: [0.34, 0.12], drag: [0.08, 0.1], grav: 0.9, maxA: 0.55, wind: 0.3, inertT: 0.5, inertR: 0.4, simW: 0.7, cols: ['hips', 'spine', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R'] },
+  cape: { stiff: [0.24, 0.07], drag: [0.06, 0.09], grav: 1, maxA: 0.8, wind: 0.6, inertT: 0.4, inertR: 0.35, simW: 0.75, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'upperarm_L', 'upperarm_R'] },
 };
+/** per weight class (heavy cloth swings slower and less; silk gowns and flyers' hair stay livelier) and per hero */
+const DYN_CLASS: Record<string, { stiff: number; drag: number; maxA: number; inertT: number }> = {
+  heavy: { stiff: 1.25, drag: 1.2, maxA: 0.85, inertT: 0.9 }, light: { stiff: 0.85, drag: 0.9, maxA: 1.1, inertT: 1.05 },
+};
+const HERO_CLASS: Record<string, string> = { gantetsu: 'heavy', tomoe: 'heavy', enra: 'heavy', gorgoth: 'heavy', vorn: 'heavy', qelvaris: 'heavy', mirei: 'light', nocturne: 'light', yuzu: 'light' };
+const HERO_DYN: Record<string, Partial<Record<DynKind, Partial<Dyn>>>> = {
+  hibiki: { tuft: { inertT: 0.5, inertR: 0.5 } }, hibiki_armor: { tuft: { inertT: 0.5, inertR: 0.5 } },   // dreads at groove speed
+  nocturne: { skirt: { simW: 0.6 } },                    // the ragged gown hem reads better with less sim
+  kaien: { sleeve: { maxA: 0.65 } }, seiran: { sleeve: { maxA: 0.65 } },
+};
+/** character-relative particle speed limit (m/s): dashes stay readable and strands can't tunnel through the body */
+const DYN_VMAX = 9;
 const kindOf = (p: ChainPrefix): DynKind => p === 'hair_T' ? 'tuft' : p.startsWith('hair') ? 'hair' : p.startsWith('cape') ? 'cape' : p.startsWith('sleeve') ? 'sleeve' : 'skirt';
 /** capsule colliders: bone head -> `to` bone head; radius as a fraction of the model height when the rig has no measurement */
 const COLL: Partial<Record<BoneName, { to: BoneName; r: number }>> = {
@@ -293,6 +312,7 @@ export class Animator {
   private sq = { x: 0, v: 0 }; private lastJump = 9; private lastLand = 9;
   private lagY = { x: 0, v: 0 }; private lagP = { x: 0, v: 0 }; private lastPitch = 0; private yawRate = 0;
   private headF = { x: 0, v: 0 };                  // the head's follow-through on hits (lags, then overshoots the body)
+  private headStab = 0;                             // the head's counter-pitch against the body's lean (smoothed)
   private kick = { x: 0, v: 0 };                   // heavy footfall punctuation (chest + hips dip on each contact)
   private tumble = 0; private hitX = 0; private hitZ = 1;
   private shiftT = 0; private shift = { x: 0, v: 0 };   // contrapposto weight side
@@ -304,7 +324,11 @@ export class Animator {
   private chains: { pf: ChainPrefix; kind: DynKind; segs: BoneName[]; tip: BoneName; par: BoneName; len: number[];
     x: THREE.Vector3[]; prev: THREE.Vector3[]; anchor: THREE.Vector3 | null;
     /** per particle, per collider: its rest distance from that capsule (model units) - the most it may be pushed out to */
-    rmax: Partial<Record<BoneName, number>>[] }[] = [];
+    rmax: Partial<Record<BoneName, number>>[];
+    /** this rig's tuned values (DYN x weight class x hero); rface: per particle, its rest distance from the face guard */
+    P: Dyn; rface: number[] | null }[] = [];
+  private dynYaw: number | null = null;
+  private heroId = '';
   private ring: { a: number; b: number; d: number[] }[] = [];
   /** collider radii (model units) measured from the mesh by the rigger (tripo_rig.py); missing = fractions of the height */
   colliders: Partial<Record<BoneName, number>> = {};
@@ -488,7 +512,11 @@ export class Animator {
         }
         return out;
       });
-      this.chains.push({ pf, kind, segs, tip, par, len, x: [], prev: [], anchor: null, rmax });
+      // face guard (head-anchored hair): a sphere in front of the skull the strands can't fold into; like the capsules,
+      // a strand modelled inside it (bangs) may only be pushed out to where it hung in the bind pose
+      const fc = par === 'head' && kind === 'hair' ? this.faceGuard(this.rest.head!.p, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1), 1) : null;
+      const rface = fc ? idx.slice(1).map(n => Math.min(fc.r, this.rest[n]!.p.distanceTo(fc.c) * 0.97)) : null;
+      this.chains.push({ pf, kind, segs, tip, par, len, x: [], prev: [], anchor: null, rmax, P: this.dynFor(kind, pf), rface });
     }
     // neighbouring skirt panels keep their rest spacing (within +-25%) level by level
     this.ring = [];
@@ -499,6 +527,32 @@ export class Animator {
       const pa2 = pts(this.chains[A]), pb2 = pts(this.chains[B]);
       this.ring.push({ a: A, b: B, d: pa2.map((p, k) => p.distanceTo(pb2[k])) });
     }
+  }
+
+  /** the head's face guard sphere: centre in front of the skull, radius (the head collider scaled by `sc`) */
+  private faceGuard(head: THREE.Vector3, up: THREE.Vector3, fwd: THREE.Vector3, sc: number) {
+    const r = (this.colliders.head ?? (COLL.head!.r * this.height)) * sc;
+    return { c: head.clone().addScaledVector(up, r * 0.6).addScaledVector(fwd, r * 0.35), r: r * 0.9 };
+  }
+
+  private dynFor(kind: DynKind, pf: ChainPrefix): Dyn {
+    const b = DYN[kind], m = DYN_CLASS[HERO_CLASS[this.heroId] ?? ''] ?? { stiff: 1, drag: 1, maxA: 1, inertT: 1 };
+    const o = HERO_DYN[this.heroId]?.[kind] ?? {};
+    return {
+      ...b, ...o,
+      stiff: [Math.min(0.95, b.stiff[0] * m.stiff), Math.min(0.95, b.stiff[1] * m.stiff)],
+      drag: [Math.min(0.9, b.drag[0] * m.drag), Math.min(0.9, b.drag[1] * m.drag)],
+      // front locks hang beside the face: a tighter limit
+      maxA: (o.maxA ?? (kind === 'hair' && (pf === 'hair_L' || pf === 'hair_R') ? 0.45 : b.maxA)) * m.maxA,
+      inertT: Math.min(1, (o.inertT ?? b.inertT) * m.inertT),
+    };
+  }
+
+  /** the hero this rig belongs to (weight class and per-hero dynamics) and the collider radii the rigger measured */
+  setBody(heroId: string, colliders?: Partial<Record<BoneName, number>>) {
+    this.heroId = heroId;
+    if (colliders) this.colliders = colliders;
+    if (this.ok) this.bindChains();
   }
 
   /** the hair / cloth solver (DYN): world space, fixed sub-steps, body colliders, then the bones are aimed down the chains */
@@ -560,8 +614,33 @@ export class Animator {
       const rigid = c.segs.map(n => this.rest[n]!.dir.clone().applyQuaternion(base));
       return { anchor, rigid };
     });
+    // the character's own turn this frame (for the rotation inertia)
+    let dYaw = this.dynYaw === null ? 0 : s.yaw - this.dynYaw;
+    dYaw = Math.atan2(Math.sin(dYaw), Math.cos(dYaw));
+    this.dynYaw = s.yaw;
+    const moving = Math.hypot(s.vel.x, s.vel.z) > 0.3 || !s.grounded;
+    // face guard this frame (world): hair anchored on the head can't fold into the eyes
+    let face: { c: THREE.Vector3; r: number } | null = null;
+    if (this.bones.head && this.chains.some(c => c.rface)) {
+      const hq = (this.modelQ.get(this.bones.head) ?? this.rest.head!.q).clone().multiply(this.rest.head!.q.clone().invert());
+      face = this.faceGuard(toW(this.modelPos('head')), dirW(new THREE.Vector3(0, 1, 0).applyQuaternion(hq)), dirW(new THREE.Vector3(0, 0, 1).applyQuaternion(hq)), sc);
+    }
+    const vA: THREE.Vector3[] = [];
     this.chains.forEach((c, ci) => {
       const F = frames[ci];
+      vA[ci] = new THREE.Vector3();
+      if (c.anchor && c.anchor.distanceTo(F.anchor) <= H * 1.5 && c.x.length === c.segs.length) {
+        // inertia: carry the chain along with the anchor by the part of its move (and turn) the chain doesn't feel;
+        // moving x and prev together keeps each particle's own velocity
+        const dA = F.anchor.clone().sub(c.anchor);
+        vA[ci].copy(dA).multiplyScalar(c.P.inertT);
+        const carry = dA.multiplyScalar(1 - c.P.inertT), turn = (1 - c.P.inertR) * dYaw;
+        const cs = Math.cos(turn), sn = Math.sin(turn);
+        for (const arr of [c.x, c.prev]) for (const x of arr) {
+          x.add(carry);
+          if (turn) { const dx = x.x - F.anchor.x, dz = x.z - F.anchor.z; x.x = F.anchor.x + dx * cs + dz * sn; x.z = F.anchor.z - dx * sn + dz * cs; }
+        }
+      }
       if (!c.anchor || c.anchor.distanceTo(F.anchor) > H * 1.5 || c.x.length !== c.segs.length) {
         // first frame / respawn / teleport: start at the animated pose
         c.x = []; c.prev = [];
@@ -573,16 +652,23 @@ export class Animator {
     for (let st = 1; st <= steps; st++) {
       const u = st / steps;
       this.chains.forEach((c, ci) => {
-        const P = DYN[c.kind], F = frames[ci];
-        const keep = Math.pow(1 - P.drag, f), pull = 1 - Math.pow(1 - P.stiff, f);
+        const P = c.P, F = frames[ci], n = c.segs.length;
+        const vS = vA[ci].clone().divideScalar(steps), vmax = DYN_VMAX * hs;
         let prevP = c.anchor!.clone().lerp(F.anchor, u), rot = new THREE.Quaternion();
-        for (let k = 0; k < c.segs.length; k++) {
+        for (let k = 0; k < n; k++) {
           const x = c.x[k], pv = c.prev[k], L = c.len[k] * sc;
+          // root -> tip: stiff roots hold the silhouette, loose tips carry the motion; extra drag at rest (no micro-jitter)
+          const tk = n > 1 ? Math.pow(k / (n - 1), 0.8) : 1;
+          const stiff = P.stiff[0] + (P.stiff[1] - P.stiff[0]) * tk, drag = Math.min(0.9, (P.drag[0] + (P.drag[1] - P.drag[0]) * tk) * (moving ? 1 : 1.6));
+          const keep = Math.pow(1 - drag, f), pull = 1 - Math.pow(1 - stiff, f);
           // the animated direction of this segment, carried by the simulated rotation of the segments above it
           const rigidW = dirW(F.rigid[k].clone().applyQuaternion(rot)).normalize();
           const target = prevP.clone().addScaledVector(rigidW, L);
           // Verlet with drag (air resistance in world space), gravity and wind
-          tmp.subVectors(x, pv).multiplyScalar(keep);
+          // velocity relative to the anchor's own (felt) motion, clamped
+          tmp.subVectors(x, pv).sub(vS);
+          if (tmp.lengthSq() > vmax * vmax) tmp.setLength(vmax);
+          tmp.add(vS).multiplyScalar(keep);
           pv.copy(x);
           x.add(tmp);
           x.y -= g * P.grav * hs * hs;
@@ -596,6 +682,7 @@ export class Animator {
             const r = Math.min(C.r + 0.008 * H, lim !== undefined ? lim * sc : Infinity);
             if (r > 0) pushOut(x, CA.copy(C.a0).lerp(C.a1, u), CB.copy(C.b0).lerp(C.b1, u), r);
           }
+          if (face && c.rface) { const r = c.rface[k] * sc; if (r > 0) pushOut(x, face.c, face.c, r); }
           if (s.grounded && x.y < s.pos.y + 0.01 * H) x.y = s.pos.y + 0.01 * H;
           // hard segment length, and an angular limit off the animated pose
           tmp.subVectors(x, prevP);
@@ -622,17 +709,24 @@ export class Animator {
     }
     // aim the bones down the solved chains
     this.chains.forEach((c, ci) => {
-      c.anchor = frames[ci].anchor.clone();
-      let head = frames[ci].anchor;
+      const F = frames[ci];
+      c.anchor = F.anchor.clone();
+      let head = F.anchor;
+      // the shown chain: the sim blended toward the animated pose by 1 - simW (the sim itself keeps its own state)
+      let shown = c.x;
+      if (c.P.simW < 1) {
+        let p = F.anchor.clone();
+        shown = c.x.map((x, k) => { p = p.clone().addScaledVector(dirW(F.rigid[k]), c.len[k] * sc); return x.clone().lerp(p, 1 - c.P.simW); });
+      }
       for (let k = 0; k < c.segs.length; k++) {
         const seg = c.segs[k];
         const parObj = this.bones[seg]!.parent!;
         const parName = k === 0 ? c.par : c.segs[k - 1];
         const pq = this.modelQ.get(parObj) ?? this.rest[parName]!.q;
         const base = pq.clone().multiply(this.rest[parName]!.q.clone().invert());
-        this.aimBone(seg, dirToM(c.x[k].clone().sub(head)), base);
+        this.aimBone(seg, dirToM(shown[k].clone().sub(head)), base);
         this.posCache.delete(k + 1 < c.segs.length ? c.segs[k + 1] : c.tip);
-        head = c.x[k];
+        head = shown[k];
       }
     });
   }
@@ -1120,6 +1214,19 @@ export class Animator {
     const headP = -lagPitch * 0.9 - carriage * 0.8 + (PERF ? this.landDip * 2.5 : 0) + headFollow - this.tilt.pitch * 0.55 - upright * 1.3;
     const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85 - lagYaw * 0.95)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02 + headP));
     blendD(Dhd, withAdd(cq('head'), aimP + this.recoil * 0.3 + fP + headP, -lagYaw * 0.95, 0), wTorso);
+    // head stabilisation (Overwatch keeps the eyes level with the aim while the body leans into the run): whatever pitch
+    // the lean, the clip and the spine chain left on the head, most of it is taken back out on the move - the run's lean
+    // put the head 20-30 deg down and the bangs over the eyes. Intended head motion stays: the aim, a landing tuck, a
+    // hit's follow-through, recoil
+    const stabW = PERF && !s.dead && !s.climb ? 0.85 * this.moveBlend : 0;
+    if (stabW > 0.01 || Math.abs(this.headStab) > 1e-3) {
+      const fwd = _v.set(0, 0, 1).applyQuaternion(Dhd);
+      const want = aimP + this.recoil * 0.3 + fP + (PERF ? this.landDip * 2.5 : 0) + headFollow - lagPitch * 0.9;
+      const has = -Math.asin(Math.max(-1, Math.min(1, fwd.y)));
+      this.headStab += (clampA((want - has) * stabW, 0.6) - this.headStab) * (1 - Math.exp(-dt * 25));
+      const axis = _v2.set(fwd.z, 0, -fwd.x);                 // the head's own horizontal right-hand axis (Y x fwd)
+      if (axis.lengthSq() > 1e-6) Dhd.premultiply(_q2.setFromAxisAngle(axis.normalize(), this.headStab));
+    }
     this.applyDelta('head', Dhd);
     // ---------------- legs (IK)
     const hipsPos = R.hips.p.clone().add(hipsOff);
