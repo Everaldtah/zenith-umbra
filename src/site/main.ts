@@ -30,7 +30,7 @@ document.getElementById('site')!.innerHTML = `
   <ul class="feat"><li><b>10</b>original heroes</li><li><b>5</b>story maps + training grounds</li><li><b>1</b>giant mecha tank per side, piloted</li><li><b>2</b>flying healers</li><li><b>5v5</b>vs AI, AI test lab, spectator</li><li><b>Co-op</b>online third-person campaign (up to 4)</li><li><b>50</b>skins in the 3D Hero Viewer</li><li><b>120 Hz</b>physics in the Windows app</li></ul>
 </section>
 <section id="film" class="film"><h2>THE SUN THAT REFUSED TO SET</h2>
-  <p class="lead">A ten-minute anime film in the spirit of late-90s mecha cinema and hot-blooded super-robot shows: the Eclipse that broke the world, how every hero and villain got their scars, and the dawn that Tenkai-Oh drags back into the sky. Painted keyframes, action cuts animated with Seedance 2.5.</p>
+  <p class="lead">A ten-minute anime film in the spirit of late-90s mecha cinema and hot-blooded super-robot shows: the Eclipse that broke the world, how every hero and villain got their scars, and the dawn that Tenkai-Oh drags back into the sky. Painted keyframes brought to life with Grok Imagine, Kling 3 and Gemini Omni, voiced and scored for the film.</p>
   <div class="player"><video controls preload="metadata" playsinline poster="${B}film/eclipse_poster.webp">
     <source src="${B}film/eclipse.mp4" type="video/mp4">
     <track kind="subtitles" srclang="en" label="English" src="${B}film/eclipse.vtt" default></video></div>

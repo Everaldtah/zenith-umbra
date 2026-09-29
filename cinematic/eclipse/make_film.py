@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
-"""Cut "The Sun That Refused to Set": painted keyframes + Seedance 2.5 clips -> a limited-animation anime film.
+"""Cut "The Sun That Refused to Set": painted keyframes + image-to-video clips -> a 10-minute anime film.
 
     python make_film.py [--draft] [--only o01,a07] [--no-web]
 Inputs  work/keys/<shot>.(jpg|png|webp)   painted keyframe per shot (Seedance AI image editor)
-        work/clips/<shot>.mp4             animated cut for the `motion` shots (Seedance 2.5, first frame = the keyframe)
+        work/clips/<shot>.mp4             the animated cut, first frame = the keyframe: Grok Imagine 720p for most shots
+                                          (grok_file.py files them), Kling 3 / Gemini Omni for a few action peaks
+        work/clip_audio.json              which clips' own generated sound is clean effects (clip_audio.py, Whisper)
         work/vo/index.json + wavs         Kokoro lines (voice.py)
         ../../public/film/music/<cue>.mp3 the score cues named in the script
-Outputs work/eclipse_master.mp4 (1080p24), ../../public/film/eclipse.mp4 (720p web), eclipse.vtt, eclipse_poster.webp
+        ../../public/sfx/<name>/          game SFX used as accents where a clip has no usable sound
+Outputs work/eclipse_master.mp4 (1080p24), ../../public/film/eclipse.mp4 (720p, two-pass to WEB_MB), eclipse.vtt,
+        eclipse_poster.webp, eclipse_teaser.mp4 (silent header loop), ../../src/site/film.ts (chapter marks)
 
-The look, shot by shot (script.py): episode cards are white condensed serif on black (a late-90s mecha-film card); stills
-are held frames brought to life the way limited TV animation does it - a camera move over the painting (push / pull /
-pan / tilt / shake), a particle layer screened over it (rain, embers, sparks, stars, speed lines, glow, smoke), impact
-flashes on cuts, grain and a vignette; motion shots play the Seedance clip, eased a little slower, then hold on its last
-frame. Cuts are hard (anime cutting); cards fade. The score follows the script's cue per shot, crossfaded between cues
-and ducked under dialogue.
+The look, shot by shot (script.py): episode cards are white condensed serif on black (a late-90s mecha-film card); every
+other shot plays its clip, eased up to 1.34x slower (animation on twos reads fine), and a clip shorter than its shot keeps
+a slow push-in through the held last frame; a shot without a clip falls back to a camera move over the painting with a
+particle layer. Grain and a vignette over everything; cuts are hard, cards fade. Sound: the score follows the script's
+cue per shot, crossfaded and ducked under dialogue; each clip's own effects track (unless Whisper hears invented dialogue
+or music in it) is stretched with its picture and levelled under the voices; soft limiter on the master.
 """
 import json, math, os, subprocess, sys, importlib.util
 import numpy as np
@@ -180,15 +184,31 @@ def still_seg(sid, secs, cam_fx, out):
     run(['ffmpeg', '-y', '-v', 'error', *inputs, '-filter_complex', graph, '-map', '[out]', '-t', f'{secs:.3f}', *enc(out)])
 
 
-def motion_seg(sid, secs, out):
-    clip = os.path.join(W, 'clips', f'{sid}.mp4')
-    if DRAFT or not os.path.exists(clip):
-        return still_seg(sid, secs, 'push|glow', out)
+SLOW = {}                                                     # shot -> clip playback stretch (the SFX bed follows it)
+
+
+def clip_path(sid):
+    p = os.path.join(W, 'clips', f'{sid}.mp4')
+    return p if os.path.exists(p) else None
+
+
+def motion_seg(sid, secs, out, cam_fx=''):
+    clip = clip_path(sid)
+    if DRAFT or not clip:
+        return still_seg(sid, secs, cam_fx or 'push|glow', out)
     dur = probe_secs(clip)
-    slow = min(1.25, max(1.0, secs / max(dur, 0.1)))         # eased a touch slower (animation on twos reads fine)
+    slow = min(1.34, max(1.0, secs / max(dur, 0.1)))         # eased a touch slower (animation on twos reads fine)
+    SLOW[sid] = slow
     hold = max(0.0, secs - dur * slow) + 0.1
-    vf = (f"setpts={slow:.4f}*PTS,scale={RW}:{RH}:force_original_aspect_ratio=increase:flags=lanczos,crop={RW}:{RH},"
-          f"tpad=stop_mode=clone:stop_duration={hold:.2f},{LOOK},format=yuv420p")
+    tail = LOOK + (",fade=t=in:st=0:d=0.35:color=white" if 'flash' in (cam_fx or '').split('|') else '')
+    if hold > 0.8:                                            # a short clip: keep the camera pushing through the held frame
+        n = int(round(secs * FPS))
+        vf = (f"setpts={slow:.4f}*PTS,fps={FPS},scale=3840:2160:force_original_aspect_ratio=increase:flags=lanczos,crop=3840:2160,"
+              f"tpad=stop_mode=clone:stop_duration={hold:.2f},"
+              f"zoompan=z='1+0.07*on/{n}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={RW}x{RH}:fps={FPS},{tail},format=yuv420p")
+    else:
+        vf = (f"setpts={slow:.4f}*PTS,scale={RW}:{RH}:force_original_aspect_ratio=increase:flags=lanczos,crop={RW}:{RH},"
+              f"tpad=stop_mode=clone:stop_duration={hold:.2f},{tail},format=yuv420p")
     run(['ffmpeg', '-y', '-v', 'error', '-i', clip, '-vf', vf, '-t', f'{secs:.3f}', *enc(out)])
 
 
@@ -204,16 +224,72 @@ def load_audio(path):
     return np.frombuffer(raw, np.float32).reshape(-1, 2).copy()
 
 
+SFX_BANK = os.path.join(ROOT, 'public', 'sfx')
+# accents for shots whose clip has no usable sound of its own: (words in the shot's prompts, game SFX, gain)
+ACCENTS = [(('explod', 'erupt', 'smash', 'crash'), 'boom', 0.9), (('lightning', 'thunder'), 'thunderclap', 0.7),
+           (('shatter', 'cracks', 'breaks'), 'barrierbreak', 0.8), (('fire', 'flame', 'burning', 'embers'), 'flame', 0.35),
+           (('wind', 'storm', 'glide'), 'wind', 0.45), (('hammer',), 'hammer', 0.8), (('katana', 'sword', 'blade'), 'katana', 0.6),
+           (('wings', 'flight'), 'wings', 0.5), (('stars', 'starlight', 'constellation'), 'star', 0.35),
+           (('talisman', 'seal'), 'talisman', 0.5), (('arrow', 'bow'), 'bow', 0.6), (('chain',), 'chainthrow', 0.6),
+           (('drill', 'lance'), 'lance', 0.7), (('roar', 'laugh'), 'roar', 0.6), (('flash',), 'sunburst', 0.5)]
+
+
+def bank_sfx(name):
+    d = os.path.join(SFX_BANK, name)
+    fs = sorted(os.listdir(d)) if os.path.isdir(d) else []
+    return load_audio(os.path.join(d, fs[0])) if fs else None
+
+
+def clip_bed(sid, secs):
+    """the clip's own generated sound, stretched like its picture, levelled, faded at the cut; None if unusable"""
+    scr = SCREEN.get(sid)
+    clip = clip_path(sid)
+    if not clip or not scr or not scr.get('has') or scr.get('speech') or scr.get('music'): return None
+    slow = SLOW.get(sid, 1.0)
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', clip, '-vn', '-af', f'atempo={1 / slow:.4f}', '-f', 'f32le', '-ac', '2',
+                          '-ar', str(SR), '-'], capture_output=True).stdout
+    a = np.frombuffer(raw, np.float32).reshape(-1, 2).copy()[:int(secs * SR)]
+    if len(a) < SR // 4: return None
+    rms = float(np.sqrt(np.mean(a ** 2))) or 1e-4
+    a *= min(4.0, 0.075 / rms)                               # level every bed to about -22 dBFS RMS
+    fi, fo = int(0.03 * SR), min(len(a) // 3, int(0.25 * SR))
+    a[:fi] *= np.linspace(0, 1, fi)[:, None]; a[-fo:] *= np.linspace(1, 0, fo)[:, None]
+    return a
+
+
+def soft_limit(x, t=0.72, ceil=0.95):
+    m = np.abs(x) > t
+    x[m] = np.sign(x[m]) * (t + (ceil - t) * np.tanh((np.abs(x[m]) - t) / (ceil - t)))
+    return x
+
+
+SCREEN = {}
+
+
 def mix(shots, vo):
     total = sum(s[1] for s in shots)
     N = int(total * SR) + SR
-    music, voice = np.zeros((N, 2), np.float32), np.zeros((N, 2), np.float32)
+    music, voice, sfx = np.zeros((N, 2), np.float32), np.zeros((N, 2), np.float32), np.zeros((N, 2), np.float32)
+    SCREEN.update(json.load(open(os.path.join(W, 'clip_audio.json'))) if os.path.exists(os.path.join(W, 'clip_audio.json')) else {})
+    bank, beds, accents = {}, 0, 0
     subs = []
     t0 = 0.0
     spans = []                                                # (cue, start, end)
     for s in shots:
         if spans and spans[-1][0] == s[7]: spans[-1][2] = t0 + s[1]
         else: spans.append([s[7], t0, t0 + s[1]])
+        if s[2] != 'card':                                    # sound effects: the clip's own bed, else accents from the prompts
+            i = int(t0 * SR)
+            bed = clip_bed(s[0], s[1])
+            if bed is not None:
+                sfx[i:i + len(bed)] += bed[:N - i]; beds += 1
+            else:
+                words = (str(s[4]) + ' ' + str(s[5])).lower()
+                for keys, name, g in [a for a in ACCENTS if any(k in words for k in a[0])][:2]:
+                    x = bank.setdefault(name, bank_sfx(name))
+                    if x is None: continue
+                    j = i + int(0.12 * SR); x = x[:max(0, min(len(x), N - j, int(s[1] * SR)))]
+                    sfx[j:j + len(x)] += x * g; accents += 1
         # dialogue: the shot's lines one after another from 0.4s in
         t = t0 + 0.4
         for k, (who, text) in enumerate(s[6]):
@@ -242,8 +318,9 @@ def mix(shots, vo):
     k = int(0.35 * SR); ker = np.ones(k, np.float32) / k
     duck = np.convolve(act, ker, 'same').clip(0, 1)
     gain = 0.5 - 0.3 * duck
-    out = music * gain[:, None] + voice * 1.1
-    out /= max(1.0, np.abs(out).max() / 0.89)
+    out = music * gain[:, None] + voice * 1.1 + sfx * (0.8 - 0.4 * duck)[:, None]
+    out = soft_limit(out)
+    print(f'mix: {beds} clip sound beds, {accents} accents', flush=True)
     return out, subs, total
 
 
@@ -264,6 +341,7 @@ def main():
         out = os.path.join(SEG, f'{sid}.mp4')
         if kind == 'card': card_seg(sid, secs, s[4], out)
         elif kind == 'motion': motion_seg(sid, secs, out)
+        elif clip_path(sid) and not DRAFT: motion_seg(sid, secs, out, s[5])   # an animated cut exists for this still
         else: still_seg(sid, secs, s[5], out)
         segs.append(out); print('shot', sid, kind, secs, flush=True)
     lst = os.path.join(W, 'concat.txt')
@@ -278,12 +356,56 @@ def main():
     print('master', master, f'{total:.1f}s', flush=True)
     if '--no-web' in sys.argv or ONLY: return
     film = os.path.join(ROOT, 'public', 'film')
-    run(['ffmpeg', '-y', '-v', 'error', '-i', master, '-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-crf', '25', '-preset', 'slow',
-         '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', os.path.join(film, 'eclipse.mp4')])
+    # 720p two-pass, sized to WEB_MB: the film is committed to git (GitHub refuses files over 100 MB) and served by Vercel
+    kbps = int(WEB_MB * 8e3 / total) - 128
+    passlog = os.path.join(W, 'x264pass')
+    common = ['-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-b:v', f'{kbps}k', '-maxrate', f'{int(kbps * 2.5)}k',
+              '-bufsize', f'{kbps * 4}k', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-passlogfile', passlog]
+    run(['ffmpeg', '-y', '-v', 'error', '-i', master, *common, '-pass', '1', '-an', '-f', 'mp4', os.devnull])
+    run(['ffmpeg', '-y', '-v', 'error', '-i', master, *common, '-pass', '2', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+         os.path.join(film, 'eclipse.mp4')])
     vtt(subs, os.path.join(film, 'eclipse.vtt'))
     pk = key_path('f03') or key_path('o01')
     if pk: Image.open(pk).convert('RGB').resize((1280, 720), Image.LANCZOS).save(os.path.join(film, 'eclipse_poster.webp'), quality=84)
-    print('web', os.path.getsize(os.path.join(film, 'eclipse.mp4')) / 1e6, 'MB')
+    teaser(shots, film)
+    chapters(shots)
+    print('web', os.path.getsize(os.path.join(film, 'eclipse.mp4')) / 1e6, 'MB', f'({kbps} kb/s video)')
+
+
+WEB_MB = 88
+TEASER = ['o01', 'b05', 'e03', 'e09', 'e15', 'd06', 'e17', 'f01', 'f03']   # the silent loop behind the site's title
+
+
+def teaser(shots, film):
+    """a ~22 s muted loop of the action peaks (2.4 s from the middle of each cut) for the site header"""
+    t0, starts = 0.0, {}
+    for s in shots: starts[s[0]] = (t0, s[1]); t0 += s[1]
+    parts = [(starts[k][0] + max(0.0, starts[k][1] / 2 - 1.2), 2.4) for k in TEASER if k in starts]
+    if not parts: return
+    master = os.path.join(W, 'eclipse_master.mp4')
+    graph = ''.join(f"[0:v]trim=start={a:.2f}:duration={d},setpts=PTS-STARTPTS[t{i}];" for i, (a, d) in enumerate(parts))
+    graph += ''.join(f'[t{i}]' for i in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0,scale=1280:720:flags=lanczos,format=yuv420p[v]"
+    run(['ffmpeg', '-y', '-v', 'error', '-i', master, '-filter_complex', graph, '-map', '[v]', '-an', '-c:v', 'libx264', '-crf', '28',
+         '-preset', 'slow', '-movflags', '+faststart', os.path.join(film, 'eclipse_teaser.mp4')])
+
+
+def headline(line):
+    small = {'of', 'the', 'a', 'an', 'and', 'to', 'in', 'on'}
+    return ' '.join(w if k and w in small else w.capitalize() for k, w in enumerate(line.strip().lower().split()))
+
+
+def chapters(shots):
+    """src/site/film.ts: a chapter mark at the cold open and at every episode card"""
+    marks, t0 = [], 0.0
+    for s in shots:
+        if s[0] == 'c00': marks.append((t0, 'Cold open'))
+        elif s[2] == 'card' and s[0] != 'c06':
+            marks.append((t0, ' - '.join(headline(l) for l in s[4].split('\n'))))
+        t0 += s[1]
+    body = ', '.join(f'[{a:.1f}, {json.dumps(n)}]' for a, n in marks)
+    with open(os.path.join(ROOT, 'src', 'site', 'film.ts'), 'w', encoding='utf-8') as o:
+        o.write('// chapter marks for "The Sun That Refused to Set" (written by cinematic/eclipse/make_film.py from script.py)\n'
+                f'export const FILM_CHAPTERS: [number, string][] = [{body}];\n')
 
 
 if __name__ == '__main__':
