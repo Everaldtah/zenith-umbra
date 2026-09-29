@@ -591,20 +591,23 @@ export class FirstPersonArms {
 
   /** Style.gauntlets, once loaded: [L, R] */
   private gaunt: [THREE.Object3D, THREE.Object3D] | null = null;
-  private gauntLoading = false;
+  private gauntLoad: Promise<void> | null = null;
+  private loadGauntlets(): Promise<void> {
+    return this.gauntLoad ??= new GLTFLoader().loadAsync(`${BASE}${this.style.gauntlets}`).then(g => {
+      const L = g.scene.getObjectByName('gauntlet_L'), R = g.scene.getObjectByName('gauntlet_R');
+      if (L && R) this.gaunt = [L, R];
+    }).catch(() => { /* no file: the rig's own hands stay */ });
+  }
+  /** what this viewmodel loads on demand (Tenkai-Oh's gauntlets), loaded now: the match preloader waits for it, and the
+   *  next update mounts it - so it is uploaded and compiled with everything else, not in the first frames of play */
+  preload(): Promise<void> { return this.style.gauntlets ? this.loadGauntlets() : Promise.resolve(); }
 
   /** each rigid gauntlet's fist round the haft at its grip, the forearm rising back toward its own shoulder below the
    *  lens; the rig's skinned body (whose arms can't reach) is hidden once they're in */
   private placeGauntlets(gR: V, gL: V, H: V) {
     const prop = this.view.anim.prop;
     if (!this.gaunt) {
-      if (!this.gauntLoading && this.style.gauntlets) {
-        this.gauntLoading = true;
-        new GLTFLoader().loadAsync(`${BASE}${this.style.gauntlets}`).then(g => {
-          const L = g.scene.getObjectByName('gauntlet_L'), R = g.scene.getObjectByName('gauntlet_R');
-          if (L && R) this.gaunt = [L, R];
-        }).catch(() => { /* no file: the rig's own hands stay */ });
-      }
+      if (this.style.gauntlets) void this.loadGauntlets();
       return;
     }
     if (!prop?.parent) return;

@@ -398,6 +398,8 @@ export class Game {
       this.fp ??= new FirstPersonArms(me, equippedSkin(me.def.id));
       for (const t = performance.now(); performance.now() - t < 15000 && !this.fp.view.real; await sleep(100)) { /* its own copy of the hero */ }
       this.fp.scene.environment = this.scene.environment;
+      // (what the viewmodel would fetch on its first frame - Tenkai-Oh's gauntlets - fetched now; the update mounts it)
+      await Promise.race([this.fp.preload(), sleep(10000)]);
       this.fp.update({ dt: 1 / 60, time: w.time, yawRate: 0, pitchRate: 0, aspect: this.camera.aspect });
     }
     this.applySceneDetail();            // texture filtering on every texture now in the scene, BEFORE the upload
