@@ -15,8 +15,9 @@ import { sfx } from '../audio/Sfx';
 
 /** how each ult is shown: `secs` from the cast to the replay; `near` walks within that of a target before casting (the
  *  Dohyo is stamped around you); `fight` closes to that range after the cast and keeps attacking (the timed ults);
- *  `flat` aims level (the ult travels along the ground); `wide` pulls the camera out and ahead (45 m koi-dragons) */
-interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number }
+ *  `flat` aims level (the ult travels along the ground); `wide` pulls the camera out and ahead (45 m koi-dragons);
+ *  `tough` armours the enemy dummies to this many times their health, so a long ult has targets for its whole length */
+interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number; tough?: number }
 const PLAN: Record<string, Plan> = {
   colossus: { secs: 10, fight: 4 },
   nova: { secs: 5 },
@@ -89,6 +90,8 @@ export class UltShowcase {
       if (!d.alive) w.respawn(d, true);
       d.st = {}; d.sv = {}; d.forced = null; d.wounds = []; d.shields = [];
       d.hp = d.def.hp * hp; d.lastDamagedAt = w.time;      // no out-of-combat regen before the ult has healed them
+      // (armour, not health: the bars over their heads stay full-scale)
+      d.maxArmor = d.armor = d.team === h.team ? 0 : d.def.hp * Math.max(0, (this.plan.tough ?? 1) - 1);
       this.place(d, x, z, d.team === h.team ? FACE : -FACE);
     };
     this.foes.forEach((d, i) => put(d, FOES[i][0], FOES[i][1], 1));
