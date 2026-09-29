@@ -67,7 +67,8 @@ export class HeroViewer {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping; this.renderer.toneMappingExposure = 0.95;
-    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // (PCFSoftShadowMap is gone in three r186: it falls back on the first shadow render and rebuilds every shader)
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.stage.prepend(this.renderer.domElement);
     this.buildStudio();
     this.bind();

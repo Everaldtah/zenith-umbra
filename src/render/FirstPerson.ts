@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { BASE } from './Assets';
 import { driveFingers } from './Fingers';
 
 type V = [number, number, number];     // view space metres: right, up, forward (from the eye)
@@ -24,7 +26,12 @@ type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists'
 // gunScale: the held guns' size in the viewmodel (the world model's props are concept-sized; up close they'd fill the view)
 // squeeze: pull arm geometry further than this (x forearm length) from its bone radially in to that distance - wide
 // sleeves become slim tubes in the viewmodel instead of walls of cloth or cut shards (a tailored first-person sleeve)
-interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; gunScale?: number; squeeze?: number; }
+// shoulderW / reach: a viewmodel liberty for rigs whose hands can't meet in front of the lens (Tenkai-Oh: shoulders
+// 0.92 m out, 0.62 m arms) - the shoulder joints drawn in to this half-width (m) and the upper arms lengthened by this
+// factor, both behind the camera where armsOnly has already cut the geometry away (see fpArmReach)
+// gauntlets: rigid first-person forearms + hands (a GLB under public/, nodes gauntlet_L / gauntlet_R) mounted straight
+// on the held haft, for a rig whose own arms can't carry its hands (Tenkai-Oh: assetgen/blender/fp_gauntlets.py)
+interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; gunScale?: number; squeeze?: number; shoulderW?: number; reach?: number; gauntlets?: string; }
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
@@ -43,7 +50,7 @@ export const FP_STYLE: Record<string, Style> = {
   haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
   // Reinhardt's viewmodel: both gauntlets on the haft low right, the haft out to the right, the head resting right of
   // centre (the rest pose of HAMMER_REST - hammerProc drives the whole swing)
-  tenkai: { grip: 'hammer', R: [0.17, -0.23, 0.44], L: [0.301, -0.206, 0.589], recoil: 0 },
+  tenkai: { grip: 'hammer', R: [0.2, -0.27, 0.5], L: [0.329, -0.27, 0.653], recoil: 0, shoulderW: 0.2, reach: 1.9, gauntlets: 'models/fp/tenkai_gauntlets.glb' },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
   // hip-held twin chainguns in the bottom corners, angled in on the reticle, the rear of each gun out of view
   gantetsu: { grip: 'dual', R: [0.36, -0.36, 0.56], L: [-0.36, -0.36, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.8 },
@@ -75,13 +82,14 @@ const add = (a: V, b: V, k = 1): V => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + 
 // the bottom left into the rest. A key: [time s, grip x, y, z (the lower, right hand; view metres), haft yaw (+ = right),
 // haft pitch, lead (left) hand distance up the haft (m)] - the lead hand slides up the haft on the wind-up.
 type HKey = [number, number, number, number, number, number, number];
-const HAMMER_REST: HKey = [0, 0.17, -0.23, 0.44, 0.72, 0.12, 0.2];
+const HAMMER_REST: HKey = [0, 0.2, -0.27, 0.5, 0.7, 0, 0.2];
 const HOLD_L: [number, number, number, number, number, number] = [-0.44, -0.44, 0.3, -1.9, -0.12, 0.2];
 const rest = (t: number): HKey => [t, ...HAMMER_REST.slice(1)] as HKey;
 /** swing 1, right to left (counter-clockwise, as Reinhardt's first swing) */
 const SWING_RL: HKey[] = [
   HAMMER_REST,
-  [0.13, 0.3, -0.36, 0.32, 1.75, -0.28, 0.24],       // wind-up: dropped back past the bottom-right corner
+  [0.065, 0.27, -0.32, 0.42, 1.2, -0.14, 0.22],      // wind-up: the head drops toward the bottom-right corner...
+  [0.13, 0.3, -0.36, 0.32, 1.75, -0.28, 0.24],       // ...and back past it
   [0.2, 0.2, -0.27, 0.4, 0.85, 0.24, 0.2],
   [0.245, 0.02, -0.26, 0.43, 0, 0.33, 0.18],          // the hit: the head flat across the upper middle
   [0.29, -0.2, -0.29, 0.39, -1.0, 0.24, 0.18],
@@ -100,9 +108,11 @@ const SWING_LR: HKey[] = [
 ];
 /** no follow-up swing: back up from the bottom left, head low across the bottom, into the rest (times from the swing) */
 const RECOVER: HKey[] = [[0.96, ...HOLD_L], [1.12, -0.12, -0.46, 0.36, -0.5, -0.55, 0.2], rest(1.34)];
-/** Solar Shatter (E): heaved overhead, slammed into the ground ahead (the quake at 0.55 s), lifted back */
-const SHATTER: HKey[] = [HAMMER_REST, [0.3, 0.12, -0.02, 0.3, 0.25, 1.35, 0.26], [0.45, 0.08, 0.06, 0.28, 0.1, 1.5, 0.28],
-  [0.55, 0.03, -0.3, 0.46, 0, -0.75, 0.16], [0.78, 0.04, -0.32, 0.44, 0.02, -0.7, 0.16], rest(1.1)];
+/** Solar Shatter (E): heaved up out of the top of the frame with the fists low at the bottom edge, brought over the top
+ *  and driven down in front - the head stops at the bottom centre with the quake (0.55 s) - lifted back. (The viewmodel
+ *  has its own level camera: the ground 2 m under Tenkai-Oh's eye is out of frame, so the head lands low, not on it) */
+const SHATTER: HKey[] = [HAMMER_REST, [0.18, 0.1, -0.46, 0.5, 0.35, 0.85, 0.08], [0.32, 0.06, -0.46, 0.48, 0.1, 1.2, 0.08],
+  [0.45, 0.05, -0.47, 0.46, 0.05, 1.3, 0.08], [0.55, 0.02, -0.42, 0.47, 0, -0.08, 0.16], [0.78, 0.02, -0.42, 0.46, 0, -0.06, 0.16], rest(1.1)];
 /** quick melee: a short thrust of the head */
 const JAB: HKey[] = [HAMMER_REST, [0.06, 0.08, -0.18, 0.56, 0.3, 0.2, 0.2], [0.14, 0.07, -0.18, 0.58, 0.28, 0.2, 0.2], rest(0.45)];
 /** Dawn Colossus (Q): the hammer raised high while the frame grows */
@@ -119,6 +129,10 @@ function hammerAt(K: HKey[], t: number): HKey {
 }
 /** a closed gauntlet's grip centre past the wrist bone, in forearm lengths */
 const FIST = 0.32;
+/** Style.gauntlets: where each rigid forearm points back to (view metres: its shoulder, below and beside the lens), and
+ *  which way round each fist wraps the haft (+1: the model's grip tunnel along the haft, -1: reversed) - [L, R] */
+const GAUNT_SHOULDER: [V, V] = [[-0.34, -0.5, 0], [0.34, -0.5, 0]];
+const GAUNT_FLIP: [number, number] = [1, 1];
 const haftDir = (k: HKey): V => [Math.sin(k[4]) * Math.cos(k[5]), Math.sin(k[5]), Math.cos(k[4]) * Math.cos(k[5])];
 export const FP_HAMMER = { REST: HAMMER_REST, SWING_RL, SWING_LR, RECOVER, SHATTER, JAB, RAISE, at: hammerAt, dir: haftDir };
 
@@ -128,6 +142,36 @@ export const FP_HAMMER = { REST: HAMMER_REST, SWING_RL, SWING_LR, RECOVER, SHATT
  * hands land where the style wants them on screen and the shoulders stay off-screen. fp_arms.py places its camera the
  * same way, so Blender-authored clips keep this framing.
  */
+/** Style.shoulderW / reach on this viewmodel's own rig (the first-person view has its own CharacterView, so the world
+ *  model keeps its proportions): shoulders moved in toward the spine, upper arms stretched, the rest pose updated to match
+ *  so the arm IK stays exact. Once per rig. */
+const armsFitted = new WeakSet<object>();
+function fpArmReach(an: { model: THREE.Object3D; bones: Partial<Record<string, THREE.Object3D>>; rest: Partial<Record<string, { p: THREE.Vector3 }>> }, st: Style) {
+  const B = an.bones, R = an.rest, uL = B.upperarm_L, uR = B.upperarm_R;
+  if ((!st.shoulderW && !st.reach) || !uL || !uR || !R.upperarm_L || !R.upperarm_R || armsFitted.has(uL)) return;
+  armsFitted.add(uL);
+  an.model.updateMatrixWorld(true);
+  // every rest entry under a bone moves with it
+  const under = (root: THREE.Object3D) => Object.keys(R).filter(n => { for (let o: THREE.Object3D | null = B[n] ?? null; o; o = o.parent) if (o === root) return true; return false; });
+  const mid = (R.upperarm_L.p.x + R.upperarm_R.p.x) / 2;
+  for (const S of ['L', 'R']) {
+    const ua = B[`upperarm_${S}`]!, fa = B[`forearm_${S}`], r = R[`upperarm_${S}`]!;
+    if (st.shoulderW && ua.parent) {
+      const d = new THREE.Vector3(mid + Math.sign(r.p.x - mid) * st.shoulderW - r.p.x, 0, 0);
+      const w = an.model.localToWorld(an.model.worldToLocal(ua.getWorldPosition(new THREE.Vector3())).add(d));
+      ua.position.copy(ua.parent.worldToLocal(w));
+      for (const n of under(ua)) R[n]!.p.add(d);
+      an.model.updateMatrixWorld(true);
+    }
+    const rf = R[`forearm_${S}`];
+    if (st.reach && fa && rf) {
+      const d = rf.p.clone().sub(r.p).multiplyScalar(st.reach - 1);
+      fa.position.multiplyScalar(st.reach);
+      for (const n of under(fa)) R[n]!.p.add(d);
+    }
+  }
+}
+
 export function viewmodelOffset(an: { rest: Partial<Record<string, { p: THREE.Vector3 }>> }, eye: THREE.Vector3, style: Style, scaleFit: number) {
   const k = 1 / Math.max(1e-6, scaleFit);
   const o = new THREE.Vector3();
@@ -259,6 +303,7 @@ export class FirstPersonArms {
     this.real = this.view.real;
     if (an.ok) {
       this.view.anim.useClips(null);
+      fpArmReach(an, this.style);                  // (before the rig is placed: that reads the shoulders)
       const R = an.rest;
       const H = an.height;
       this.eye.copy(R.head!.p).add(new THREE.Vector3(0, H * 0.06, H * 0.05 + (this.style.push ?? 0) / Math.max(1e-6, this.view.scaleFit)));
@@ -509,7 +554,9 @@ export class FirstPersonArms {
     const side: V = src === 'shatter' ? [Math.sin(k[4]) * Math.sin(k[5]), -Math.cos(k[5]), Math.cos(k[4]) * Math.sin(k[5])] : [-Math.cos(k[4]) * dir, 0, Math.sin(k[4]) * dir];
     const Hm = new THREE.Vector3(-H[0], H[1], H[2]), Tm = new THREE.Vector3(-side[0], side[1], side[2]);
     an.updateFirstPerson({ hands: [toM(add(g, H, k[6])), toM(g)], wrist: [null, null], prop: { pos: toM(g), dir: Hm, side: Tm } });
-    this.haftThroughFists(Hm, Tm);
+    // dedicated first-person gauntlets sit on the haft by construction; the rig's own hands are locked on after the IK
+    if (this.style.gauntlets) this.placeGauntlets(g, add(g, H, k[6]), H);
+    if (!this.gaunt) this.haftThroughFists(Hm, Tm);
     const hm = this.view.hammer;
     if (hm) {
       hm.flame.visible = flame > 0.02;
@@ -517,6 +564,43 @@ export class FirstPersonArms {
       hm.core.emissiveIntensity = 2.4 + 3 * flame;
     }
     this.source = `proc:${src}`;
+  }
+
+  /** Style.gauntlets, once loaded: [L, R] */
+  private gaunt: [THREE.Object3D, THREE.Object3D] | null = null;
+  private gauntLoading = false;
+
+  /** each rigid gauntlet's fist round the haft at its grip, the forearm rising back toward its own shoulder below the
+   *  lens; the rig's skinned body (whose arms can't reach) is hidden once they're in */
+  private placeGauntlets(gR: V, gL: V, H: V) {
+    const prop = this.view.anim.prop;
+    if (!this.gaunt) {
+      if (!this.gauntLoading && this.style.gauntlets) {
+        this.gauntLoading = true;
+        new GLTFLoader().loadAsync(`${BASE}${this.style.gauntlets}`).then(g => {
+          const L = g.scene.getObjectByName('gauntlet_L'), R = g.scene.getObjectByName('gauntlet_R');
+          if (L && R) this.gaunt = [L, R];
+        }).catch(() => { /* no file: the rig's own hands stay */ });
+      }
+      return;
+    }
+    if (!prop?.parent) return;
+    const [GL, GR] = this.gaunt;
+    if (GL.parent !== prop.parent) {
+      prop.parent.add(GL, GR);
+      this.view.model.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.visible = false; });
+    }
+    const s = 1 / Math.max(1e-6, this.view.scaleFit);
+    const toM = (v: V) => new THREE.Vector3(-v[0] * s, v[1] * s, v[2] * s).add(this.eye);
+    const Hm = new THREE.Vector3(-H[0], H[1], H[2]).normalize();
+    for (const [i, o, at] of [[0, GL, gL], [1, GR, gR]] as const) {
+      const p = toM(at);
+      const f = toM(GAUNT_SHOULDER[i]).sub(p);
+      f.addScaledVector(Hm, -f.dot(Hm)).normalize();                       // the forearm square to the haft
+      const z = Hm.clone().multiplyScalar(GAUNT_FLIP[i]), x = new THREE.Vector3().crossVectors(f, z).normalize();
+      o.position.copy(p);
+      o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, f, z));
+    }
   }
 
   /** the haft through both closed gauntlets as the arms actually solved (the IK falls a little short at the extremes):
