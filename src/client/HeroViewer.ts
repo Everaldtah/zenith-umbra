@@ -198,6 +198,9 @@ export class HeroViewer {
       else if (T % 1.4 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ability1.id; }
     } else if (a.forced?.kind === 'dawncharge') a.forced = null;
     if (m === 'e' && T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ability2.id; }
+    // the deflects hold a guard stance while they last (Raijin's Thunder Parry on SHIFT... E, Hayate's Mirror Water)
+    const guard = (x: { id: string }) => x.id === 'parry' || x.id === 'mirrorwater';
+    if ((m === 'e' && guard(a.def.ability2)) || (m === 'shift' && guard(a.def.ability1))) a.set('parry', T, 0.2);
     if (m === 'cast' && T % 1.4 < dt) a.anim.castAt = T;
     if (m === 'ult') {
       // Tenkai-Oh previews the giant form; everyone else plays their ult cast

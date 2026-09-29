@@ -59,6 +59,7 @@ export interface AnimState {
   grounded: boolean; flying: boolean; frame: string;
   attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
+  parry?: boolean;          // a blade deflect held (Raijin's Thunder Parry, Hayate's Mirror Water)
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
   move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets' | 'reaping' | 'tide' (Tomoe's axe)
@@ -231,6 +232,10 @@ export class Animator {
   foot = [new THREE.Vector3(), new THREE.Vector3()];   // current foot targets (model space)
   lean = new THREE.Vector2();  // smoothed lean
   bob = 0; landDip = 0; flap = 0; moveBlend = 0; airBlend = 0; flyBlend = 0; atk = 0; cast = 0;
+  /** the archer's draw (0..1): bow arm out, string hand at the cheek (Yuzu, Seiran) */
+  drawW = 0;
+  /** a blade guard held (0..1): the deflect stance */
+  guardW = 0;
   onStep: ((side: number, heavy: boolean) => void) | null = null;
   ok = false;
   private lastStance = [true, true];
@@ -1055,7 +1060,11 @@ export class Animator {
     // ---------------- spine chain (unwinds the hip yaw so the chest faces the aim)
     const aimP = -s.pitch;   // pitch up = negative X rotation in this frame
     const breath = Math.sin(s.time * 1.6) * 0.015;
-    const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12);
+    // an archer draws side-on, the bow shoulder toward the target (Hanzo's stance), and holds it through the release
+    const archer = !!(s.hero && HELD[s.hero]?.L?.kind === 'bow');
+    this.drawW += ((archer && (s.charging || this.atk > 0.05) ? 1 : 0) - this.drawW) * Math.min(1, dt * (s.charging ? 14 : 6));
+    this.guardW += ((s.parry ? 1 : 0) - this.guardW) * Math.min(1, dt * (s.parry ? 16 : 8));
+    const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12) * (1 - this.drawW) + 0.55 * this.drawW;
     // the upper body trails a fast aim turn and springs back past centre, the eyes stay on target (Boehm's spring aims:
     // tight for duellists, flowing for the floaty, loose for heavies)
     const pitchRate = dt > 0 ? (s.pitch - this.lastPitch) / dt : 0; this.lastPitch = s.pitch;
@@ -1168,6 +1177,27 @@ export class Animator {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
+      } else if (archer && this.drawW > 0.02) {
+        // the draw: the bow arm straight out along the aim, the string hand pulled back to the cheek with the elbow
+        // high behind; on the release the string hand snaps back and open (follow-through), the bow arm holds
+        const Lr = l1 + l2, face = (R.neck ? R.neck.p : R.chest.p).clone().add(hipsOff).add(new THREE.Vector3(0, 0.06 * this.height, 0));
+        if (i === 0) {
+          const hand = shoulder.clone().addScaledVector(aimDir, Lr * 0.97);
+          over = { hand, w: this.drawW, pole: new THREE.Vector3(side * 0.6, -0.8, 0) };
+        } else {
+          const release = s.charging ? 0 : Math.min(1, this.atk * 1.4);
+          const hand = face.addScaledVector(aimDir, 0.05 * this.height).add(new THREE.Vector3(-side * 0.05 * this.height, 0, 0))
+            .add(new THREE.Vector3(-side * 0.12 * Lr, 0.04 * Lr, -0.22 * Lr).multiplyScalar(release));
+          over = { hand, w: this.drawW, pole: new THREE.Vector3(side * 0.9, 0.5, -0.9) };
+        }
+      } else if (this.guardW > 0.02 && carry?.R?.kind === 'blade') {
+        // the deflect guard (Genji's): the blade hand in front of the chest, the blade across the body and turning in a
+        // slow circle; the off hand low and forward, ready
+        const Lr = l1 + l2, t = s.time * 5.5;
+        const hand = i === 1
+          ? shoulder.clone().add(new THREE.Vector3(side * 0.55 * Lr + Math.cos(t) * 0.06 * Lr, -0.12 * Lr + Math.sin(t) * 0.06 * Lr, 0.62 * Lr).applyQuaternion(Dc))
+          : shoulder.clone().add(new THREE.Vector3(-side * 0.1 * Lr, -0.42 * Lr, 0.5 * Lr).applyQuaternion(Dc));
+        over = { hand, w: this.guardW, pole: new THREE.Vector3(side * 0.9, -0.5, -0.3) };
       } else if (s.dual) {
         // twin chainguns held at the hips, barrels along the aim; each gun kicks back on its own rounds and chatters while
         // it fires; running they ride lower and bounce, in the rush they tuck in under the shoulders

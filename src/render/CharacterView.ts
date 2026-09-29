@@ -551,7 +551,7 @@ export class CharacterView {
       // a swoop skimming the floor is still flight (no running gait at 20 m/s)
       grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
-      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, beam: a.beamOn || a.flameOn,
+      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
