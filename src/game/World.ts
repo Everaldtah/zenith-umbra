@@ -5,7 +5,7 @@ import { mapFor, type MapDef } from '../data/maps';
 import { Level, STEP, type V3 } from '../engine/Physics';
 import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
-import { castAbility, tickAbilities } from './abilities';
+import { castAbility, stompLeap, tickAbilities } from './abilities';
 import { updateWeapons } from './weapons';
 import { Stadium } from './stadium';
 import { FULL } from '../edition';
@@ -264,7 +264,7 @@ export class World {
     if (src?.has('dmgamp', t)) dmg *= 1.3;
     if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
-    if (tgt.has('taiko', t)) { tgt.mitigated += dmg * 0.25; dmg *= 0.75; }
+    if (tgt.has('taiko', t)) { tgt.mitigated += dmg * 0.4; dmg *= 0.6; }
     if (src?.has('ambush', t) && o.kind !== 'dot') { dmg += 50; src.clear('ambush'); }
     // Hex: Stitched Decoy eats one huge hit
     if (tgt.def.id === 'hex' && dmg > 90 && tgt.ready('decoy', t)) {
@@ -753,12 +753,10 @@ export class World {
         const ny = cur + Math.max(-2.2 * dt, Math.min(2.2 * dt, dy));
         a.sv.rushYaw = ny;
         wx = Math.sin(ny) * spd * 1.85; wz = Math.cos(ny) * spd * 1.85;
-        if (this.pressed(a, 'jump') && a.grounded) {
-          a.vel.y = 9.5; a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
-          a.clear('tachiai'); a.set('stompair', t, 2.5); a.sv.stompArmed = 1;
-          this.sfx('mechjump', a.pos, a);
-        }
+        if (this.pressed(a, 'jump') && a.grounded) stompLeap(this, a);
       }
+      // ...and past the top of the leap he drives himself down into the slam
+      if (a.sv.stompArmed && !a.grounded && a.vel.y < 0) a.vel.y -= G * 1.5 * dt;
       // Mirei - Starwing Swoop: the swoop drives her velocity this step (flight, steering and gravity sit it out)
       const swooping = this.swoopStep(a, dt) || this.grindStep(a, dt, spd, rooted) || this.climbStep(a, dt, rooted);
       // flight

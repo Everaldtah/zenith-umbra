@@ -59,6 +59,8 @@ function zone(w: World, a: Actor, kind: string, p: V3, r: number, dur: number, d
   return z;
 }
 const inZone = (z: Zone, x: Actor) => Math.hypot(x.pos.x - z.x, x.pos.z - z.z) < z.r + x.radius * 0.5 && x.pos.y > z.y - 2 && x.pos.y < z.y + 6;
+/** Grand Dohyo: a hero bound by the ring's chains can't dash, leap or teleport (the chain holds) */
+const LEASHED = new Set(['spiritstep', 'flashstep', 'currentdash', 'riverstep', 'shadowstep', 'dawncharge', 'abysscharge', 'sunhop', 'chain', 'pilotroll']);
 function sealed(w: World, a: Actor) {
   if (a.has('sealed', w.time)) { w.fx('blocked', a.center, { color: '#ffe28a', actor: a }); w.sfx('denied', a.pos, a); return true; }
   return false;
@@ -535,14 +537,14 @@ const I: Record<string, Impl> = {
   tachiai(w, a) {
     if (a.has('root', w.time)) return false;
     const t = w.time;
-    a.set('tachiai', t, 2.5); a.sv.rushYaw = a.yaw; a.sv.rushStart = t;
+    a.set('tachiai', t, RUSH_T); a.sv.rushYaw = a.yaw; a.sv.rushStart = t; a.sv.rushOn = 1;
     (a as any)._rushHit = new Set<number>();
     w.sfx('charge', a.center, a); w.sfx('roar', a.center, a);
-    w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur: 2.5 });
+    w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur: RUSH_T });
     return true;
   },
   taiko(w, a) {
-    a.set('taiko', w.time, 4); a.sv.taikoBeat = w.time;
+    a.set('taiko', w.time, 3); a.sv.taikoBeat = w.time;
     w.fx('taiko', a.center, { actor: a, color: '#ffb35c', r: 12 }); w.sfx('taiko', a.center, a);
     return true;
   },
@@ -551,8 +553,10 @@ const I: Record<string, Impl> = {
     const t = w.time, g = w.level.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.5);
     const p = { x: a.pos.x, y: g > -Infinity ? g : a.pos.y, z: a.pos.z };
     const trapped = w.enemies(a).filter(x => Math.hypot(x.pos.x - p.x, x.pos.z - p.z) < 9 + x.radius * 0.5 && Math.abs(x.pos.y - p.y) < 6).map(x => x.id);
-    zone(w, a, 'dohyo', p, 9, 6, { trapped });
-    a.set('dohyo', t, 6);
+    zone(w, a, 'dohyo', p, 9, DOHYO_T, { trapped });
+    a.set('dohyo', t, DOHYO_T);
+    // the binding chains snap onto everyone caught: dashes and flight end where they stand
+    for (const x of w.enemies(a)) if (trapped.includes(x.id)) { leash(w, a, x); w.sfx('chainhit', x.center, a); }
     a.reloadUntil = 0; a.ammo = a.maxAmmo; if (!isAbility(a.def.secondary)) a.sv.ammo2 = Math.max(1, Math.round((a.def.secondary.ammo ?? 0) * (1 + a.mods.ammo)));
     w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('slam', p, { r: 9, color: '#ffe6a8', actor: a });
     w.sfx('ultcall', a.center, a); w.sfx('dohyo', p, a); w.sfx('slam', p, a);
@@ -744,19 +748,50 @@ function bassDrop(w: World, a: Actor) {
   w.emit({ t: 'msg', text: 'HIBIKI · BASS DROP', color: a.def.color });
 }
 
-/** Shiko Stomp: the leap out of a Tachiai Rush lands - everyone close is launched into the air and set alight */
+/** Tachiai Rush: how long the charge runs before it ends in the leap by itself */
+export const RUSH_T = 2.5;
+/** Grand Dohyo: how long the ring and its chains hold */
+export const DOHYO_T = 8;
+/** Shiko Stomp: the slam's reach, the heart of it (full damage, the longest knockdown), and how high it reaches */
+export const STOMP_R = 7, STOMP_CORE = 2.5, STOMP_H = 3;
+
+/** the leap out of a Tachiai Rush (SPACE, or by itself when the charge runs out): up, then driven down into the slam */
+export function stompLeap(w: World, a: Actor) {
+  const t = w.time;
+  a.vel.y = 10; a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
+  a.clear('tachiai'); a.sv.rushOn = 0; a.set('stompair', t, 2.5); a.sv.stompArmed = 1;
+  w.sfx('mechjump', a.pos, a);
+}
+
+/** Grand Dohyo: bind a hero to the ring - no flight, no dashes (castAbility), held inside the rope (World.ringClamp) */
+function leash(w: World, by: Actor, x: Actor) {
+  const t = w.time;
+  x.set('chained', t, 0.3, undefined, by);
+  if (x.def.frame === 'mech' || x.isBoss) return;
+  x.set('grounded', t, 0.3, undefined, by); x.flying = false;
+  if (x.forced && x.forced.kind !== 'knock' && x.forced.kind !== 'pull') interrupt(w, x, by);
+}
+
+/**
+ * Shiko Stomp: the leap out of a Tachiai Rush lands. Everyone within 7m the shockwave can reach is thrown back off their
+ * feet and left flat on the ground, stunned (1s at the heart of it, 0.8s further out), and set alight.
+ */
 function shikoStomp(w: World, a: Actor) {
-  const t = w.time, p = { ...a.pos };
+  const t = w.time, p = { ...a.pos }, eye = { x: p.x, y: p.y + 0.6, z: p.z };
   for (const x of w.enemies(a)) {
     const dx = x.pos.x - p.x, dz = x.pos.z - p.z, d = Math.hypot(dx, dz);
-    if (d > 5 + x.radius || Math.abs(x.pos.y - p.y) > 2.5) continue;
-    w.damage(a, x, 60, { kind: 'ability' }); ignite(w, a, x, 8);
-    if (ccBlocked(w, x) || x.def.frame === 'mech' || x.isBoss) continue;
-    const n = d > 0.1 ? { x: dx / d, z: dz / d } : { x: 0, z: 0 };
-    x.vel.y = 9.5; x.grounded = false; x.lastGroundedAt = -9;
-    x.forced = { vx: n.x * 4, vy: 0, vz: n.z * 4, until: t + 0.35, kind: 'knock' };
+    if (d > STOMP_R + x.radius || Math.abs(x.pos.y - p.y) > STOMP_H) continue;
+    if (!w.level.lineOfSight(eye, x.center)) continue;                 // a wall between them takes the shockwave
+    const core = d < STOMP_CORE + x.radius;
+    w.damage(a, x, core ? 150 : 75, { kind: 'ability' }); ignite(w, a, x, 8);
+    if (!x.alive || x.def.frame === 'mech' || x.isBoss || !applyCC(w, a, x, 'stun', core ? 1 : 0.8)) continue;
+    x.set('knockdown', t, core ? 1 : 0.8, undefined, a);
+    // swept off their feet, away from the landing: a low hop and a shove, then flat on the ground
+    const n = d > 0.1 ? { x: dx / d, z: dz / d } : { x: Math.sin(a.yaw), z: Math.cos(a.yaw) };
+    x.flying = false; x.vel.y = 4; x.grounded = false;
+    x.forced = { vx: n.x * 8.5, vy: 0, vz: n.z * 8.5, until: t + 0.3, kind: 'knock' };
   }
-  w.fx('slam', p, { r: 5, color: a.def.glow, actor: a }); w.fx('stomp', p, { r: 5, color: '#ffb35c', actor: a }); w.fx('dust', p, { r: 3 });
+  w.fx('slam', p, { r: STOMP_R, color: a.def.glow, actor: a }); w.fx('stomp', p, { r: STOMP_R, color: '#ffb35c', actor: a }); w.fx('dust', p, { r: 4 });
   w.sfx('slam', p, a); w.sfx('mechland', p, a);
 }
 
@@ -908,12 +943,17 @@ export function tickAbilities(w: World, dt: number) {
         w.emit({ t: 'counter', actor: a, target: b, text: 'Tachiai Rush cracks the Solar Bulwark' });
       }
     }
+    else if (a.sv.rushOn) {
+      // the charge ran its full course (not cut short with SHIFT): it ends in the leap by itself
+      a.sv.rushOn = 0;
+      if (t - (a.sv.rushStart ?? 0) >= RUSH_T - 0.05 && a.grounded && !a.has('stun', t) && !a.has('root', t)) stompLeap(w, a);
+    }
     if (a.sv.stompArmed) {
       if (a.grounded && t - a.anim.jumpAt > 0.1) { a.sv.stompArmed = 0; a.clear('stompair'); shikoStomp(w, a); }
       else if (!a.has('stompair', t)) a.sv.stompArmed = 0;
     }
     if (a.has('taiko', t)) {
-      for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 12) x.set('lifesteal', t, 0.3, x === a ? 0.4 : 0.3);
+      for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 12) x.set('lifesteal', t, 0.3, x === a ? 1 : 0.5);
       if (t - (a.sv.taikoBeat ?? 0) > 0.5) { a.sv.taikoBeat = t; w.fx('taikopulse', a.center, { actor: a, color: '#ffb35c', r: 12 }); w.sfx('taikobeat', a.center, a); }
     }
   }
@@ -973,7 +1013,20 @@ export function tickAbilities(w: World, dt: number) {
       a.sv.fangX = to.x; a.sv.fangY = to.y; a.sv.fangZ = to.z;
     }
   }
-  for (const z of w.zones) if (z.kind === 'dohyo' && !z.owner.alive) z.until = t;
+  for (const z of w.zones) {
+    if (z.kind !== 'dohyo' || t >= z.until) continue;
+    if (!z.owner.alive) { z.until = t; continue; }
+    // the chains: everyone caught stays bound, and an enemy who gets inside the rope (dropped in from above) is bound too
+    const trapped = z.data.trapped as number[];
+    for (const x of w.enemies(z.owner)) {
+      if (!x.alive) continue;
+      if (!trapped.includes(x.id)) {
+        if (Math.hypot(x.pos.x - z.x, x.pos.z - z.z) > z.r - x.radius - 0.3 || x.pos.y < z.y - 2 || x.pos.y > z.y + 6) continue;
+        trapped.push(x.id); w.sfx('chainhit', x.center, z.owner);
+      }
+      leash(w, z.owner, x);
+    }
+  }
   // dashes that interact with enemies on the way
   for (const a of w.actors) {
     if (!a.alive || !a.forced) continue;
@@ -1061,6 +1114,7 @@ export function castAbility(w: World, a: Actor, id: string, slot: 'a1' | 'a2' | 
   if (id === 'crescent' && a.sv.fang) { if (a.sv.fang === 2 || a.sv.fang === 3) { recallFang(w, a); return true; } return false; }
   if (slot !== 'ult' && !a.ready(id, t)) return false;
   if (a.forced && !['knock', 'pull'].includes(a.forced.kind) && id !== 'thousandcuts') return false;
+  if (LEASHED.has(id) && a.has('chained', t)) { w.fx('blocked', a.center, { color: '#ffd27a', actor: a }); w.sfx('denied', a.pos, a); return false; }
   if (a.has('stealth', t) && id !== 'veil') { a.clear('stealth'); a.set('ambush', t, 0.6); }
   const ok = I[id](w, a);
   if (!ok) return false;

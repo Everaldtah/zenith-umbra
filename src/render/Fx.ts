@@ -9,6 +9,7 @@ import { FULL } from '../edition';
 import { fangPos } from '../game/abilities';
 import { buildFang } from './TomoeProps';
 import { SpiritDragons } from './SpiritDragon';
+import { ChainCage } from './ChainCage';
 
 const FXCOL: Record<string, string> = {
   sun: '#ffd76a', star: '#bfe8ff', talisman: '#ffe28a', bolt: '#8ad8ff', void: '#ff2244', blood: '#ff2d55', hex: '#c77dff',
@@ -97,13 +98,15 @@ export class Fx {
   wfx: WeaponFx | null = null;
   /** desktop edition: the Koryu brothers' rigged spirit koi-dragons (SpiritDragon.ts) */
   dragons: SpiritDragons | null = null;
+  /** Grand Dohyo's binding chains (desktop edition) */
+  chains: ChainCage | null = null;
   /** Game: where the local player's rounds leave the gun in first person (the viewmodel's muzzle, not the body's) */
   muzzleFor: ((a: Actor, from: V3) => V3) | null = null;
 
   constructor(scene: THREE.Scene, cap = 6000) {
     this.parts = new Particles(cap);
     this.group.add(this.parts.points);
-    if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); this.dragons = new SpiritDragons(this.group); }
+    if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); this.dragons = new SpiritDragons(this.group); this.chains = new ChainCage(this.group); }
     this.flash = new THREE.PointLight('#ffffff', 0, 18, 2);
     this.group.add(this.flash);
     scene.add(this.group);
@@ -322,12 +325,20 @@ export class Fx {
         break;
       }
       case 'stomp': {
-        // Shiko Stomp: a ground shockwave, clods of earth thrown up, embers
-        this.ring(p, e.r ?? 5, e.color ?? '#ffb35c', now, 0.45);
-        this.ring(p, (e.r ?? 5) * 0.55, '#ffffff', now, 0.3);
-        P.emit({ x: p.x, y: p.y + 0.2, z: p.z }, n(30), new THREE.Color('#6b5b4a'), { speed: 6, life: 0.8, size: 0.45, up: 6, grav: 16, spread: 2.5 });
-        P.emit({ x: p.x, y: p.y + 0.3, z: p.z }, n(24), c, { speed: 7, life: 0.5, size: 0.3, up: 3, spread: 2 });
-        this.shake = Math.max(this.shake, 0.45 / (1 + near / 12));
+        // Shiko Stomp: the slam's shockwave rolling out to its full reach, a hot core, clods of earth thrown up all the
+        // way round, embers - and the ground kicks under everyone near it
+        const R = e.r ?? 7;
+        this.ring(p, R, e.color ?? '#ffb35c', now, 0.5);
+        this.ring(p, R * 0.62, '#ff6a2a', now, 0.4);
+        this.ring(p, R * 0.36, '#ffffff', now, 0.28);
+        this.light(p, '#ff8a3d', 40, now);
+        P.emit({ x: p.x, y: p.y + 0.2, z: p.z }, n(36), new THREE.Color('#6b5b4a'), { speed: 7, life: 0.9, size: 0.5, up: 7, grav: 16, spread: 3 });
+        P.emit({ x: p.x, y: p.y + 0.3, z: p.z }, n(28), c, { speed: 9, life: 0.55, size: 0.3, up: 3, spread: 2.5 });
+        for (let k = 0; k < 10; k++) {
+          const a = k / 10 * Math.PI * 2 + 0.3, q = { x: p.x + Math.cos(a) * R * 0.7, y: p.y + 0.15, z: p.z + Math.sin(a) * R * 0.7 };
+          P.emit(q, n(4), new THREE.Color('#8a7660'), { speed: 3, life: 0.7, size: 0.4, up: 5, grav: 16, spread: 0.8 });
+        }
+        this.shake = Math.max(this.shake, 0.7 / (1 + near / 12));
         break;
       }
       case 'bossbeam': if (e.to) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.45); this.beam(p, e.to, '#ffffff', now, 0.07, 0.15); P.emit(e.to, n(3), c, { speed: 4, life: 0.3, size: 0.5 }); } break;
@@ -374,6 +385,7 @@ export class Fx {
     this.syncProjectiles(w.projs, now);
     this.syncFangs(w, now);
     this.syncZones(w.zones, now);
+    this.chains?.update(w, now);
     this.syncBeams(w, now);
     this.statusFx(w, now, dt);
   }

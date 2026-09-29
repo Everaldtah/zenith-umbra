@@ -161,10 +161,15 @@ export function buildChaingun(modelHeight: number, side: 'L' | 'R'): ChaingunPro
  * into its own mesh and hung in the spin group on the cluster's own axis, so the barrels still spin up as he fires.
  */
 const GUN_ROLL: Record<string, number> = { prop_gantetsu_hanabi: Math.PI };
+/** how much of the gun's length, from the muzzle back, is the barrel cluster that spins (the rest is the receiver) */
+const GUN_BARREL: Record<string, number> = { prop_gantetsu_hinoko_v2: 0.4, prop_gantetsu_hanabi_v2: 0.36 };
 
-function upgradeChaingun(prop: ChaingunProp, id: string, L: number) {
+function upgradeChaingun(prop: ChaingunProp, id0: string, L: number) {
   void (async () => {
     await loadManifest();
+    // the second generation of the guns (six long barrels in two gold rings, a drum magazine under the receiver) when the
+    // build has them
+    const id = hasProp(`${id0}_v2`) ? `${id0}_v2` : id0;
     if (!hasProp(id)) return;
     const m = await propModel(id);
     if (!m) return;
@@ -188,7 +193,7 @@ function upgradeChaingun(prop: ChaingunProp, id: string, L: number) {
     for (const p of parts) { p.geo.computeBoundingBox(); box.union(p.geo.boundingBox!); }
     // the grip: a quarter of the way along from the back, the receiver sitting just above the fist
     const off = new THREE.Vector3(-(box.min.x + box.max.x) / 2, -(box.min.y + (box.max.y - box.min.y) * 0.3), -(box.min.z + (box.max.z - box.min.z) * 0.22));
-    const zCut = box.max.z + off.z - (box.max.z - box.min.z) * 0.38;
+    const zCut = box.max.z + off.z - (box.max.z - box.min.z) * (GUN_BARREL[id] ?? 0.38);
     const keepMeshes: THREE.Mesh[] = [], barrelMeshes: THREE.Mesh[] = [];
     const ax = new THREE.Vector2(), bb = new THREE.Box2();
     bb.makeEmpty();

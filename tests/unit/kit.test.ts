@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { World, RING_H } from '../../src/game/World';
 import { lineup } from '../../src/game/setup';
+import { DOHYO_T, stompLeap } from '../../src/game/abilities';
 import { HERO } from '../../src/data/heroes';
 import type { Actor } from '../../src/game/Actor';
 import { Animator, type AnimState } from '../../src/render/Animator';
@@ -101,7 +102,7 @@ describe('Gantetsu', () => {
     expect(burned).toBe(true);
     expect(roar).toBeGreaterThan(0);
   });
-  it('Tachiai Rush is unstoppable and the Shiko Stomp launches everyone close', () => {
+  it('Tachiai Rush is unstoppable and the Shiko Stomp knocks everyone close off their feet', () => {
     const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, 0, 0), e = place(w, 'raijin', 'zenith', 0.4, 4.5);
     tap(w, g, 'a1');
     expect(g.has('tachiai', w.time)).toBe(true);
@@ -111,10 +112,44 @@ describe('Gantetsu', () => {
     expect(g.forced).toBe(null);
     tap(w, g, 'jump');
     expect(g.sv.stompArmed).toBe(1);
-    let lifted = 0; const hp0 = e.health;
-    run(w, 1.4, () => { lifted = Math.max(lifted, e.vel.y); });
-    expect(lifted).toBeGreaterThan(5);
-    expect(e.health).toBeLessThan(hp0 - 50);
+    const hp0 = e.health, d0 = Math.hypot(e.pos.x - g.pos.x, e.pos.z - g.pos.z);
+    let down = 0, stunned = 0, landed = 0;
+    run(w, 1.4, () => {
+      if (e.has('knockdown', w.time)) down += DT;
+      if (e.has('stun', w.time)) stunned += DT;
+      if (!landed && !g.sv.stompArmed) landed = w.time;
+    });
+    expect(landed).toBeGreaterThan(0);
+    expect(down).toBeGreaterThan(0.7);                        // flat on the ground...
+    expect(stunned).toBeGreaterThan(0.7);                     // ...and stunned while he lies there
+    expect(e.health).toBeLessThan(hp0 - 70);
+    expect(Math.hypot(e.pos.x - g.pos.x, e.pos.z - g.pos.z)).toBeGreaterThan(d0);   // thrown back from the landing
+  });
+  it('Tachiai Rush ends in the leap by itself when the charge runs out - unless it was cut short', () => {
+    const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, -12, 0);
+    tap(w, g, 'a1');
+    let armed = false;
+    run(w, 3.2, () => { armed ||= !!g.sv.stompArmed; });
+    expect(armed).toBe(true);
+    const w2 = arena(), g2 = place(w2, 'gantetsu', 'umbra', 0, -12, 0);
+    tap(w2, g2, 'a1'); run(w2, 0.6); tap(w2, g2, 'a1');       // SHIFT again: the charge just stops
+    expect(g2.has('tachiai', w2.time)).toBe(false);
+    let armed2 = false;
+    run(w2, 3, () => { armed2 ||= !!g2.sv.stompArmed; });
+    expect(armed2).toBe(false);
+  });
+  it('the Shiko Stomp reaches 7m, hits hardest at its heart, and a colossus keeps its feet', () => {
+    const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, 0, 0);
+    const near = place(w, 'raijin', 'zenith', 1, 1.5), far = place(w, 'yuzu', 'zenith', -5.5, 2), out = place(w, 'kaien', 'zenith', 9, 3), mech = place(w, 'tenkai', 'zenith', 3, -3);
+    const hp = [near, far, out, mech].map(x => x.health);
+    stompLeap(w, g);
+    run(w, 1.2);
+    expect(hp[0] - near.health).toBeGreaterThan(hp[1] - far.health);
+    expect(hp[1] - far.health).toBeGreaterThan(50);
+    expect(out.health).toBe(hp[2]);
+    expect(far.st.knockdown).toBeGreaterThan(0);
+    expect(mech.health).toBeLessThan(hp[3]);
+    expect(mech.st.knockdown).toBeUndefined();
   });
   it('Grand Dohyo traps the enemies inside, keeps the rest out, blocks enemy fire across the wall and feeds the guns', () => {
     const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, 0), e = place(w, 'raijin', 'zenith', 0, 4, 0), o = place(w, 'yuzu', 'zenith', 0, 20, Math.PI);
@@ -132,6 +167,23 @@ describe('Gantetsu', () => {
     const a0 = g.ammo;
     run(w, 1, () => { aimAt(g, e.center); g.input.fire = true; });
     expect(g.ammo).toBe(a0);                                 // endless inside the ring
+  });
+  it('Grand Dohyo chains the enemies inside: no dashes, no flight, until the ring is gone', () => {
+    const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, 0), e = place(w, 'raijin', 'zenith', 0, 4, 0), m = place(w, 'mirei', 'zenith', 3, 3), o = place(w, 'kaien', 'zenith', 0, 20);
+    g.ult = g.def.ult.charge; tap(w, g, 'ult');
+    run(w, 0.2);
+    expect(e.has('chained', w.time)).toBe(true);
+    expect(m.has('grounded', w.time)).toBe(true);            // the flyer is pulled out of the air
+    expect(o.has('chained', w.time)).toBe(false);
+    const p0 = { ...e.pos };
+    tap(w, e, 'a1');                                         // Flash Step: the chain holds
+    expect(e.forced).toBe(null);
+    expect(Math.hypot(e.pos.x - p0.x, e.pos.z - p0.z)).toBeLessThan(1);
+    expect(w.zones.find(z => z.kind === 'dohyo')!.until - w.time).toBeGreaterThan(DOHYO_T - 0.5);
+    run(w, DOHYO_T + 0.5);
+    expect(e.has('chained', w.time)).toBe(false);
+    tap(w, e, 'a1');
+    expect(e.forced?.kind).toBe('flashstep');
   });
   it('Taiko Heartbeat: less damage taken, and the team heals by dealing damage', () => {
     const w = arena(), g = place(w, 'gantetsu', 'umbra', 0, 0), al = place(w, 'kagemaru', 'umbra', 3, 0), x = place(w, 'tenkai', 'zenith', 0, 9);
