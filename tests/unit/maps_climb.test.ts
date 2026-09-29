@@ -36,4 +36,25 @@ describe('climbers\' maps: the climb routes climb', () => {
       expect(climb(map, x, z, yaw, y0, top)).toBeGreaterThan(top - 0.3);
     });
   }
+
+  // Hibiki's Mag-Grind: airborne beside a face with grind held, riding along it (+x) looking up, he climbs and mantles on
+  const rides: [string, string, number, number, number][] = [
+    // map, route, start x, face z (the wall on the +z side if wallSide > 0), top ... wall side packed into the sign of top
+    ['mile', 'butte ledge (5 m)', -31, 20.5, 5],
+    ['mile', 'south shelf (8 m)', -28, -23.5, -8],
+    ['gulch', 'a boxcar roof (4.2 m)', -45, 11.4, 4.2],
+  ];
+  for (const [map, name, x, face, signedTop] of rides) {
+    it(`${map}: Hibiki rides up the ${name}`, () => {
+      const top = Math.abs(signedTop), side = Math.sign(signedTop);        // side: the wall lies on the +z (1) or -z (-1) side
+      const w = new World(map, 'practice');
+      const h: Actor = w.addHero('hibiki', 'zenith'); h.clear('spawnprot');
+      h.pos = { x, y: 0.9, z: face - side * (h.radius + 0.3) }; h.vel = { x: 6, y: 1, z: 0 }; h.grounded = false; h.lastGroundedAt = -9;
+      h.yaw = h.input.yaw = Math.PI / 2; h.pitch = h.input.pitch = 0.7; h.input.grind = true; h.input.mz = 1;
+      let mantled = false;
+      run(w, 4, () => { if ((h.stats.mantles ?? 0) > 0 && !mantled) { mantled = true; h.input.mz = 0; h.input.grind = false; } });
+      expect(mantled).toBe(true);
+      expect(h.pos.y).toBeGreaterThan(top - 0.3);
+    });
+  }
 });
