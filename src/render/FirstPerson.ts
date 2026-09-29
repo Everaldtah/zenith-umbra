@@ -35,32 +35,33 @@ interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; 
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
-  raijin: { grip: 'katana', R: [0.22, -0.17, 0.46], L: [0.08, -0.19, 0.44], recoil: 0, clip: 0.14, keep: 0.97 },
+  raijin: { grip: 'katana', R: [0.21, -0.21, 0.44], L: [-0.17, -0.24, 0.42], recoil: 0, clip: 0.14, keep: 0.97 },
   // the bow held left of the reticle and canted (an archer's first-person read), sized down for the viewmodel; the
   // string hand rests on the nocked arrow beside the grip (Hanzo's ready pose)
   // (work/fp_spec.md, after Hanzo: bow fist low left at (0.37, 0.83), string hand on the arrow at (0.47, 0.89), the bow
   // small enough that its limb never covers the reticle at rest)
   yuzu: { grip: 'bow', R: [-0.03, -0.19, 0.44], L: [-0.13, -0.18, 0.5], recoil: 0, clip: 0.12, gunScale: 0.6 },
   // the wide kimono sleeves are squeezed into slim tubes for the viewmodel (they'd fill the screen), hands well forward
-  kaien: { grip: 'caster', R: [0.2, -0.1, 0.56], L: [-0.2, -0.11, 0.54], recoil: 0.03, keep: 0.97, squeeze: 0.12 },
-  mirei: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.15, -0.11, 0.38], recoil: 0.02 },
-  nocturne: { grip: 'caster', R: [0.14, -0.07, 0.42], L: [-0.14, -0.08, 0.4], recoil: 0.02 },
-  hex: { grip: 'caster', R: [0.13, -0.1, 0.4], L: [-0.13, -0.1, 0.4], recoil: 0.025 },
-  kagemaru: { grip: 'kunai', R: [0.17, -0.11, 0.37], L: [-0.17, -0.13, 0.35], recoil: 0 },
+  kaien: { grip: 'caster', R: [0.21, -0.2, 0.44], L: [-0.21, -0.17, 0.46], recoil: 0.03, keep: 0.97, squeeze: 0.12 },
+  mirei: { grip: 'caster', R: [0.22, -0.2, 0.42], L: [-0.19, -0.24, 0.4], recoil: 0.02 },
+  nocturne: { grip: 'caster', R: [0.17, -0.17, 0.42], L: [-0.18, -0.19, 0.42], recoil: 0.02 },
+  hex: { grip: 'caster', R: [0.18, -0.16, 0.42], L: [-0.18, -0.16, 0.42], recoil: 0.025 },
+  kagemaru: { grip: 'kunai', R: [0.19, -0.16, 0.4], L: [-0.2, -0.23, 0.4], recoil: 0 },
   // his spiked pauldrons and gauntlet spikes crowd the lens: clipped close, only hand-weighted triangles kept
-  enra: { grip: 'fists', R: [0.2, -0.14, 0.44], L: [-0.2, -0.14, 0.44], recoil: 0, push: 0.05, clip: 0.22, keep: 0.95, drape: 0.35 },
-  haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
+  enra: { grip: 'fists', R: [0.21, -0.18, 0.44], L: [-0.21, -0.2, 0.44], recoil: 0, push: 0.05, clip: 0.22, keep: 0.95, drape: 0.35 },
+  haruto: { grip: 'pistol', R: [0.17, -0.16, 0.4], L: [0.02, -0.26, 0.34], recoil: 0.05 },
   // Reinhardt's viewmodel: both gauntlets on the haft low right, the haft out to the right, the head resting right of
   // centre (the rest pose of HAMMER_REST - hammerProc drives the whole swing)
   tenkai: { grip: 'hammer', R: [0.2, -0.27, 0.5], L: [0.329, -0.27, 0.653], recoil: 0, shoulderW: 0.2, reach: 1.9, gauntlets: 'models/fp/tenkai_gauntlets.glb' },
-  gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
+  // mech claws half a metre across: out in the bottom corners and well forward (as Gantetsu's guns), the near arm cut away
+  gorgoth: { grip: 'shotgun', R: [0.34, -0.34, 0.56], L: [-0.34, -0.34, 0.56], recoil: 0.09, clip: 0.25, gunScale: 0.8 },
   // hip-held twin chainguns in the bottom corners, angled in on the reticle, the rear of each gun out of view
   gantetsu: { grip: 'dual', R: [0.36, -0.36, 0.56], L: [-0.36, -0.36, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.8 },
-  hibiki: { grip: 'pistol', R: [0.25, -0.17, 0.52], L: [-0.24, -0.3, 0.4], recoil: 0.05 },
+  hibiki: { grip: 'pistol', R: [0.2, -0.2, 0.44], L: [-0.18, -0.21, 0.4], recoil: 0.05 },
   // the scattergun one-handed on the right, the Crescent Fang held low in the left fist
-  tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.23, -0.29, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
+  tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.21, -0.19, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
   // koi-scale shuriken flicked from the chest (the scarf is cut out: it wraps the neck, not the arms)
-  hayate: { grip: 'kunai', R: [0.17, -0.09, 0.42], L: [-0.17, -0.11, 0.4], recoil: 0, keep: 0.9 },
+  hayate: { grip: 'kunai', R: [0.17, -0.17, 0.4], L: [-0.17, -0.18, 0.4], recoil: 0, keep: 0.9 },
   // the Riverbow in the left hand, the draw hand on the right
   // his robe sleeves squeezed to slim tubes and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
   seiran: { grip: 'bow', R: [-0.03, -0.19, 0.44], L: [-0.13, -0.18, 0.5], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.58 },
@@ -335,7 +336,10 @@ export class FirstPersonArms {
     if (this.playing?.name === name) return true;
     const a = this.mixer.clipAction(c);
     a.reset(); a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); a.clampWhenFinished = !loop; a.timeScale = rate;
-    if (this.playing) a.crossFadeFrom(this.playing.action, 0.08, false);
+    // a one-shot retriggered (auto fire) is the SAME action: cross-fading it from itself fades it in from weight 0 with
+    // nothing else playing, and the arms flash to the bind pose (hands thrown off-screen) - just restart it at full weight
+    if (this.playing && this.playing.action !== a) a.crossFadeFrom(this.playing.action, 0.08, false);
+    else a.setEffectiveWeight(1);
     a.play();
     this.playing = { name, action: a };
     return true;

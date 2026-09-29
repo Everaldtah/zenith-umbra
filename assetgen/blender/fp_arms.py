@@ -48,27 +48,27 @@ EASE = {"lin": lambda u: u, "io": lambda u: u * u * (3 - 2 * u), "in": lambda u:
 # personality: view-space hand rest positions in metres from the eye (right, up, forward) - mirrors FP_STYLE in
 # src/render/FirstPerson.ts so authored clips start from exactly the procedural framing
 STYLE = {
-    "raijin": ("katana", (0.22, -0.17, 0.46), (0.08, -0.19, 0.44), 0.0),
+    "raijin": ("katana", (0.21, -0.21, 0.44), (-0.17, -0.24, 0.42), 0.0),
     "yuzu": ("bow", (-0.03, -0.19, 0.44), (-0.13, -0.18, 0.5), 0.0),
-    "kaien": ("caster", (0.2, -0.1, 0.56), (-0.2, -0.11, 0.54), 0.03),
-    "mirei": ("caster", (0.14, -0.1, 0.4), (-0.15, -0.11, 0.38), 0.02),
-    "nocturne": ("caster", (0.14, -0.07, 0.42), (-0.14, -0.08, 0.4), 0.02),
-    "hex": ("caster", (0.13, -0.1, 0.4), (-0.13, -0.1, 0.4), 0.025),
-    "kagemaru": ("kunai", (0.17, -0.11, 0.37), (-0.17, -0.13, 0.35), 0.0),
-    "enra": ("fists", (0.2, -0.14, 0.44), (-0.2, -0.14, 0.44), 0.0),
-    "haruto": ("pistol", (0.13, -0.12, 0.4), (0.06, -0.15, 0.36), 0.05),
+    "kaien": ("caster", (0.21, -0.2, 0.44), (-0.21, -0.17, 0.46), 0.03),
+    "mirei": ("caster", (0.22, -0.2, 0.42), (-0.19, -0.24, 0.4), 0.02),
+    "nocturne": ("caster", (0.17, -0.17, 0.42), (-0.18, -0.19, 0.42), 0.02),
+    "hex": ("caster", (0.18, -0.16, 0.42), (-0.18, -0.16, 0.42), 0.025),
+    "kagemaru": ("kunai", (0.19, -0.16, 0.4), (-0.2, -0.23, 0.4), 0.0),
+    "enra": ("fists", (0.21, -0.18, 0.44), (-0.21, -0.2, 0.44), 0.0),
+    "haruto": ("pistol", (0.17, -0.16, 0.4), (0.02, -0.26, 0.34), 0.05),
     "tenkai": ("hammer", (0.2, -0.27, 0.5), (0.329, -0.27, 0.653), 0.0),
-    "gorgoth": ("shotgun", (0.2, -0.19, 0.34), (0.05, -0.19, 0.62), 0.09),
+    "gorgoth": ("shotgun", (0.34, -0.34, 0.56), (-0.34, -0.34, 0.56), 0.09),
     "gantetsu": ("dual", (0.36, -0.36, 0.56), (-0.36, -0.36, 0.56), 0.03),
-    "hibiki": ("pistol", (0.25, -0.17, 0.52), (-0.24, -0.3, 0.4), 0.05),
-    "tomoe": ("shotgun", (0.21, -0.2, 0.44), (-0.23, -0.29, 0.38), 0.1),
-    "hayate": ("kunai", (0.17, -0.09, 0.42), (-0.17, -0.11, 0.4), 0.0),
+    "hibiki": ("pistol", (0.2, -0.2, 0.44), (-0.18, -0.21, 0.4), 0.05),
+    "tomoe": ("shotgun", (0.21, -0.2, 0.44), (-0.21, -0.19, 0.38), 0.1),
+    "hayate": ("kunai", (0.17, -0.17, 0.4), (-0.17, -0.18, 0.4), 0.0),
     "seiran": ("bow", (-0.03, -0.19, 0.44), (-0.13, -0.18, 0.5), 0.0),
 }
 # eye pushed forward past a high collar / bulky coat (metres), as FP_STYLE.push in FirstPerson.ts
 PUSH = {"enra": 0.05, "gantetsu": 0.08, "tomoe": 0.04}
 # near clip (m): cut geometry closer than this to the camera - a high collar wrapped around the eye (FP_STYLE.clip)
-CLIP = {"raijin": 0.14, "seiran": 0.14, "yuzu": 0.12, "enra": 0.22}
+CLIP = {"raijin": 0.14, "seiran": 0.14, "yuzu": 0.12, "enra": 0.22, "gorgoth": 0.25}
 GRIP, REST_R, REST_L, RECOIL = STYLE.get(a.hero, ("rifle", (0.16, -0.15, 0.34), (0.03, -0.14, 0.5), 0.04))
 
 

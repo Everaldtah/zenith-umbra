@@ -415,4 +415,6 @@ def build(hero, R, L):
     C.setdefault("fp_land", land(R, L))
     C.setdefault("fp_equip", equip(R, L, 1 if hero != "yuzu" else -1))
     if hero in ("yuzu", "seiran"): base_wrist(C, REST_RR)
+    # a pistol grip: palm to the grip, the back of the hand toward the lens (the forearm-following rest shows the palm)
+    if hero == "haruto": base_wrist(C, (0, 0, -90))
     return C
