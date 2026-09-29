@@ -258,7 +258,7 @@ export class Hud {
     const seen = new Set<number>();
     const v = new THREE.Vector3();
     for (const a of w.actors) {
-      if (!a.alive || a === me) continue;
+      if (!a.alive || a === me || a.isSummon) continue;     // (no bar over each of fifty puppets)
       if (me && a.team !== me.team && a.has('stealth', t) && !a.has('revealed', t)) continue;
       v.set(a.pos.x, a.pos.y + a.height + 0.35, a.pos.z).project(cam);
       if (v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) continue;

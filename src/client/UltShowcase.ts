@@ -25,7 +25,7 @@ const PLAN: Record<string, Plan> = {
   hundredsuns: { secs: 4.5 },
   singularity: { secs: 4.5, flat: true },
   requiem: { secs: 4.5 },
-  theater: { secs: 4 },
+  theater: { secs: 17, wide: 1 },
   thousandcuts: { secs: 3.2 },
   asura: { secs: 8.5, fight: 5 },
   dohyo: { secs: 7, near: 3, fight: 2.5 },

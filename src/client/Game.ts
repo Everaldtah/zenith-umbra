@@ -25,6 +25,7 @@ import type { Mode, GameEvent } from '../game/World';
 import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
+import { PuppetSwarm } from '../render/PuppetSwarm';
 import { FirstPersonArms, FP_STYLE } from '../render/FirstPerson';
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
@@ -95,6 +96,8 @@ export class Game {
   mapScene: MapScene | null = null;
   fx: Fx | null = null;
   views = new Map<number, CharacterView>();
+  /** Hex's puppet army, drawn as one instanced swarm (built at match start when a Hex is in the match) */
+  swarm: PuppetSwarm | null = null;
   /** first-person arms (viewmodel), drawn in their own pass over the world */
   fp: FirstPersonArms | null = null;
   private fpAim = { yaw: 0, pitch: 0 };
@@ -284,6 +287,7 @@ export class Game {
       const w = new WorldCls(LEVEL[o.map].map, 'campaign');
       Object.assign(w.extraDefs, ENEMIES, BOSSES);
       this.match = { world: w, nav: new Nav(w.level), player: null, bots: [] };
+      w.nav = this.match.nav;
       this.clientSync = new ClientSync(w, o.net.coop, e => this.handleEvent(e), LEVEL[o.map]);
     } else {
       this.match = o.mode === 'campaign'
@@ -319,6 +323,7 @@ export class Game {
       return { x: p.x, y: p.y, z: p.z };
     };
     const viewerTeam = this.match.player?.team ?? 'zenith';
+    if (FULL && w.actors.some(a => a.baseDef.id === 'hex')) this.swarm = new PuppetSwarm(this.scene);
     for (const a of w.actors) this.addView(a, viewerTeam);
     await this.warmUp(w, viewerTeam);
     this.hud.reset();
@@ -363,6 +368,7 @@ export class Game {
     }
     const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
     const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
+    if (this.swarm) laterLoads.push(this.swarm.ready);
     for (const [hero, id] of Object.entries(DRAGON_MODEL)) if (FULL && w.actors.some(a => a.def.id === hero)) laterLoads.push(riggedModel(id).then(m => { if (m) warmGroup.add(m); }));
     const views = () => [...this.views.values()];
     const needs = (v: CharacterView) => hasModel(v.actor.def.id);
@@ -503,6 +509,7 @@ export class Game {
   }
 
   private addView(a: Actor, viewerTeam: string) {
+    if (a.isSummon) return;                   // (the swarm draws these)
     const v = new CharacterView(a, viewerTeam, a.isPlayer ? equippedSkin(a.def.id) : 'classic');
     v.onStep = (act, _side, heavy) => {
       if (!this.match) return;
@@ -521,6 +528,7 @@ export class Game {
     for (const v of this.views.values()) v.dispose();
     this.views.clear();
     this.fp?.dispose(); this.fp = null;
+    this.swarm?.dispose(this.scene); this.swarm = null;
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
     this.match = null; this.mapScene = null; this.fx = null;
     this.hud.show(false);
@@ -621,6 +629,7 @@ export class Game {
       // the World swaps hero defs (Tenkai-Oh's pilot ejecting / calling the mech back): rebuild that actor's view
       const old = this.views.get(a.id);
       if (old && old.defId !== a.def.id) { this.scene.remove(old.group); old.dispose(); this.views.delete(a.id); }
+      if (a.isSummon) { this.swarm ??= new PuppetSwarm(this.scene); continue; }
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);
@@ -641,6 +650,7 @@ export class Game {
     this.fpAim.yaw = this.camYaw; this.fpAim.pitch = this.camPitch;
     this.fx.wfx?.cam.copy(this.camera.position);
     this.fx.fpActor = wantFp ? me : null;
+    this.swarm?.update(w, w.time, viewer.team, viewer.sees);
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
     this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null);
     this.updateCamera(dt, me);

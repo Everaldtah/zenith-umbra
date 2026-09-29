@@ -55,6 +55,8 @@ export class Actor {
   isRobot = false;
   noRespawn = false;
   isBoss = false;
+  /** a summoned body's summoner (Hex's puppets) */
+  owner: Actor | null = null;
   netId = '';                 // co-op: which peer controls this actor ('' = local / AI)
   controller: { think(dt: number): void } | null = null;
   spawn: [number, number] = [0, 0];
@@ -70,6 +72,8 @@ export class Actor {
     if (def.id === 'tenkai') this.barrier = { hp: 1400, max: 1400, up: false, regenAt: 0, brokenUntil: 0 };
   }
 
+  /** a summoned body (by its def, so co-op clients know it too) */
+  get isSummon() { return !!this.def.summoned; }
   get maxHp() { return this.def.hp + this.maxArmor; }
   get health() { return this.hp + this.armor; }
   get height() { return this.def.height * this.scale; }

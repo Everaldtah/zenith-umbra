@@ -6,6 +6,7 @@ import { Level, STEP, type V3 } from '../engine/Physics';
 import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
 import { castAbility, stompLeap, tickAbilities } from './abilities';
+import { PUPPET_DEF, dropPuppets, tickPuppets } from './puppets';
 import { updateWeapons } from './weapons';
 import { Stadium } from './stadium';
 import { FULL } from '../edition';
@@ -82,7 +83,11 @@ export class World {
   /** health packs: position, size, and when each is back */
   packs: { x: number; y: number; z: number; big: boolean; readyAt: number }[] = [];
   /** campaign hooks: enemy/boss definitions and the encounter director */
-  extraDefs: Record<string, HeroDef> = {};
+  extraDefs: Record<string, HeroDef> = { puppet: PUPPET_DEF };
+  /** the match's path finder, when it has one (summoned armies route around walls with it) */
+  nav: { find(from: V3, to: V3, maxIter?: number): V3[] | null } | null = null;
+  /** per-tick scratch values */
+  sv: Record<string, number> = { puppetPaths: 0 };
   director: { update(dt: number): void; onKill?(a: Actor, src: Actor | null): void } | null = null;
   /** Stadium mode: rounds, the Armory, cash (null in every other mode) */
   stadium: Stadium | null = null;
@@ -126,7 +131,7 @@ export class World {
   addHero(heroId: string, team?: TeamId): Actor {
     const def: HeroDef = HERO[heroId] ?? PILOT_BY_ID[heroId] ?? ROBOTS[heroId] ?? this.extraDefs[heroId];
     const a = new Actor(def, team ?? def.team);
-    a.isRobot = !!ROBOTS[heroId];
+    a.isRobot = !!ROBOTS[heroId] || !!def.summoned;
     a.spawn = this.map.spawns[a.team];
     this.actors.push(a);
     this.respawn(a, true);
@@ -134,6 +139,7 @@ export class World {
   }
 
   respawn(a: Actor, first = false) {
+    if (!first && !a.isSummon && a.sv.puppetsCast !== undefined) dropPuppets(this, a);
     const [sx, sz] = a.spawn;
     const i = this.actors.filter(o => o.team === a.team).indexOf(a);
     const ang = i * 1.3;
@@ -303,8 +309,9 @@ export class World {
       tgt.lastHitBy = src; tgt.lastHitAt = t; tgt.sv.lastHitDmg = dealt;
       let m = this.attackers.get(tgt.id); if (!m) this.attackers.set(tgt.id, m = new Map());
       m.set(src.id, t);
-      src.dmgDone += dealt;
-      src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
+      // shooting a summoned puppet, or a puppet's own claws, never feeds an ultimate or the damage column
+      if (!tgt.isSummon) src.dmgDone += dealt;
+      if (!tgt.isSummon && o.ability !== 'puppet') src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
       // Gantetsu - Roar of the Crowd: critical hits turn half their damage into temporary health (max 150)
@@ -388,6 +395,13 @@ export class World {
 
   kill(tgt: Actor, src: Actor | null) {
     if (!tgt.alive) return;
+    if (tgt.isSummon) {
+      // a puppet falls: no kill feed, no kill or assist, no respawn
+      tgt.alive = false; tgt.deathAt = this.time; tgt.respawnAt = 0; tgt.forced = null; tgt.wounds = []; tgt.sv.fellAt = this.time;
+      this.attackers.delete(tgt.id);
+      this.fx('puppetfall', tgt.center, { color: tgt.def.glow, actor: tgt });
+      return;
+    }
     if (tgt.def === tgt.baseDef && PILOTS[tgt.def.id]) { this.demech(tgt, src); return; }
     tgt.alive = false; tgt.deathAt = this.time; tgt.deaths++;
     tgt.respawnAt = tgt.noRespawn ? 0 : this.time + (tgt.isRobot ? 3 : this.mode === 'aitest' ? 4 : this.mode === 'campaign' ? 8 : 6);
@@ -580,6 +594,7 @@ export class World {
     this.separate();
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
+    tickPuppets(this);
     this.zones = this.zones.filter(z => z.until > t);
     this.updatePacks();
     if (this.director) this.director.update(dt);
@@ -667,7 +682,7 @@ export class World {
     { const s = a.shields.find(x => x.kind === 'bassdrop'); if (s && t - (a.sv.bassAt ?? 0) > 0.8) s.amt -= 750 / 6 * dt; }
     if (per('linked') && a.src.linked) this.heal(a.src.linked, a, 25 * dt, true);
     if (a.def.id === 'enra' && t - a.lastDamagedAt > 3 && a.hp < a.def.hp) a.hp = Math.min(a.def.hp, a.hp + 12 * dt);
-    if (a.isRobot && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
+    if (a.isRobot && !a.isSummon && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
     // the spawn room heals quickly (not the web build's legacy match)
     if (this.full && this.mode !== 'campaign' && t - a.lastDamagedAt > 1.5 && Math.hypot(a.pos.x - a.spawn[0], a.pos.z - a.spawn[1]) < 7) {
       a.hp = Math.min(a.def.hp, a.hp + 150 * dt); a.armor = Math.min(a.maxArmor, a.armor + 150 * dt);

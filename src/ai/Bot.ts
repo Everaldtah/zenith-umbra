@@ -58,7 +58,8 @@ export class Bot {
     const foes = w.enemies(a).filter(x => w.perceivable(a, x) && !x.isRobot || (x.isRobot && x.def.id !== 'bot_dummy'));
     const vis = foes.filter(x => dist3(x.pos, a.pos) < 55 && w.visible(a, x));
     // target: close + low + visible, sticky
-    const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0);
+    const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0)
+      + (x.isSummon ? 10 : 0);                 // a puppet only when it is much closer than any hero
     this.target = vis.sort((p, q) => score(p) - score(q))[0] ?? null;
     // the objective: the capture point, or (Mikoshi Rush) wherever the float is now
     const P: [number, number, number] = w.rules === 'push' ? [w.push.pos.x, w.push.pos.y, w.push.pos.z] : w.map.point;
@@ -453,7 +454,9 @@ export class Bot {
         if (rdy('grievous') && healed && healed.health / healed.maxHp < 0.8) { this.castAt('a2', healed.pos); break; }
         const yuzu = foes.find(x => x.def.id === 'yuzu' && dist3(x.pos, a.pos) < 19 && vis(x));
         if (rdy('marionette') && (yuzu || (tg && d < 19 && vis(tg)))) { this.castAt('a1', (yuzu ?? tg)!.center); break; }
-        if (ultReady && near(a.pos, 14, foes).length >= 2) this.castAt('ult');
+        // Grand Puppet Theater: raise the army when a fight is on - two or more of them close, or one on top of him
+        const heroes = foes.filter(x => !x.isSummon);
+        if (ultReady && (near(a.pos, 18, heroes).length >= 2 || (tg && !tg.isSummon && d < 9 && a.health / a.maxHp < 0.7))) this.castAt('ult');
         break;
       }
       case 'kagemaru': {

@@ -14,6 +14,7 @@ export interface Match { world: World; nav: Nav; player: Actor | null; bots: Bot
 export function createMatch(mapId: string, mode: Mode, playerHero: string | null, skill = 0.7): Match {
   const world = new World(mapId, mode);
   const nav = new Nav(world.level);
+  world.nav = nav;
   const bots: Bot[] = [];
   let player: Actor | null = null;
   if (mode === 'gallery') {
@@ -114,6 +115,7 @@ export function createCampaign(levelId: string, squad: { hero: string; netId: st
   const lvl = LEVEL[levelId];
   const world = new World(lvl.map, 'campaign');
   const nav = new Nav(world.level);
+  world.nav = nav;
   const bots: Bot[] = [];
   let player: Actor | null = null;
   const humans = squad.length;

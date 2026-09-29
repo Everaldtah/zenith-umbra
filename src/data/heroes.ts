@@ -1,6 +1,8 @@
 // ZENITH//UMBRA roster: 5 Zenith Vanguard heroes vs 6 Umbra Syndicate villains.
 // Every hero has a rival on the other team, and each of them owns an ability that counters the other.
 
+import { FULL } from '../edition';
+
 export type TeamId = 'zenith' | 'umbra';
 export type Role = 'tank' | 'support' | 'dps';
 export type Slot = 'primary' | 'secondary' | 'ability1' | 'ability2' | 'ult';
@@ -66,6 +68,7 @@ export interface HeroDef {
   gunProp?: boolean;     // carries a procedural sidearm (the pilot out of the mech)
   dualGuns?: boolean;    // a rotary chaingun in each fist: LMB fires the left, RMB the right, both spin up and reload together
   full?: boolean;        // desktop edition only
+  summoned?: boolean;    // a summoned body (Hex's puppets): no respawn, no objective time, no kill feed, no ultimate charge
 }
 
 const isAbility = (x: WeaponDef | AbilityDef): x is AbilityDef => (x as AbilityDef).id !== undefined;
@@ -175,7 +178,7 @@ export const HEROES: HeroDef[] = [
     secondary: { kind: 'projectile', damage: 55, rate: 1.2, range: 35, speed: 35, heal: true, sfx: 'stitch', fx: 'hex' },
     ability1: { id: 'marionette', name: 'Marionette Strings', key: 'SHIFT', cooldown: 10, desc: 'Tether an enemy within 20m; after 0.6s they are yanked 8m toward you and rooted for 1s.' },
     ability2: { id: 'grievous', name: 'Grievous Hex', key: 'E', cooldown: 12, desc: 'A curse bomb: 6m zone for 4s, enemies inside receive 80% less healing and take 10/s.', counter: "Starves Mirei's and Kaien's heals." },
-    ult: { id: 'theater', name: 'Grand Puppet Theater', key: 'Q', cooldown: 0, charge: 2100, desc: 'Every enemy within 15m is rooted and takes +30% damage for 2.5s.' },
+    ult: { id: 'theater', name: 'Grand Puppet Theater', key: 'Q', cooldown: 0, charge: 2100, desc: FULL ? 'Fifty masked puppets rise around you and fight for you for 15s, then fall lifeless. They fall at once if you do.' : 'Every enemy within 15m is rooted and takes +30% damage for 2.5s.' },
     passive: { name: 'Stitched Decoy', desc: 'A single hit over 90 damage is taken by a doll instead (15s cooldown). Counters Yuzu\'s charged shots.' },
     lore: 'No one has seen the face behind the porcelain. Hex collects "students" from the Eclipse Rift and restitches them into perfect, obedient dolls. His favourite still whispers a girl\'s name.',
     inspiration: 'Creepy puppeteer antagonists from dark-fantasy anime.',

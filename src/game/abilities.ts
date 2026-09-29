@@ -4,6 +4,7 @@ import type { V3 } from '../engine/Physics';
 import type { Actor } from './Actor';
 import { dist3, norm, type Proj, type World, type Zone } from './World';
 import { ignite, wound } from './weapons';
+import { raisePuppets } from './puppets';
 
 /** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
 export const DRAGONBLADE_SECS = 15;
@@ -458,6 +459,13 @@ const I: Record<string, Impl> = {
     return true;
   },
   theater(w, a) {
+    if (w.full) {
+      // Grand Puppet Theater: fifty masked puppets rise around him and fight for him (puppets.ts)
+      raisePuppets(w, a);
+      w.fx('theater', a.center, { r: 12, color: '#c77dff', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('theater', a.center, a);
+      return true;
+    }
+    // the web edition keeps the original: every enemy within 15m rooted and vulnerable for 2.5s
     for (const x of w.enemies(a)) {
       if (dist3(x.pos, a.pos) > 15 || !w.level.lineOfSight(a.eye, x.center)) continue;
       x.set('vuln', w.time, 2.5, undefined, a);
