@@ -9,15 +9,17 @@ import * as THREE from 'three';
 import { hasProp, loadManifest, propModel } from './Assets';
 import { fitProp } from './TomoeProps';
 
-type Kind = 'blade' | 'bow';
+type Kind = 'blade' | 'bow' | 'arrow';
 interface Item { id: string; kind: Kind; size: number; color: string; glow: string; pitch?: number }
 export interface HeldSpec { L?: Item; R?: Item }
 
 export const HELD: Record<string, HeldSpec> = {
   raijin: { R: { id: 'prop_raijin_katana', kind: 'blade', size: 0.56, color: '#cfd6e2', glow: '#7fc8ff', pitch: -0.55 } },
   hayate: { R: { id: 'prop_hayate_nodachi', kind: 'blade', size: 0.62, color: '#e8efe9', glow: '#4fe3c1', pitch: -0.5 } },
-  yuzu: { L: { id: 'prop_yuzu_bow', kind: 'bow', size: 0.72, color: '#f2c14e', glow: '#ffd76a' } },
-  seiran: { L: { id: 'prop_seiran_bow', kind: 'bow', size: 0.86, color: '#1d2433', glow: '#6fa8ff' } },
+  // the archers also hold the next arrow in the string hand (nocked on the string, drawn to the jaw, loosed, then a new
+  // one drawn from the quiver over the right shoulder - Hanzo's cycle)
+  yuzu: { L: { id: 'prop_yuzu_bow', kind: 'bow', size: 0.72, color: '#f2c14e', glow: '#ffd76a' }, R: { id: 'prop_yuzu_arrow', kind: 'arrow', size: 0.4, color: '#f7e2a8', glow: '#ffb347' } },
+  seiran: { L: { id: 'prop_seiran_bow', kind: 'bow', size: 0.86, color: '#1d2433', glow: '#6fa8ff' }, R: { id: 'prop_seiran_arrow', kind: 'arrow', size: 0.42, color: '#dfe6f0', glow: '#6fa8ff' } },
 };
 
 export interface HeldProp { group: THREE.Group; kind: Kind }
@@ -85,12 +87,29 @@ function buildBow(L: number, it: Item, body: THREE.Group) {
   body.position.z = -0.09 * len;                                   // the grip (the arc's apex) sits in the fist
 }
 
+/** an arrow along +Z from its nock at the origin: a lacquered shaft, a steel head with a glowing edge, three vanes */
+function buildArrow(L: number, it: Item, body: THREE.Group) {
+  const len = it.size * L;
+  const shaft = new THREE.MeshStandardMaterial({ color: '#2a2230', metalness: 0.3, roughness: 0.5 });
+  const steel = new THREE.MeshStandardMaterial({ color: it.color, metalness: 0.9, roughness: 0.25, emissive: new THREE.Color(it.glow), emissiveIntensity: 0.35 });
+  const vane = new THREE.MeshStandardMaterial({ color: it.color, roughness: 0.6, side: THREE.DoubleSide });
+  put(body, new THREE.CylinderGeometry(0.0045 * L, 0.0045 * L, len, 6).rotateX(Math.PI / 2), shaft, 0, 0, len / 2);
+  put(body, new THREE.ConeGeometry(0.011 * L, 0.05 * L, 4).rotateX(Math.PI / 2), steel, 0, 0, len + 0.022 * L);
+  put(body, new THREE.CylinderGeometry(0.006 * L, 0.006 * L, 0.012 * L, 6).rotateX(Math.PI / 2), steel, 0, 0, 0.004 * L);   // nock
+  for (let k = 0; k < 3; k++) {
+    const s = new THREE.Shape(); s.moveTo(0, 0); s.lineTo(0.018 * L, 0.012 * L); s.lineTo(0.02 * L, 0.07 * L); s.lineTo(0, 0.08 * L); s.lineTo(0, 0);
+    const m = put(body, new THREE.ShapeGeometry(s), vane, 0, 0, 0.015 * L);
+    m.rotation.set(-Math.PI / 2, 0, k * Math.PI * 2 / 3, 'ZXY');
+  }
+}
+
 export function buildHeld(modelHeight: number, it: Item): HeldProp {
   const g = new THREE.Group(), body = new THREE.Group(), L = modelHeight;
   g.add(body);
   g.userData.body = body;
   if (it.id === 'prop_hayate_nodachi') { const sh = buildShuriken(L); g.add(sh); g.userData.swap = sh; }
   if (it.kind === 'blade') { buildBlade(L, it, body); body.rotation.x = it.pitch ?? -0.5; }
+  else if (it.kind === 'arrow') { buildArrow(L, it, body); g.userData.arrow = true; return { group: g, kind: it.kind }; }
   else buildBow(L, it, body);
   void (async () => {
     await loadManifest();
@@ -109,6 +128,9 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
   })();
   return { group: g, kind: it.kind };
 }
+
+/** after a shot the string hand is empty until it brings the next arrow from the quiver (seconds after the shot) */
+export const ARROW_GONE: [number, number] = [0.03, 0.42];
 
 /** Hayate keeps the nodachi sheathed on his back except while he deflects, dashes, cuts or runs the Dragon Gate */
 export function heldVisible(heroId: string, side: 0 | 1, a: { has(s: string, t: number): boolean; anim: { castId?: string; castAt: number; attackAt: number; attackKind?: string } }, t: number) {

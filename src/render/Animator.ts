@@ -61,6 +61,7 @@ export interface AnimState {
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
   parry?: boolean;          // a blade deflect held (Raijin's Thunder Parry, Hayate's Mirror Water)
   climb?: boolean;          // running up a wall (the Koryu brothers)
+  charge?: number;          // how far a charge weapon is drawn (0..1)
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
   move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets' | 'reaping' | 'tide' (Tomoe's axe)
@@ -235,6 +236,8 @@ export class Animator {
   bob = 0; landDip = 0; flap = 0; moveBlend = 0; airBlend = 0; flyBlend = 0; atk = 0; cast = 0;
   /** the archer's draw (0..1): bow arm out, string hand at the cheek (Yuzu, Seiran) */
   drawW = 0;
+  /** where the bow hand is being held this frame (model space), for the nock */
+  private bowHandM = new THREE.Vector3();
   /** a blade guard held (0..1): the deflect stance */
   guardW = 0;
   onStep: ((side: number, heavy: boolean) => void) | null = null;
@@ -266,6 +269,8 @@ export class Animator {
   hammerLen = 1;
   /** twin chaingun props (model-space children of the rig root) [left hand, right hand], barrels along the forearms */
   guns: [THREE.Object3D, THREE.Object3D] | null = null;
+  /** a slot holding the nocked arrow: laid from the string hand through the bow hand (not along the forearm) */
+  arrowSlot: [boolean, boolean] = [false, false];
   /** first person: roll a held bow by this much (radians) so it reads canted, the way archers hold it on screen */
   bowCant = 0;
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
@@ -376,6 +381,11 @@ export class Animator {
       const fq = this.modelQ.get(this.bones[fa]!) ?? R[fa].q;
       const at = this.modelPos(this.bones[hn] && R[hn] ? hn : fa);
       let Zv = aim ? aim.clone().sub(at).normalize() : R[fa].dir.clone().applyQuaternion(fq.clone().multiply(R[fa].q.clone().invert())).normalize();
+      if (this.arrowSlot[i]) {
+        const o = i === 0 ? 'R' : 'L', ob = `hand_${o}` as BoneName, of = `forearm_${o}` as BoneName;
+        const other = this.modelPos(this.bones[ob] && R[ob] ? ob : of);
+        if (other.distanceToSquared(at) > 1e-6) Zv = other.clone().sub(at).normalize();
+      }
       if (this.gunUpright[i]) {
         // the bow faces where the forearm points across the ground (straight ahead when the arm hangs), limbs up
         Zv = new THREE.Vector3(Zv.x, 0, Zv.z);
@@ -408,6 +418,10 @@ export class Animator {
       fa.getWorldPosition(wa); hn.getWorldPosition(wh);
       const at = par.worldToLocal(wh.clone()), from = par.worldToLocal(wa.clone());
       let Zv = aim ? aim.clone().sub(at) : at.clone().sub(from);
+      if (this.arrowSlot[i]) {
+        const ob = this.bones[`hand_${i === 0 ? 'R' : 'L'}` as BoneName];
+        if (ob) Zv = par.worldToLocal(ob.getWorldPosition(new THREE.Vector3())).sub(at);
+      }
       if (Zv.lengthSq() < 1e-10) Zv.set(0, 0, 1);
       Zv.normalize();
       if (this.gunUpright[i]) { Zv = new THREE.Vector3(Zv.x, 0, Zv.z); if (Zv.lengthSq() < 0.09) Zv.set(0, 0, 1); Zv.normalize(); }
@@ -1070,7 +1084,8 @@ export class Animator {
     const breath = Math.sin(s.time * 1.6) * 0.015;
     // an archer draws side-on, the bow shoulder toward the target (Hanzo's stance), and holds it through the release
     const archer = !!(s.hero && HELD[s.hero]?.L?.kind === 'bow');
-    this.drawW += ((archer && (s.charging || this.atk > 0.05) ? 1 : 0) - this.drawW) * Math.min(1, dt * (s.charging ? 14 : 6));
+    const shotAge = s.attackKind === 'primary' || s.attackKind === 'secondary' ? s.attackAge : 9;
+    this.drawW += ((archer && (s.charging || shotAge < 0.85) ? 1 : 0) - this.drawW) * Math.min(1, dt * (s.charging ? 14 : 6));
     this.guardW += ((s.parry ? 1 : 0) - this.guardW) * Math.min(1, dt * (s.parry ? 16 : 8));
     const twist = this.atk * (s.melee || s.attackKind === 'secondary' ? -0.55 : -0.12) * (1 - this.drawW) + 0.55 * this.drawW;
     // the upper body trails a fast aim turn and springs back past centre, the eyes stay on target (Boehm's spring aims:
@@ -1197,13 +1212,25 @@ export class Animator {
         // the draw: the bow arm straight out along the aim, the string hand pulled back to the cheek with the elbow
         // high behind; on the release the string hand snaps back and open (follow-through), the bow arm holds
         const Lr = l1 + l2, face = (R.neck ? R.neck.p : R.chest.p).clone().add(hipsOff).add(new THREE.Vector3(0, 0.06 * this.height, 0));
+        const bowHand = shoulder.clone();          // (the left shoulder on i === 0; recomputed for the right hand below)
         if (i === 0) {
-          const hand = shoulder.clone().addScaledVector(aimDir, Lr * 0.97);
+          const hand = bowHand.addScaledVector(aimDir, Lr * 0.97);
+          this.bowHandM.copy(hand);
           over = { hand, w: this.drawW, pole: new THREE.Vector3(side * 0.6, -0.8, 0) };
         } else {
-          const release = s.charging ? 0 : Math.min(1, this.atk * 1.4);
-          const hand = face.addScaledVector(aimDir, 0.05 * this.height).add(new THREE.Vector3(-side * 0.05 * this.height, 0, 0))
-            .add(new THREE.Vector3(-side * 0.12 * Lr, 0.04 * Lr, -0.22 * Lr).multiplyScalar(release));
+          // Hanzo's cycle, string hand: at the jaw while drawing; loose - it snaps back past the ear, open; reaches over
+          // the right shoulder to the quiver; brings the next arrow down to the bow and nocks it; rests on the string
+          const anchor = face.clone().addScaledVector(aimDir, 0.05 * this.height).add(new THREE.Vector3(-side * 0.05 * this.height, 0, 0));
+          const nock = this.bowHandM.clone().addScaledVector(aimDir, -0.12 * Lr).add(new THREE.Vector3(-side * 0.03 * Lr, 0, 0));
+          const quiver = shoulder.clone().add(new THREE.Vector3(-side * 0.08 * Lr, 0.34 * Lr, -0.42 * Lr).applyQuaternion(Dc));
+          const snap = anchor.clone().add(new THREE.Vector3(-side * 0.14 * Lr, 0.05 * Lr, -0.26 * Lr).applyQuaternion(Dc));
+          const k = (a: number, b: number) => Math.max(0, Math.min(1, (shotAge - a) / (b - a))), ez = (u: number) => u * u * (3 - 2 * u);
+          let hand: THREE.Vector3;
+          if (s.charging) hand = nock.clone().lerp(anchor, Math.min(1, 0.25 + (s.charge ?? 1)));
+          else if (shotAge < 0.1) hand = anchor.clone().lerp(snap, ez(k(0, 0.07)));
+          else if (shotAge < 0.34) hand = snap.clone().lerp(quiver, ez(k(0.1, 0.34)));
+          else if (shotAge < 0.6) hand = quiver.clone().lerp(nock, ez(k(0.4, 0.6)));
+          else hand = nock;
           over = { hand, w: this.drawW, pole: new THREE.Vector3(side * 0.9, 0.5, -0.9) };
         }
       } else if (this.guardW > 0.02 && carry?.R?.kind === 'blade') {
@@ -1230,7 +1257,7 @@ export class Animator {
         // the bow hand low at the side, bow upright - instead of pumping the weapon through the arm swing. Any attack
         // or cast takes the arm straight back.
         const it = i === 0 ? carry.L : carry.R;
-        if (it) {
+        if (it && it.kind !== 'arrow') {
           const Lr = l1 + l2, busy = Math.min(1, Math.max(this.atk, this.cast, s.charging ? 1 : 0) * 1.6);
           const local = it.kind === 'blade' ? new THREE.Vector3(side * 0.3, -0.76, -0.3) : new THREE.Vector3(side * 0.36, -0.8, 0.06);
           const hand = shoulder.clone().add(local.multiplyScalar(Lr).applyQuaternion(Dc));

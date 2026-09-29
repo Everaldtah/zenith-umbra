@@ -28,8 +28,9 @@ interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
   raijin: { grip: 'katana', R: [0.22, -0.17, 0.46], L: [0.08, -0.19, 0.44], recoil: 0, clip: 0.14, keep: 0.97 },
-  // the bow held left of the reticle and canted (an archer's first-person read), sized down for the viewmodel
-  yuzu: { grip: 'bow', R: [0.1, -0.16, 0.4], L: [-0.17, -0.15, 0.5], recoil: 0, clip: 0.12, gunScale: 0.8 },
+  // the bow held left of the reticle and canted (an archer's first-person read), sized down for the viewmodel; the
+  // string hand rests on the nocked arrow beside the grip (Hanzo's ready pose)
+  yuzu: { grip: 'bow', R: [-0.02, -0.1, 0.41], L: [-0.06, -0.095, 0.49], recoil: 0, clip: 0.12, gunScale: 0.8 },
   // the wide kimono sleeves are squeezed into slim tubes for the viewmodel (they'd fill the screen), hands well forward
   kaien: { grip: 'caster', R: [0.2, -0.1, 0.56], L: [-0.2, -0.11, 0.54], recoil: 0.03, keep: 0.97, squeeze: 0.12 },
   mirei: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.15, -0.11, 0.38], recoil: 0.02 },
@@ -50,7 +51,7 @@ export const FP_STYLE: Record<string, Style> = {
   hayate: { grip: 'kunai', R: [0.17, -0.09, 0.42], L: [-0.17, -0.11, 0.4], recoil: 0, keep: 0.9 },
   // the Riverbow in the left hand, the draw hand on the right
   // his robe sleeves squeezed to slim tubes and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
-  seiran: { grip: 'bow', R: [0.12, -0.17, 0.4], L: [-0.22, -0.2, 0.46], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.75 },
+  seiran: { grip: 'bow', R: [-0.03, -0.11, 0.44], L: [-0.07, -0.105, 0.53], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.75 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 

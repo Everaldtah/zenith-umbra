@@ -144,18 +144,27 @@ def raijin(R, L):
 
 
 def yuzu(R, L):
-    """YUZU - calm, precise archer. Bow in the left hand, arrow in the right. The draw is scrubbed by charge (fp_draw):
-    the string hand comes to the cheek. The release (fp_fire) snaps the right hand back and open, the bow arm kicks
-    forward, then she nocks the next arrow from the quiver over the right shoulder - all inside the 0.9 s shot cycle."""
+    """YUZU - calm, precise archer, after Hanzo's first-person cycle. Bow in the left hand (canted), the next arrow nocked
+    with the right hand resting on the string beside the grip. fp_draw (scrubbed by charge) pulls the string hand back
+    to the jaw - bottom right of the view, the arrow shaft running from it through the bow. fp_fire: the loose snaps the
+    hand back and open (it stays at the screen's edge, never behind the lens), the bow arm kicks forward, then the hand
+    reaches up over the right shoulder to the quiver (off the top of the view), comes back down with the next arrow and
+    nocks it on the string - all inside the 0.9 s shot cycle (HeldProps.ARROW_GONE hides the arrow from the loose until
+    the grab at the quiver)."""
     C = {}
     C["fp_idle"] = idle(R, L, amp=0.004, sway=0.003, Lr=(0, 0, -10))
-    draw = (0.24, -0.11, -0.01)         # string hand drawn back past the jaw, out of frame on the right (the forearm never crosses the lens)
-    C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -10)), K(20, draw, off(L, 0, 0.01, 0.03), (0, 10, 0), (0, 0, -15), "out")]}
-    C["fp_fire"] = {"keys": [K(0, draw, off(L, 0, 0.01, 0.03), (0, 10, 0), (0, 0, -15)),
-                             K(1, (0.34, -0.1, -0.06), off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
-                             K(6, (0.35, -0.11, -0.06), off(L, 0, 0.0, 0.02), None, (0, 0, -10), "out"),
-                             K(12, (0.3, -0.06, -0.02), None, (40, 30, 30), None, "io"),
-                             K(20, off(R, 0.02, 0.0, 0.0), None, (0, 0, 0), None, "io"),
+    anchor = (0.08, -0.125, 0.13)        # the jaw: close and low on the right, the arrow running up from it through the bow
+    snap = (0.3, -0.27, 0.12)            # loosed: the hand flicks back and out through the bottom-right corner
+    quiver = (0.33, -0.34, -0.04)        # the reach back to the quiver - out of the view, never across the lens
+    drawnL = off(L, 0, 0.01, 0.02)
+    C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -10)), K(20, anchor, drawnL, (0, 12, 0), (0, 0, -15), "out")]}
+    C["fp_fire"] = {"keys": [K(0, anchor, drawnL, (0, 12, 0), (0, 0, -15)),
+                             K(1, snap, off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
+                             K(4, off(snap, 0.01, -0.01, -0.02), off(L, 0, 0.0, 0.02), None, (0, 0, -10), "out"),
+                             K(10, quiver, None, (40, 30, 30), None, "io"),
+                             K(13, off(quiver, -0.01, 0.01, -0.01), None, (45, 30, 30), None, "hold"),
+                             K(19, off(R, 0.12, -0.08, -0.06), None, (10, 10, 10), None, "io"),
+                             K(23, R, L, (0, 0, 0), (0, 0, -10), "io"),
                              K(27, R, L, (0, 0, 0), (0, 0, -10), "io")]}
     C["fp_alt"] = {"keys": [K(0, R, L), K(10, off(R, 0, 0.01, -0.01), off(L, 0, 0.01, 0.02), None, None, "io"), K(30, R, L, None, None, "io")]}
     C["fp_melee"] = quick_melee(R, L, main_hand_free=True)
@@ -168,7 +177,6 @@ def yuzu(R, L):
     C["fp_inspect"] = {"keys": [K(0, R, L), K(12, off(R, 0.03, 0.02), (0.02, -0.08, 0.44), None, (0, -30, -40), "io"),
                                 K(32, None, (0.02, -0.075, 0.45), None, (0, -32, -60), "io"), K(48, R, L, (0, 0, 0), (0, 0, -10), "io")]}
     return C
-
 
 def caster(R, L, who):
     """the four casters, one family - four personalities:
@@ -365,15 +373,20 @@ def hayate(R, L):
 
 
 def seiran(R, L):
-    """SEIRAN - the elder brother: the same archer's craft as Yuzu, carried heavier and stiller (less idle drift, a
-    longer settle after each shot). Twin Koi: both hands lift the bow skyward and the release throws both arms wide."""
+    """SEIRAN - the elder brother: Hanzo's cycle as Yuzu has it, carried heavier and stiller (less idle drift). Scatter
+    Current (fp_alt) is a snap draw and loose of the fan of arrows, then the same reach to the quiver and nock. Twin Koi:
+    both hands lift the bow skyward and the release throws both arms wide."""
     C = yuzu(R, L)
     C["fp_idle"] = idle(R, L, amp=0.0025, sway=0.002, Lr=(0, 0, -8))
+    anchor, snap, quiver = (0.085, -0.135, 0.13), (0.3, -0.28, 0.12), (0.33, -0.35, -0.04)
+    C["fp_alt"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -8)), K(3, anchor, off(L, 0, 0.01, 0.02), (0, 12, 0), (0, 0, -15), "out"),
+                            K(4, snap, off(L, 0, 0.02, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
+                            K(9, quiver, off(L, 0, 0, 0.01), (40, 30, 30), None, "io"), K(12, None, None, None, None, "hold"),
+                            K(18, off(R, 0.12, -0.08, -0.06), None, (10, 10, 10), None, "io"), K(22, R, L, (0, 0, 0), (0, 0, -8), "io")]}
     C["fp_ult"] = {"keys": [K(0, R, L), K(5, (0.04, 0.12, 0.32), (0.0, 0.16, 0.46), (60, 0, 0), (60, 0, -10), "snap"),
                             K(20, (0.1, 0.18, 0.12), (0.0, 0.2, 0.46), (70, 10, 10), None, "out"),
                             K(22, (0.3, 0.1, 0.1), (-0.1, 0.18, 0.5), (80, 40, 40), None, "snap"), K(38, R, L, (0, 0, 0), (0, 0, -10), "io")]}
     return C
-
 
 def build(hero, R, L):
     """hero -> {clip: {"loop": bool, "keys": [...]}}; every hero also gets hit / land / equip"""

@@ -8,7 +8,7 @@ import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
-import { HELD, buildHeld, heldVisible } from './HeldProps';
+import { HELD, buildHeld, heldVisible, ARROW_GONE } from './HeldProps';
 import { Ragdoll } from './Ragdoll';
 import type { Level } from '../engine/Physics';
 
@@ -321,6 +321,7 @@ export class CharacterView {
       root.add(gl); root.add(gr);
       anim.guns = [gl, gr];
       anim.gunUpright = [held.L?.kind === 'bow', held.R?.kind === 'bow'];
+      anim.arrowSlot = [held.L?.kind === 'arrow', held.R?.kind === 'arrow'];
       this.heldHero = true;
       return;
     }
@@ -338,7 +339,16 @@ export class CharacterView {
     if (this.heldHero) {
       const hide: [boolean, boolean] = [false, false];
       for (let i = 0; i < 2; i++) {
-        const g = this.guns[i].group, vis = heldVisible(a.def.id, i as 0 | 1, a, time);
+        const g = this.guns[i].group;
+        if (g.userData.arrow) {
+          // the nocked arrow: gone from loose until the next one comes out of the quiver; in third person it shows only
+          // while the bow is up (drawn, or nocking between shots)
+          const since = time - a.anim.attackAt, shot = a.anim.attackKind === 'primary' || a.anim.attackKind === 'secondary';
+          const gone = shot && since > ARROW_GONE[0] && since < ARROW_GONE[1];
+          hide[i] = gone || (!this.noSmear && this.anim.drawW < 0.45);
+          continue;
+        }
+        const vis = heldVisible(a.def.id, i as 0 | 1, a, time);
         // a hand with a stand-in (Hayate: the shuriken while the nodachi is sheathed) never goes empty
         if (g.userData.swap) { (g.userData.body as THREE.Object3D).visible = vis; (g.userData.swap as THREE.Object3D).visible = !vis; }
         // Dragon Gate Blade: the drawn nodachi burns with the koi-dragon's violet for the whole 15 s
@@ -569,7 +579,7 @@ export class CharacterView {
       // a swoop skimming the floor is still flight (no running gait at 20 m/s)
       grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
-      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), climb: a.has('wallclimb', time), beam: a.beamOn || a.flameOn,
+      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), climb: a.has('wallclimb', time), charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
