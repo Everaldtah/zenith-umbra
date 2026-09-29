@@ -1008,5 +1008,43 @@
   "kind": "ambient",
   "take": 3,
   "loop": true
+ },
+ {
+  "id": "shuriken",
+  "prompt": "a small metal throwing star thrown hard, a quick spinning whir and a bright metallic swish, close",
+  "secs": 0.4,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "bodyfall",
+  "prompt": "a body falling onto a hard floor, a heavy soft thud with a little armour clatter",
+  "secs": 0.6,
+  "kind": "event",
+  "take": 5
+ },
+ {
+  "id": "amb_lantern",
+  "prompt": "a lantern-lit night market on festival night, distant crowd murmur, soft wind chimes, a canal trickling, faint taiko far away",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_starfall",
+  "prompt": "a mountaintop observatory above the snowline, cold wind gusting, distant temple bells, soft snow hiss",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
+ },
+ {
+  "id": "amb_foundry",
+  "prompt": "a busy forge foundry, rhythmic distant hammering, furnace roar, molten metal hiss and heavy machinery hum",
+  "secs": 8.0,
+  "kind": "ambient",
+  "take": 3,
+  "loop": true
  }
 ]

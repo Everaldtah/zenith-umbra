@@ -76,9 +76,11 @@ for job in JOBS:
                 rms = float(np.sqrt(np.mean(x ** 2)) + 1e-9)
                 score = max(0.0, 1.0 - abs(dur - 0.45) / 1.2) * 0.7 + min(1.0, rms * 8) * 0.3
             else:
-                hyp = asr({"raw": x, "sampling_rate": sr}, generate_kwargs={"language": "english"})["text"]
+                # Whisper refuses >30 s without timestamps: score the first 25 s (a take that long is babble anyway)
+                hyp = asr({"raw": x[:int(25 * sr)], "sampling_rate": sr}, generate_kwargs={"language": "english"})["text"]
                 score = difflib.SequenceMatcher(None, norm(text), norm(hyp)).ratio()
                 if dur > 1.2 + max(1, len(norm(text).split())) * 0.55: score *= 0.7
+                if dur > 12: score *= 0.2
             sf.write(f"{out}/{key}_{idx}_{t}_{score:.3f}.wav", x, sr); n += 1
         publish("line", vid=vid, key=key, idx=idx)
     publish("voice-done", vid=vid, takes=n)

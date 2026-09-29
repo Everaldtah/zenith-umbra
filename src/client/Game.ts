@@ -342,6 +342,7 @@ export class Game {
       if (FULL) this.sound.step(act, heavy); else sfx.play(heavy ? 'mechstep' : 'step', act.pos, heavy ? 1 : 0.6);
       if (heavy) { this.fx?.onEvent({ t: 'fx', kind: 'step', pos: { ...act.pos } }, this.match.world.time, this.camPos); this.fx!.shake = Math.max(this.fx!.shake, 0.08 / (1 + this.camPos.distanceTo(new THREE.Vector3(act.pos.x, act.pos.y, act.pos.z)) / 8)); }
     };
+    v.onBodyFall = (_act, at, speed) => { if (this.match) sfx.play('bodyfall', { x: at.x, y: at.y, z: at.z }, Math.min(1, 0.35 + speed / 10)); };
     this.views.set(a.id, v);
     this.scene.add(v.group);
   }

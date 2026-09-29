@@ -156,11 +156,17 @@ export class Ragdoll {
     this.pose();
   }
 
+  /** the body's first hard landings (pelvis, chest): world position and impact speed (m/s), for the thud */
+  onImpact?: (at: THREE.Vector3, speed: number) => void;
+  private landed = new Set<number>();
+
   private collide(q: P) {
     const L = this.level;
     const g = L ? L.groundAt(q.x.x, q.x.z, q.x.y + this.H * 0.3, 0) : this.floorY;
     const floor = Number.isFinite(g) ? g : this.floorY - 50;
     if (q.x.y < floor + q.r) {
+      const i = this.p.indexOf(q), vy = (q.prev.y - q.x.y) / STEP;
+      if (!this.landed.has(i) && vy > 2.5 && (i === this.idx.get('hips') || i === this.idx.get('chest'))) { this.landed.add(i); this.onImpact?.(q.x.clone(), vy); }
       q.x.y = floor + q.r;
       // floor friction: the body slides a little, then stops
       q.prev.x += (q.x.x - q.prev.x) * 0.18; q.prev.z += (q.x.z - q.prev.z) * 0.18;

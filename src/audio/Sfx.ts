@@ -34,6 +34,10 @@ const R: Record<string, Layer[]> = {
   needle: [{ w: 'sawtooth', f: 2600, f1: 1400, d: 0.07, v: 0.12, hp: 1200 }],
   stitch: [{ w: 'triangle', f: 500, f1: 900, d: 0.18, v: 0.18 }, { n: true, d: 0.1, v: 0.1, bp: 3000, q: 4 }],
   kunai: [{ n: true, d: 0.1, v: 0.3, bp: 4000, q: 3 }, { w: 'sine', f: 1800, f1: 900, d: 0.08, v: 0.08 }],
+  // Hayate's koi-scale shuriken: a spinning whir with a bright ring (the recorded bank replaces it on desktop)
+  shuriken: [{ n: true, d: 0.12, v: 0.26, bp: 5200, q: 4 }, { w: 'sine', f: 2600, f1: 1900, d: 0.1, v: 0.07 }, { w: 'triangle', f: 3400, f1: 3100, d: 0.05, v: 0.04, dl: 0.03 }],
+  // a ragdoll hitting the floor
+  bodyfall: [{ w: 'sine', f: 110, f1: 45, d: 0.22, v: 0.45 }, { n: true, d: 0.18, v: 0.3, lp: 500 }],
   fang: [{ n: true, d: 0.18, v: 0.35, bp: 3000, q: 1 }, { w: 'sawtooth', f: 300, f1: 120, d: 0.12, v: 0.12 }],
   flame: [{ n: true, d: 0.12, v: 0.12, lp: 900 }],
   flamestart: [{ n: true, d: 0.35, v: 0.35, lp: 400, lp1: 1600 }, { w: 'sawtooth', f: 60, d: 0.3, v: 0.1, lp: 300 }],

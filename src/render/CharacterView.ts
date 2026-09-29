@@ -275,6 +275,8 @@ export class CharacterView {
   lids: Eyelids | null = null;
   /** the map the ragdolls collide with (set by the match; the Hero Viewer has none - a flat floor) */
   static level: Level | null = null;
+  /** a ragdoll's hard landing (the match plays the thud) */
+  onBodyFall?: (a: Actor, at: THREE.Vector3, speed: number) => void;
   /** Overwatch-style death: the body goes limp and is thrown by the killing blow (desktop edition, humanoid rigs) */
   private ragdoll: Ragdoll | null = null;
   private ragdollDone = false;
@@ -588,6 +590,7 @@ export class CharacterView {
       }
       const v = new THREE.Vector3(a.vel.x, a.vel.y, a.vel.z);
       this.ragdoll = new Ragdoll(bones, a.height * a.scale, v, fling, CharacterView.level, a.pos.y);
+      this.ragdoll.onImpact = (at, speed) => this.onBodyFall?.(a, at, speed);
       this.hammerParent = this.hammer?.group.parent ?? null;
       this.hammer?.group.parent?.remove(this.hammer.group);
       if (this.backAxe) this.backAxe.visible = false;

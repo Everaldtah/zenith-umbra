@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 
 import { BONES, CHAIN_PREFIXES, RT_INDEX, type BoneName, type ChainPrefix, type RtBone } from './Rig';
+import { HELD } from './HeldProps';
 import { ClipLayer, poseDir, type LayerOut } from './ClipLayer';
 import type { ClipLibrary } from './ClipLibrary';
 import { FULL } from '../edition';
@@ -528,7 +529,8 @@ export class Animator {
         const dq = (n: 'thigh_L' | 'thigh_R') => (this.modelQ.get(this.bones[n]!) ?? this.rest[n]!.q).clone().multiply(this.rest[n]!.q.clone().invert());
         const qL = dq('thigh_L'), qR = dq('thigh_R');
         const zL = this.rest.thigh_L.dir.clone().applyQuaternion(qL).z, zR = this.rest.thigh_R.dir.clone().applyQuaternion(qR).z;
-        const [q, w] = c.pf === 'skirt_L' ? [qL, 0.55] : c.pf === 'skirt_R' ? [qR, 0.55] : c.pf === 'skirt_F' ? [zL > zR ? qL : qR, 0.45] : [zL < zR ? qL : qR, 0.45];
+        // (a full-strength follow made coat tails and loincloths kick out as stiff flat sheets on every stride)
+        const [q, w] = c.pf === 'skirt_L' ? [qL, 0.35] : c.pf === 'skirt_R' ? [qR, 0.35] : c.pf === 'skirt_F' ? [zL > zR ? qL : qR, 0.25] : [zL < zR ? qL : qR, 0.25];
         base.slerp(q, w);
       }
       const anchor = toW(this.modelPos(c.segs[0]));
@@ -1111,6 +1113,7 @@ export class Animator {
     }
     // ---------------- arms
     const armSwing = Math.sin(this.phase * 2 * Math.PI) * (heavy ? 0.25 : 0.4) * this.moveBlend * Math.min(1, speed / 5 + 0.3);
+    const carry = s.hero ? HELD[s.hero] : undefined;             // a held blade / bow (HeldProps)
     const aimDir = new THREE.Vector3(0, Math.sin(s.pitch), Math.cos(s.pitch)).normalize();
     // a tilted body (a swoop) still aims where the camera looks: undo the whole-body tilt on the aim line
     if (Math.abs(this.tilt.pitch) + Math.abs(this.tilt.roll) > 1e-3) aimDir.applyQuaternion(rot(X, this.tilt.pitch).multiply(rot(Z, this.tilt.roll)).invert());
@@ -1176,6 +1179,19 @@ export class Animator {
         over = { hand, w: 1, pole: new THREE.Vector3(side * 0.9, -0.6, -0.5) };
       } else if (s.angel) {
         over = this.angelArm(i, side, shoulder, l1 + l2, s, idleW, run);
+      } else if (carry && this.moveBlend > 0.05) {
+        // a blade or a bow carried on the move: the sword hand low and back (the blade trailing, a samurai's run),
+        // the bow hand low at the side, bow upright - instead of pumping the weapon through the arm swing. Any attack
+        // or cast takes the arm straight back.
+        const it = i === 0 ? carry.L : carry.R;
+        if (it) {
+          const Lr = l1 + l2, busy = Math.min(1, Math.max(this.atk, this.cast, s.charging ? 1 : 0) * 1.6);
+          const local = it.kind === 'blade' ? new THREE.Vector3(side * 0.3, -0.76, -0.3) : new THREE.Vector3(side * 0.36, -0.8, 0.06);
+          const hand = shoulder.clone().add(local.multiplyScalar(Lr).applyQuaternion(Dc));
+          hand.z += armSwing * side * 0.05 * Lr;
+          const w = this.moveBlend * (1 - busy);
+          if (w > 0.01) over = { hand, w, pole: new THREE.Vector3(side * 0.6, -0.4, -0.8) };
+        }
       }
       const lead = i === 1 ? 1 : 0.35;
       const act = (1 - armAct) * Math.max(this.atk * lead * (s.attackKind === 'secondary' && i === 0 ? 2.5 : 1), this.cast * 0.9, s.beam ? 0.9 * lead : 0, s.charging ? 1 * (i === 0 ? 1 : 0.8) : 0, s.barrier && i === 0 ? 1 : 0);
