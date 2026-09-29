@@ -4,7 +4,7 @@ import { LITE_MAP, LITE_MAPS } from './maps_lite';
 // Map layouts. Coordinates in metres: X is the long axis (Zenith spawn at -X, Umbra at +X), Z across, Y up.
 // Each map lists half of its geometry; `mirror` adds the 180-degree rotated copy so both teams get the same map.
 
-export type Mat = 'wall' | 'trim' | 'ground' | 'glass' | 'accent' | 'roof' | 'window' | 'wood';
+export type Mat = 'wall' | 'trim' | 'ground' | 'glass' | 'accent' | 'roof' | 'window' | 'wood' | 'rock' | 'paint';
 export interface Box { x: number; z: number; w: number; d: number; h: number; y?: number; mat?: Mat; ramp?: 'x+' | 'x-' | 'z+' | 'z-'; }
 export interface Prop { id: string; x: number; z: number; y?: number; rot?: number; s?: number; solid?: number; }
 export interface Pad { x: number; z: number; y?: number; vx: number; vy: number; vz: number; }
@@ -27,7 +27,7 @@ export interface MapDef {
   ambient: [string, string, number];  // sky colour, ground colour, intensity
   fog: [string, number, number];
   tint: string;                // accent light colour
-  particles: 'petals' | 'rain' | 'sparks' | 'embers' | 'motes' | 'none';
+  particles: 'petals' | 'rain' | 'sparks' | 'embers' | 'motes' | 'dust' | 'none';
   killY: number;
   decor?: Box[];               // render-only detail: trim, frames, awnings, lit window panes (no collision)
   packs?: Pack[];              // health packs
@@ -38,6 +38,7 @@ export interface MapDef {
   retired?: boolean;           // kept for the engine cut / lite parity, off the desktop playlist (not Overwatch-shaped)
   water?: number;              // a water surface at this height (harbours): render only, killY sits below it
   bloom?: [number, number];    // bloom [threshold, strength] override (pale stone maps glare at the night default)
+  payload?: string;            // push: the escorted model (a prop id; default the Mikoshi float)
 }
 
 function mirror(list: Box[]): Box[] {
@@ -290,6 +291,105 @@ const FOUNDRY = (() => {
   ]);
 })();
 
+// ================================================================ the climbers' desert (desktop edition, Push)
+// Two maps in the mould of a desert-highway escort map: a payload route down an old road through a small town, flanked
+// by buildings you can run through and by red rock you can climb. The high ground comes in tiers - a ledge reached by
+// ramps, then a sheer face above it that only climbers (Hibiki's wall ride, the Koryu brothers' wall run) and flyers take
+// - so wall climbers get routes no one else has. Climbable faces are vertical boxes 4-12m tall, well inside the arena
+// edge; every rooftop is flat or ramped, with parapets low enough to vault.
+
+// ---------------------------------------------------------------- Sunset Mile (Mikoshi Rush: the float rides a road hauler)
+// A highway town under the red mesas. The Mikoshi's hauler rolls down the old road past the gas station (a canopy perch over the
+// pumps), the chrome diner (walkable roof, the big star sign), the two-storey motel (an outside walkway on the road side)
+// and under the sign gantry at the town's centre. North: a butte with a 5m ledge up a ramp and a 12m climb-only summit
+// with the water tower. South: an 8m rock shelf over the gas station, reached by a ramp from the west.
+const MILE = (() => {
+  const motel = building({ x: -48, z: 18, w: 16, d: 8, storeys: 2, storeyH: 4,
+    doors: [{ side: 'z-', at: -4 }, { side: 'z-', at: 4 }, { side: 'x+', at: 0 }, { side: 'z-', at: -4, level: 1 }, { side: 'z-', at: 4, level: 1 }],
+    windows: [{ side: 'z-', at: 0, level: 1 }, { side: 'x-', at: 0, level: 1 }, { side: 'x+', at: 2, level: 1 }], roof: 'flat', stair: 'x-' });
+  const diner = building({ x: -16, z: 16, w: 14, d: 9, storeys: 1, storeyH: 4.6,
+    doors: [{ side: 'z-', at: -3.5 }, { side: 'x+', at: 0 }, { side: 'x-', at: 1.5 }], windows: [{ side: 'z-', at: 2.5, w: 3.2 }, { side: 'x+', at: 3 }],
+    roof: 'flat', stair: 'z+', awnings: ['z-'] });
+  const shop = building({ x: -40, z: -17, w: 10, d: 8, storeys: 1, storeyH: 4.4,
+    doors: [{ side: 'z+', at: -1.5, w: 3 }, { side: 'x+', at: 1 }], windows: [{ side: 'z+', at: 3 }, { side: 'x-', at: 0 }], roof: 'flat', stair: 'x-' });
+  // the highway: asphalt with a dashed centre line (render only)
+  const road: Box[] = [{ x: -31, z: 1.5, w: 58, d: 12, h: 0.02, y: 0.012, mat: 'roof' }];
+  for (let x = -57; x <= -5; x += 6) road.push({ x, z: 1.5, w: 3, d: 0.22, h: 0.03, y: 0.02, mat: 'paint' });
+  return half([motel, diner, shop, spawnRoom(-64, 0, 1, 10, 16)], [
+    // the motel's outside walkway (level with its upper floor) and the stair up to it from the road
+    { x: -48, z: 12.9, w: 16, d: 2.2, h: 0.35, y: 3.65, mat: 'wood' }, { x: -36.5, z: 12.9, w: 7, d: 2.2, h: 4, mat: 'wood', ramp: 'x-' },
+    // the gas-station canopy: a flat slab on four posts over the pumps (a perch; climbers go up the posts)
+    { x: -30, z: -8, w: 12, d: 7, h: 0.5, y: 5.2, mat: 'roof' },
+    { x: -35.4, z: -11, w: 0.6, d: 0.6, h: 5.2, mat: 'trim' }, { x: -24.6, z: -11, w: 0.6, d: 0.6, h: 5.2, mat: 'trim' },
+    { x: -35.4, z: -5, w: 0.6, d: 0.6, h: 5.2, mat: 'trim' }, { x: -24.6, z: -5, w: 0.6, d: 0.6, h: 5.2, mat: 'trim' },
+    // north butte: a 5m ledge up a ramp from the motel lot, a sheer 12m summit behind it (climb-only); rock runs back to
+    // the arena wall (no trench to fall into behind it)
+    { x: -27, z: 29.25, w: 16, d: 9.5, h: 12, mat: 'rock' },
+    { x: -26, z: 22.5, w: 12, d: 4, h: 5, mat: 'rock' }, { x: -36, z: 22.5, w: 8, d: 4, h: 5, mat: 'rock', ramp: 'x+' },
+    // south shelf: 8m of rock over the gas station, a long ramp up from the west; its face is a climb
+    { x: -18, z: -28.75, w: 22, d: 10.5, h: 8, mat: 'rock' }, { x: -35, z: -30.25, w: 12, d: 7.5, h: 8, mat: 'rock', ramp: 'x+' },
+    // the town-sign towers either side of the road at the centre: 6m climb-only perches over the payload (nothing spans the
+    // road - the hauler rides the highest surface under it)
+    { x: 0, z: 12, w: 3, d: 3, h: 6, mat: 'trim' },
+    // cover: jersey barriers, boulders and crates breaking the long sightlines down the road
+    { x: -50, z: -6, w: 4, d: 1, h: 1.1, mat: 'trim' }, { x: -22, z: -1, w: 1, d: 4, h: 1.2, mat: 'trim' }, { x: -8, z: -9, w: 3, d: 1, h: 1.1, mat: 'trim' },
+    { x: -12, z: 8, w: 3, d: 2.2, h: 1.6, mat: 'rock' }, { x: -28, z: 10, w: 2.5, d: 2.5, h: 1.4, mat: 'rock' }, { x: -44, z: 6, w: 2, d: 2, h: 1.3, mat: 'wood' },
+  ], [
+    { x: 0, z: 0, w: 4, d: 12, h: 0.02, y: 0.012, mat: 'roof' }, ...road,
+    // walkway posts
+    { x: -55.6, z: 12, w: 0.25, d: 0.25, h: 3.65, mat: 'wood' }, { x: -48, z: 12, w: 0.25, d: 0.25, h: 3.65, mat: 'wood' }, { x: -40.4, z: 12, w: 0.25, d: 0.25, h: 3.65, mat: 'wood' },
+    // walkway rail
+    { x: -48, z: 11.9, w: 16, d: 0.12, h: 1.0, y: 4.0, mat: 'trim' },
+  ]);
+})();
+
+// ---------------------------------------------------------------- Iron Gulch (Mikoshi Rush: the float rides a road hauler)
+// A frontier rail yard at the bottom of a canyon. The hauler follows the main line past the timber depot (its platform
+// canopy is walkable from the upper floor) and through the yard, where boxcars on the sidings make a maze of cover you can
+// run across the top of. North: two 8m rock masses joined by a timber trestle over the old mine (ramps up the west one);
+// south: a 6m cliff ledge up a ramp and a 12m climb-only crag above it.
+const GULCH = (() => {
+  const depot = building({ x: -32, z: -17, w: 18, d: 8, storeys: 2, storeyH: 4.4, roof: 'gable-x', mat: 'wood',
+    doors: [{ side: 'z+', at: -5 }, { side: 'z+', at: 4 }, { side: 'x-', at: 0 }, { side: 'x+', at: 0 }, { side: 'z+', at: 0, level: 1 }],
+    windows: [{ side: 'z+', at: -4, level: 1, w: 2.4 }, { side: 'z+', at: 4.5, level: 1 }, { side: 'x+', at: 0, level: 1 }], stair: 'x-' });
+  // track: two rails and sleepers along a straight run (render only)
+  const track = (x0: number, x1: number, z: number): Box[] => {
+    const out: Box[] = [{ x: (x0 + x1) / 2, z: z - 0.72, w: x1 - x0, d: 0.12, h: 0.16, y: 0.01, mat: 'trim' }, { x: (x0 + x1) / 2, z: z + 0.72, w: x1 - x0, d: 0.12, h: 0.16, y: 0.01, mat: 'trim' }];
+    for (let x = x0 + 0.6; x < x1; x += 1.3) out.push({ x, z, w: 0.3, d: 2.4, h: 0.08, y: 0.004, mat: 'wood' });
+    return out;
+  };
+  return half([depot, spawnRoom(-64, 0, 1, 10, 16)], [
+    // the depot's platform canopy, level with its upper floor (a door opens onto it)
+    { x: -32, z: -11, w: 18, d: 4, h: 0.4, y: 4.0, mat: 'roof' },
+    { x: -40.5, z: -9.4, w: 0.5, d: 0.5, h: 4.0, mat: 'wood' }, { x: -35, z: -9.4, w: 0.5, d: 0.5, h: 4.0, mat: 'wood' }, { x: -29.5, z: -9.4, w: 0.5, d: 0.5, h: 4.0, mat: 'wood' },
+    // boxcars on the two sidings (4.2m; their roofs are a running route), a freight ramp onto the inner one
+    { x: -48, z: 7, w: 12, d: 3.2, h: 4.2, mat: 'wood' }, { x: -30, z: 7, w: 10, d: 3.2, h: 4.2, mat: 'wood' },
+    { x: -40, z: 13, w: 12, d: 3.2, h: 4.2, mat: 'wood' }, { x: -20, z: 13, w: 12, d: 3.2, h: 4.2, mat: 'wood' },
+    { x: -10, z: 13, w: 8, d: 3.2, h: 4.2, mat: 'trim', ramp: 'x-' },
+    // north rock: a 5m ledge up a ramp, a ramp on to the 8m top of the west mass, the trestle across to the east mass
+    { x: -44, z: 27.5, w: 14, d: 9, h: 8, mat: 'rock' }, { x: -20, z: 27.5, w: 14, d: 9, h: 8, mat: 'rock' },
+    { x: -44, z: 20, w: 14, d: 6, h: 5, mat: 'rock' }, { x: -55, z: 20, w: 8, d: 6, h: 5, mat: 'rock', ramp: 'x+' },
+    { x: -48, z: 21.5, w: 6, d: 3, y: 5, h: 3, mat: 'rock', ramp: 'x+' },
+    { x: -32, z: 26.5, w: 10, d: 3, h: 0.4, y: 7.6, mat: 'wood' },
+    { x: -34.5, z: 25.3, w: 0.5, d: 0.5, h: 7.6, mat: 'wood' }, { x: -29.5, z: 25.3, w: 0.5, d: 0.5, h: 7.6, mat: 'wood' },
+    { x: -34.5, z: 27.7, w: 0.5, d: 0.5, h: 7.6, mat: 'wood' }, { x: -29.5, z: 27.7, w: 0.5, d: 0.5, h: 7.6, mat: 'wood' },
+    // south cliffs: a 6m ledge up a ramp past the depot, a 12m crag behind it (climb-only)
+    { x: -14, z: -26.75, w: 18, d: 10.5, h: 6, mat: 'rock' }, { x: -27.5, z: -27.75, w: 9, d: 8.5, h: 6, mat: 'rock', ramp: 'x+' },
+    { x: -11, z: -29.75, w: 10, d: 4.5, h: 12, mat: 'rock' },
+    // cover: crates, ties and a switch cabinet along the line
+    { x: -16, z: -2, w: 3, d: 1.5, h: 1.4, mat: 'wood' }, { x: -44, z: -9, w: 2, d: 2, h: 1.6, mat: 'wood' },
+    { x: -8, z: 5, w: 1.5, d: 3, h: 1.3, mat: 'trim' }, { x: -52, z: 4, w: 3, d: 1, h: 1.2, mat: 'trim' },
+  ], [
+    ...track(-60, -36, -3), ...track(-24, -12, -8), ...track(-4, 0, 0),
+    ...track(-60, -14, 7), ...track(-60, -14, 13),
+    // trestle bracing
+    { x: -32, z: 25.3, w: 5, d: 0.2, h: 0.3, y: 4, mat: 'wood' }, { x: -32, z: 27.7, w: 5, d: 0.2, h: 0.3, y: 4, mat: 'wood' },
+    // the old mine's timber portal in the east mass
+    { x: -26.9, z: 26.5, w: 0.3, d: 4.4, h: 0.5, y: 3.6, mat: 'wood' },
+    { x: -26.9, z: 24.3, w: 0.3, d: 0.4, h: 3.6, mat: 'wood' }, { x: -26.9, z: 28.7, w: 0.3, d: 0.4, h: 3.6, mat: 'wood' },
+  ]);
+})();
+
 export const MAPS: MapDef[] = [
   {
     id: 'amatsu', retired: true, name: 'Amatsu Sky Shrine', heroes: ['kaien', 'kagemaru', 'mirei'],
@@ -516,6 +616,51 @@ export const MAPS: MapDef[] = [
     spawns: { zenith: [-68, 0], umbra: [68, 0] }, point: [0, 0, 0],
     sun: { color: '#ffd6a0', intensity: 1.8, dir: [-0.2, 0.9, 0.4] }, ambient: ['#b89a80', '#3a2a22', 1.3],
     fog: ['#3a2a24', 45, 170], tint: '#ff8a2a', particles: 'sparks', killY: -20,
+  },
+  {
+    id: 'mile', name: 'Sunset Mile', heroes: ['hibiki', 'hayate'], full: true, objective: 'push', payload: 'prop_mile_payload',
+    story: 'A highway town under the red mesas, where the old road runs past the pumps, the diner and the motel. The Mikoshi rides a road hauler through town - push it home, and take the rock the long way up.',
+    size: [72, 34],
+    floors: [{ x: 0, z: 0, w: 144, d: 68, h: 0.01, mat: 'ground' }],
+    boxes: [...border(72, 34, 14).map(b => ({ ...b, mat: 'rock' as const })), ...MILE.boxes], decor: MILE.decor,
+    props: mirrorProps([
+      { id: 'prop_mile_gaspump', x: -33, z: -8, s: 2.2, solid: 0.5 }, { id: 'prop_mile_gaspump', x: -27, z: -8, s: 2.2, solid: 0.5 },
+      { id: 'prop_mile_sign', x: -11, z: 18, y: 4.6, s: 8 }, { id: 'prop_mile_sign', x: -38, z: 9, s: 8, solid: 0.4 },
+      { id: 'prop_mile_car', x: -24, z: -14, rot: 0.5, s: 2, solid: 1.2 }, { id: 'prop_mile_car', x: -54, z: 10, rot: -0.3, s: 2, solid: 1.2 },
+      { id: 'prop_mile_cactus', x: -46, z: -9, s: 5, solid: 0.5 }, { id: 'prop_mile_cactus', x: -6, z: 14, s: 4.5, solid: 0.5 }, { id: 'prop_mile_cactus', x: -14, z: -18, s: 5, solid: 0.5 },
+      { id: 'prop_mile_billboard', x: -22, z: 29.5, y: 12, s: 6.5 }, { id: 'prop_mile_billboard', x: -12, z: -29, y: 8, rot: Math.PI, s: 6 },
+      { id: 'prop_gulch_watertower', x: -31, z: 28.5, y: 12, s: 9 },
+      { id: 'prop_mile_sign', x: 0, z: 12, y: 6, rot: Math.PI / 2, s: 7 },
+      { id: 'prop_mile_rock', x: -52, z: 25, s: 7, solid: 2 }, { id: 'prop_mile_rock', x: -4, z: -25, s: 6, solid: 1.8 },
+    ]),
+    pads: [],
+    packs: mirrorPacks([{ x: -40, z: -17, y: 0, big: true }, { x: -52, z: 12.9, y: 4 }, { x: -19, z: 14, y: 0 }, { x: -22, z: -27, y: 8 }, { x: -54, z: -8 }]),
+    path: [[-58, 0], [-46, 0], [-34, 5], [-18, 5], [-8, -2], [0, 0], [8, 2], [18, -5], [34, -5], [46, 0], [58, 0]],
+    spawns: { zenith: [-64, 0], umbra: [64, 0] }, point: [0, 0, 0],
+    sun: { color: '#ffd9a0', intensity: 2.2, dir: [-0.5, 0.7, 0.35] }, ambient: ['#9ec8ff', '#b0703e', 0.9],
+    fog: ['#e8c9a0', 90, 260], tint: '#ffb84a', particles: 'dust', killY: -20, bloom: [0.97, 0.3],
+  },
+  {
+    id: 'gulch', name: 'Iron Gulch', heroes: ['hayate', 'seiran', 'gantetsu'], full: true, objective: 'push', payload: 'prop_mile_payload',
+    story: 'A frontier rail yard at the bottom of a canyon, all boxcars, timber and red rock. Haul the Mikoshi down the main line - fight over the boxcars, across the trestle and up the crags.',
+    size: [72, 32],
+    floors: [{ x: 0, z: 0, w: 144, d: 64, h: 0.01, mat: 'ground' }],
+    boxes: [...border(72, 32, 14).map(b => ({ ...b, mat: 'rock' as const })), ...GULCH.boxes], decor: GULCH.decor,
+    props: mirrorProps([
+      { id: 'prop_gulch_loco', x: -50, z: -12, s: 5, solid: 2.2 },
+      { id: 'prop_gulch_watertower', x: -6, z: 9, s: 11, solid: 1.6 },
+      { id: 'prop_gulch_windpump', x: -11, z: -29, y: 12, s: 9 }, { id: 'prop_gulch_windpump', x: -44, z: 27, y: 8, s: 9, solid: 0.5 },
+      { id: 'prop_gulch_minecart', x: -32, z: 28, s: 1.6, solid: 0.9 }, { id: 'prop_gulch_minecart', x: -30, z: 24.5, rot: 0.6, s: 1.6, solid: 0.9 },
+      { id: 'prop_gulch_lamp', x: -38, z: -7, s: 4.5, solid: 0.3 }, { id: 'prop_gulch_lamp', x: -14, z: -12, s: 4.5, solid: 0.3 }, { id: 'prop_gulch_lamp', x: -50, z: 2, s: 4.5, solid: 0.3 },
+      { id: 'prop_gulch_cactus', x: -58, z: -18, s: 1.6, solid: 0.6 }, { id: 'prop_gulch_cactus', x: -2, z: 18, s: 1.6, solid: 0.6 }, { id: 'prop_gulch_cactus', x: -22, z: 20, s: 1.6, solid: 0.6 },
+      { id: 'prop_gulch_spire', x: -60, z: 25, s: 12, solid: 1.5 }, { id: 'prop_gulch_spire', x: -4, z: -18, s: 10, solid: 1.4 },
+    ]),
+    pads: [],
+    packs: mirrorPacks([{ x: -36, z: -17, y: 0, big: true }, { x: -26, z: -11, y: 4.4 }, { x: -44, z: 27, y: 8 }, { x: -10, z: -24.5, y: 6 }, { x: -36, z: 10 }, { x: -32, z: 24 }]),
+    path: [[-58, -3], [-36, -3], [-24, -8], [-12, -8], [-4, 0], [0, 0], [4, 0], [12, 8], [24, 8], [36, 3], [58, 3]],
+    spawns: { zenith: [-64, 0], umbra: [64, 0] }, point: [0, 0, 0],
+    sun: { color: '#ffc78a', intensity: 1.9, dir: [-0.7, 0.45, 0.3] }, ambient: ['#a9c4ff', '#8a5a3a', 0.8],
+    fog: ['#e6b890', 80, 240], tint: '#ff8a3c', particles: 'dust', killY: -20, bloom: [0.97, 0.3],
   },
   LITE_MAP.training,
 ];

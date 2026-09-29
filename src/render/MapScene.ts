@@ -7,7 +7,7 @@ import { propModel, texture, hasTexture } from './Assets';
 
 /** the texture set a map paints with: its own when the manifest has it, else the closest sibling's (a map whose textures
  * haven't been generated yet would otherwise load black walls and sky) */
-const ENV_FALLBACK: Record<string, string> = { lantern: 'hanabi', starfall: 'cloudstep', foundry: 'kurogane' };
+const ENV_FALLBACK: Record<string, string> = { lantern: 'hanabi', starfall: 'cloudstep', foundry: 'kurogane', mile: 'foundry', gulch: 'foundry' };
 function envSet(id: string) { return hasTexture(`env/tex_${id}_wall.webp`) ? id : ENV_FALLBACK[id] ?? 'amatsu'; }
 
 export interface Quality { shadows: number; pixelRatio: number; particles: number; bloom: boolean; tex: 'hi' | 'lo'; }
@@ -115,7 +115,7 @@ export class MapScene {
     this.group.add(tint);
     // ---------------- materials
     const env = envSet(m.id);
-    const tex = (k: 'ground' | 'wall' | 'roof') => texture(`env/tex_${env}_${k}.webp`);
+    const tex = (k: 'ground' | 'wall' | 'roof' | 'rock') => texture(`env/tex_${env}_${k}.webp`);
     const roofTex = hasTexture(`env/tex_${env}_roof.webp`) ? tex('roof') : null;
     const mats: Record<Mat, THREE.Material> = {
       // tiled roofs in the map's own tile texture, or a painted tint of the walls
@@ -127,6 +127,10 @@ export class MapScene {
       wood: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color('#a8744a'), roughness: 0.8 }),
       ground: new THREE.MeshStandardMaterial({ map: tex('ground'), color: new THREE.Color(m.id === 'hangar' ? '#6e6a62' : '#b8b8b8'), roughness: 0.85, metalness: 0.05 }),
       wall: new THREE.MeshStandardMaterial({ map: tex('wall'), roughness: 0.75, metalness: 0.1 }),
+      // road paint: flat and bright (lane markings)
+      paint: new THREE.MeshStandardMaterial({ color: new THREE.Color('#f2cf5b'), roughness: 0.7, emissive: new THREE.Color('#f2cf5b'), emissiveIntensity: 0.08 }),
+      // cliffs and boulders: the map's own rock texture where it has one (else its walls, a shade darker)
+      rock: new THREE.MeshStandardMaterial({ map: hasTexture(`env/tex_${env}_rock.webp`) ? tex('rock') : tex('wall'), color: new THREE.Color(hasTexture(`env/tex_${env}_rock.webp`) ? '#ffffff' : '#c9b8a8'), roughness: 0.9, metalness: 0.02 }),
       trim: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color('#d8d2c8'), roughness: 0.6, metalness: 0.25 }),
       accent: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color(m.tint).lerp(new THREE.Color('#ffffff'), 0.4), emissive: new THREE.Color(m.tint), emissiveIntensity: 0.25, roughness: 0.4 }),
       glass: new THREE.MeshStandardMaterial({ color: new THREE.Color(m.tint), transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.2, emissive: new THREE.Color(m.tint), emissiveIntensity: 0.3 }),
@@ -289,7 +293,7 @@ export class MapScene {
       f.traverse(o => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
       const light = new THREE.PointLight('#ffd27a', 14, 12, 1.6); light.position.y = 2.2; f.add(light);
       this.float = f; this.group.add(f);
-      propModel('prop_kagura_mikoshi').then(mm => {
+      propModel(m.payload ?? 'prop_kagura_mikoshi').then(mm => {
         if (!mm || !this.float) return;
         const box = new THREE.Box3().setFromObject(mm), h = box.max.y - box.min.y || 1, s = 3.4 / h;
         mm.scale.setScalar(s); mm.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
@@ -341,11 +345,11 @@ export class MapScene {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
     const cfg: Record<string, [string, number, number, number]> = {   // colour, size, fall speed, sway
-      petals: ['#ffb7d5', 0.22, 1.2, 1.5], rain: ['#9fb6ff', 0.06, 22, 0.1], sparks: ['#ffb040', 0.08, -1.5, 0.6], embers: ['#ff4d2a', 0.1, -1.2, 0.8], motes: ['#c9a2ff', 0.12, -0.4, 1.2],
+      petals: ['#ffb7d5', 0.22, 1.2, 1.5], rain: ['#9fb6ff', 0.06, 22, 0.1], sparks: ['#ffb040', 0.08, -1.5, 0.6], embers: ['#ff4d2a', 0.1, -1.2, 0.8], motes: ['#c9a2ff', 0.12, -0.4, 1.2], dust: ['#e8c9a0', 0.1, -0.15, 2.2],
     };
     const [col, size, fall, sway] = cfg[m.particles];
     const mat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, blending: m.particles === 'petals' ? THREE.NormalBlending : THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, blending: m.particles === 'petals' || m.particles === 'dust' ? THREE.NormalBlending : THREE.AdditiveBlending,
       uniforms: { t: this.pUniforms.t, c: { value: new THREE.Color(col) }, size: { value: size }, fall: { value: fall }, sway: { value: sway }, rain: { value: m.particles === 'rain' ? 1 : 0 } },
       vertexShader: `uniform float t; uniform float size; uniform float fall; uniform float sway; uniform float rain; attribute float seed; varying float vA;
         void main(){ vec3 p=position; p.y=mod(p.y - t*fall*(0.6+seed*0.8), 30.0) - 2.0 ; p.x+=sin(t*0.7+seed*20.0)*sway; p.z+=cos(t*0.5+seed*13.0)*sway;

@@ -106,12 +106,13 @@ export function building(s: BuildingSpec): { boxes: Box[]; decor: Box[] } {
         const zc = alt ? iz0 + stairW / 2 : iz1 - stairW / 2;
         const x1 = st === 'x+' ? ix1 - 0.2 : ix0 + 0.2, x0 = st === 'x+' ? x1 - r : x1 + r;
         bx = { x: (x0 + x1) / 2, z: zc, w: r, d: stairW, h: H, y: top - H, mat: trim, ramp: st };
-        hole = [Math.min(x0, x1) + 1.2, zc - stairW / 2, Math.max(x0, x1), zc + stairW / 2];
+        // the hole opens over the ramp from 1.2m past its foot to its top (the foot is x0, the top x1)
+        hole = st === 'x+' ? [x0 + 1.2, zc - stairW / 2, x1, zc + stairW / 2] : [x1, zc - stairW / 2, x0 - 1.2, zc + stairW / 2];
       } else {
         const xc = alt ? ix0 + stairW / 2 : ix1 - stairW / 2;
         const z1 = st === 'z+' ? iz1 - 0.2 : iz0 + 0.2, z0 = st === 'z+' ? z1 - r : z1 + r;
         bx = { x: xc, z: (z0 + z1) / 2, w: stairW, d: r, h: H, y: top - H, mat: trim, ramp: st };
-        hole = [xc - stairW / 2, Math.min(z0, z1) + 1.2, xc + stairW / 2, Math.max(z0, z1)];
+        hole = st === 'z+' ? [xc - stairW / 2, z0 + 1.2, xc + stairW / 2, z1] : [xc - stairW / 2, z1, xc + stairW / 2, z0 - 1.2];
       }
       boxes.push(bx);
     }

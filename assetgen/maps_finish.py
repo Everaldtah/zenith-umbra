@@ -2,7 +2,7 @@
 """Map art from modal_maps.py (work/maps/*.png) -> game assets:
   <map>_key.png          -> public/img/map_<map>.webp (1024 wide) and the full-size desktop copy (out/hq/img)
   <map>_sky.png          -> public/env/sky_<map>.webp (1280x533 strip)
-  <map>_{ground,wall,roof}.png -> seamless tiles: public/env/tex_<map>_<k>.webp (512) + out/hq/env (1024)
+  <map>_{ground,wall,roof,rock}.png -> seamless tiles: public/env/tex_<map>_<k>.webp (512) + out/hq/env (1024)
 then lists the env textures in public/models/manifest.json (the renderer only asks for textures it lists).
 
     python assetgen/maps_finish.py [map ...]
@@ -64,7 +64,7 @@ def main():
             im = Image.open(s).convert('RGB').resize((1280, 533), Image.LANCZOS)
             im.save(PUB / 'env' / f'sky_{m}.webp', quality=86); im.save(HQ / 'env' / f'sky_{m}.webp', quality=92)
             print('sky', m)
-        for t in ['ground', 'wall', 'roof']:
+        for t in ['ground', 'wall', 'roof', 'rock']:
             p = SRC / f'{m}_{t}.png'
             if not p.exists(): continue
             src = Image.open(p).convert('RGB')

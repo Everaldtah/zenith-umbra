@@ -71,6 +71,29 @@ JOBS = [
      "red lacquer pillars and tassels, mounted on a sleek white hover-sled with glowing cyan thrusters.", 1024, 1024),
     ("prop_kagura_gate", PROP + "a huge vermilion shrine gate (torii) with black crossbeams and a golden plaque.", 1024, 1024),
     ("prop_kagura_lamp", PROP + "a tall stone lantern post combined with a futuristic street lamp and a small neon sign.", 1024, 1024),
+    # ---------------- Sunset Mile: a desert highway town under red mesas (push; a Route-66-style climbers' map)
+    ("mile_key", ART + "Sunset Mile: a sun-baked desert highway town in a canyon of red sandstone mesas, an old two-lane "
+     "highway running down the middle past a retro gas station with a big canopy, a chrome roadside diner with a tall "
+     "neon star on a pole, a two-storey motel with an outdoor walkway, blank sun-faded billboards on the cliff tops (every "
+     "sign is blank - no letters or words anywhere), saguaro cactus, a wooden water "
+     "tower on a mesa ledge, warm late-afternoon sun, turquoise and cream accents, heat haze.", 1344, 768),
+    ("mile_sky", SKY + "a hot late-afternoon desert sky, deep blue fading to warm gold at the horizon, thin high clouds, "
+     "distant flat-topped red mesas and buttes on the horizon.", 1536, 640),
+    ("mile_ground", TEX + "packed desert sand and dry red dirt with tiny pebbles, faint wind ripples and a few cracks.", 1024, 1024),
+    ("mile_wall", TEX + "sun-bleached cream stucco wall with a turquoise painted band and faint cracks, retro roadside style.", 1024, 1024),
+    ("mile_rock", TEX + "layered red and orange sandstone rock face with horizontal strata bands, painted smooth.", 1024, 1024),
+    ("mile_roof", TEX + "sun-faded dark asphalt with fine gravel, subtle patches and cracks.", 1024, 1024),
+    # ---------------- Iron Gulch: a canyon rail yard (push; a Route-66-style climbers' map)
+    ("gulch_key", ART + "Iron Gulch: a frontier rail yard at the bottom of a deep ochre canyon, rows of rust-red boxcars on "
+     "parallel tracks, a two-storey timber train depot with a long platform canopy, an old locomotive, a wooden water tower "
+     "on a timber trestle, a mine entrance cut into the cliff with ore carts, a high wooden trestle bridge spanning the "
+     "canyon, stepped cliff ledges, windpumps, golden-hour light with long shadows.", 1344, 768),
+    ("gulch_sky", SKY + "a golden-hour canyon sky, warm orange and pink clouds, a pale blue zenith, jagged canyon rims and "
+     "rock spires silhouetted on the horizon.", 1536, 640),
+    ("gulch_ground", TEX + "dusty rail yard ground: packed ochre dirt mixed with grey gravel ballast and a few wooden splinters.", 1024, 1024),
+    ("gulch_wall", TEX + "weathered vertical timber planks, sun-faded red-brown paint worn back to grey wood, a few nail heads.", 1024, 1024),
+    ("gulch_rock", TEX + "ochre and burnt-orange canyon rock with broad horizontal strata bands and soft painted cracks, calm and even.", 1024, 1024),
+    ("gulch_roof", TEX + "rusty corrugated metal roofing sheets with orange rust streaks and faded red paint.", 1024, 1024),
     # ---------------- shared: health pack station (small + large) for every map
     ("prop_healthpack", PROP + "a compact medical supply station: a round white and teal pedestal with a glowing plus-shaped "
      "health emblem floating above it.", 1024, 1024),

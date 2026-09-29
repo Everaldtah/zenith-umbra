@@ -10,11 +10,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DIST = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'dist');
-const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura', 'lantern', 'starfall', 'foundry'];
+const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura', 'lantern', 'starfall', 'foundry', 'mile', 'gulch'];
 const FULL_HEROES = ['gantetsu', 'hibiki', 'tomoe', 'hayate', 'seiran'];
 // generated weapon props of desktop-only heroes
 const HERO_PROPS = ['prop_tomoe_', 'prop_hayate_', 'prop_seiran_', 'prop_gantetsu_'];
-const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_', lantern: 'prop_lantern_', starfall: 'prop_star_', foundry: 'prop_forge_' };
+const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_', lantern: 'prop_lantern_', starfall: 'prop_star_', foundry: 'prop_forge_', mile: 'prop_mile_', gulch: 'prop_gulch_' };
 
 let bytes = 0, files = 0;
 const rm = p => {
