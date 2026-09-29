@@ -11,9 +11,11 @@ await p.goto('http://localhost:5199/play.html', { waitUntil: 'domcontentloaded',
 await p.waitForFunction(() => !!window.__zu?.menu, { timeout: 60000 });
 await p.evaluate(() => window.__zu.menu.viewer());
 await p.waitForFunction(() => !!window.__zu?.viewer, { timeout: 30000 });
+// SPEED=<m/s>: override the hero's speed in the page (e.g. Hibiki deep in the Groove)
 // SKIN=<id>: equip it first (the viewer builds the hero in the equipped skin, like a match does)
 if (process.env.SKIN) await p.evaluate((h, sk) => localStorage.setItem('zu-skins-v1', JSON.stringify({ [h]: sk })), hero, process.env.SKIN);
 await p.evaluate(h => window.__zu.viewer.select(h), hero);
+if (process.env.SPEED) await p.evaluate(v => { window.__zu.viewer.actor.def.speed = v; }, Number(process.env.SPEED));
 await new Promise(r => setTimeout(r, 6000));                 // model + clip library stream in
 await p.evaluate((m, y) => { const v = window.__zu.viewer; v.auto = false; v.yaw = y * Math.PI / 180; document.querySelector(`.vanims button[data-a="${m}"]`)?.click(); }, mode, +yaw);
 fs.mkdirSync('tests/e2e/shots/look', { recursive: true });

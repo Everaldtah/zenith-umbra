@@ -701,7 +701,7 @@ export class CharacterView {
     this.inner.quaternion.setFromEuler(new THREE.Euler(an2.tilt.pitch, 0, an2.tilt.roll, 'XZY'));
     _jp.set(0, piv, 0).applyQuaternion(this.inner.quaternion);
     this.inner.position.set(-_jp.x, piv - _jp.y, -_jp.z);
-    this.smear();
+    this.smear(time);
     this.updateGuns(dt, time);
     const an = a.anim;
     if (this.hammer && a.def.id !== 'tomoe') {
@@ -728,10 +728,11 @@ export class CharacterView {
   }
 
   /** smear frames on fast moves: the trailing surfaces are dragged back along the velocity (mesh space) */
-  private smear() {
+  private smear(time: number) {
     const a = this.actor, u = this.look.zuSmear.value as THREE.Vector3;
     const sp = Math.hypot(a.vel.x, a.vel.y, a.vel.z);
-    if (!FULL || this.noSmear || sp < SMEAR_FROM || !a.alive) { u.set(0, 0, 0); return; }
+    // (a burst effect for dashes: sustained speed - Hibiki deep in the Groove - would streak the whole body)
+    if (!FULL || this.noSmear || sp < SMEAR_FROM || !a.alive || a.has('rhythm', time)) { u.set(0, 0, 0); return; }
     let mesh: THREE.Object3D | null = null;
     this.model.traverse(o => { if (!mesh && (o as THREE.SkinnedMesh).isSkinnedMesh) mesh = o; });
     if (!mesh) { u.set(0, 0, 0); return; }

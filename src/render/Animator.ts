@@ -273,6 +273,8 @@ export class Animator {
   gunUpright: [boolean, boolean] = [false, false];
   /** skating (Hibiki): how much of the skate stroke is blended in, and each stroke's lateral weight shift */
   private skW = 0;
+  /** skating fast (Hibiki's Groove): the speed-skater tuck, 0..1 */
+  private tuck = 0;
   /** props clamped under the feet (Hibiki's mag-skates) */
   feet: [THREE.Object3D, THREE.Object3D] | null = null;
   /** a weapon slung across the back (Tomoe's great axe between swings), riding the chest */
@@ -851,7 +853,11 @@ export class Animator {
     const duty = heavy ? 0.6 - 0.1 * run : 0.62 - 0.22 * run;
     const cycleLen = stride * 2;                    // one cycle = a left and a right step
     const travel = cycleLen * duty;                 // how far the body moves over a planted foot
-    this.phase += (speed * dt) / cycleLen * (moving ? 1 : 0);
+    // skating strokes don't speed up past a strong rhythm (Hibiki's Groove reaches 20x: at that speed he tucks and
+    // glides - long strokes, not a blur of legs)
+    this.phase += Math.min(speed / cycleLen, s.skate ? 2.4 : Infinity) * dt * (moving ? 1 : 0);
+    const tuckT = PERF && s.skate && s.grounded ? Math.max(0, Math.min(1, (speed - 9) / 14)) : 0;
+    this.tuck += (tuckT - this.tuck) * Math.min(1, dt * 4);
     const md = speed > 0.01 ? _v2.set(lvx / speed, 0, lvz / speed).clone() : new THREE.Vector3(0, 0, 1);
     const lift = this.legLen * (heavy ? 0.16 : 0.22) * Math.min(1, speed / 3 + 0.3);
     // skating (Hibiki, after Lucio / inline speed skating): long push-glide strokes, about one per leg per second.
@@ -883,8 +889,9 @@ export class Animator {
           const u = (sp - 0.42) / 0.2, e = u * u * (3 - 2 * u);
           out = 0.41 - 0.36 * e; back = -0.34 + 0.46 * e; up = Math.sin(u * Math.PI) * 0.09;
         } else { out = 0.05; back = 0.12 - 0.04 * (sp - 0.62) / 0.38; }   // glide: under the body, slightly ahead
-        tgt = restFoot.clone().add(new THREE.Vector3(side * out * this.legLen, 0, back * this.legLen).applyAxisAngle(Y, this.hipYaw));
-        tgt.y = this.footY + up * this.legLen;
+        const amp = 1 - 0.55 * this.tuck;     // tucked: shorter strokes, feet close under the hips
+        tgt = restFoot.clone().add(new THREE.Vector3(side * out * amp * this.legLen, 0, back * amp * this.legLen).applyAxisAngle(Y, this.hipYaw));
+        tgt.y = this.footY + up * amp * this.legLen;
         const pushing = sp < 0.42;
         if (pushing && !this.lastStance[i] && this.cLegs < 0.5) this.footfall(i, heavy, PS);
         this.lastStance[i] = pushing;
@@ -1005,7 +1012,7 @@ export class Animator {
     hipsOff.y = this.bob - this.landDip * this.legLen - (s.charging ? 0.04 * this.legLen : 0) - stance * this.legLen - lunge * 0.3;
     // skating: knees ~105 deg (hips low), weight rolls over the gliding leg every stroke; standing, he nods to the beat
     const skSway = Math.sin(2 * Math.PI * sph0 + Math.PI);
-    if (this.skW > 0.01) { hipsOff.y -= 0.12 * this.legLen * this.skW; hipsOff.x += skSway * 0.085 * this.legLen * this.skW; }
+    if (this.skW > 0.01) { hipsOff.y -= (0.12 + 0.1 * this.tuck) * this.legLen * this.skW; hipsOff.x += skSway * 0.085 * (1 - 0.6 * this.tuck) * this.legLen * this.skW; }
     if (PERF && s.skate && idleW > 0.01) hipsOff.y -= (0.5 - 0.5 * Math.cos(s.time * Math.PI * 3)) * 0.018 * this.legLen * idleW;
     hipsOff.z += lunge;
     // hammer: weight rolls onto the front foot at impact; jab: a small step into the punch
@@ -1077,7 +1084,7 @@ export class Animator {
     const upright = PERF ? -0.2 * this.moveBlend * run * (heavy ? 0.4 : 1) : 0;
     // the clip's own torso keeps these additives (aim, flinch, lag, carriage)
     const withAdd = (q: THREE.Quaternion | null, p: number, y: number, r: number) => q ? q.clone().premultiply(rot(Z, r)).premultiply(rot(Y, y)).premultiply(rot(X, p)) : null;
-    const skLean = this.skW * 0.24, skTwist = this.skW * skSway * 0.14;
+    const skLean = this.skW * (0.24 + 0.36 * this.tuck), skTwist = this.skW * skSway * 0.14 * (1 - 0.6 * this.tuck);
     const Ds = Dh.clone().multiply(rot(X, this.lean.y * 0.5 + aimP * 0.2 + fP * 0.6 + breath + this.cast * 0.1 + stance * 1.2 + (hs ? hs.imp * 0.16 + hs.lean : 0) + (charging ? 0.38 : 0) + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright + skLean))
       .multiply(rot(Y, -(this.hipYaw + hipSway + hTw * 0.22) * 0.45 + twist * 0.4 + (hTw + pTw) * 0.4 + lagYaw * 0.35 + skTwist)).multiply(rot(Z, fR - wsh * 0.04 - skSway * 0.06 * this.skW));
     blendD(Ds, withAdd(cq('spine'), aimP * 0.2 + fP * 0.6 + lagPitch * 0.3 + carriage * 0.4 + this.kick.x * 0.06 + upright, lagYaw * 0.35, fR - wsh * 0.04), wTorso);
@@ -1139,6 +1146,8 @@ export class Animator {
       const restD = R[ua].dir.clone().applyQuaternion(Dc);
       const relaxed = restD.clone().lerp(new THREE.Vector3(side * 0.25, -1, 0.05), s.angel ? 0.1 : flyer && s.flying ? 0.05 : 0.3).normalize();
       relaxed.applyAxisAngle(new THREE.Vector3(side, 0, 0).applyQuaternion(Dc).normalize(), -armSwing * side * (i === 0 ? 1 : 1) * (1 - this.skW));
+      // the speed tuck: arms swept back along the body
+      if (this.tuck > 0.01) relaxed.lerp(new THREE.Vector3(side * 0.22, -0.5, -0.84).applyQuaternion(Dc).normalize(), this.tuck * 0.85).normalize();
       if (this.skW > 0.01 && i === 0) {
         const sw = Math.sin(2 * Math.PI * sphOf(1) + 0.19);            // forward while the right leg pushes
         relaxed.applyAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(Dc).normalize(), -sw * 0.85 * this.skW);
