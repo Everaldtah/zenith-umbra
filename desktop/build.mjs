@@ -55,8 +55,15 @@ if (!process.argv.includes('--no-install')) {
   const dest = path.join(process.env.LOCALAPPDATA, 'Programs', 'ZenithUmbra');
   try { execSync('taskkill /IM ZenithUmbra.exe /F', { stdio: 'ignore' }); } catch { /* not running */ }
   // the killed app (and the antivirus scanning it) can hold files for a moment: retry the removal
-  fs.rmSync(dest, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
-  fs.cpSync(appDir, dest, { recursive: true });
+  try {
+    fs.rmSync(dest, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
+    fs.cpSync(appDir, dest, { recursive: true });
+  } catch (e) {
+    // the folder itself stays locked sometimes (an Explorer window, the antivirus): mirror the files into it instead
+    console.warn('install folder busy (' + e.code + '): mirroring into it');
+    try { execSync(`robocopy "${appDir}" "${dest}" /MIR /R:10 /W:2 /NFL /NDL /NJH /NJS /NP`, { stdio: 'inherit' }); }
+    catch (r) { if ((r.status ?? 16) >= 8) throw r; }                   // robocopy: exit codes below 8 are success
+  }
   const exe = path.join(dest, 'ZenithUmbra.exe');
   const ps1 = path.join(HERE, 'out', 'shortcuts.ps1');
   fs.writeFileSync(ps1, [
