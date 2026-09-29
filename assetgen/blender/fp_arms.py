@@ -50,12 +50,12 @@ EASE = {"lin": lambda u: u, "io": lambda u: u * u * (3 - 2 * u), "in": lambda u:
 STYLE = {
     "raijin": ("katana", (0.22, -0.17, 0.46), (0.08, -0.19, 0.44), 0.0),
     "yuzu": ("bow", (0.1, -0.16, 0.4), (-0.17, -0.15, 0.5), 0.0),
-    "kaien": ("caster", (0.18, -0.14, 0.5), (-0.18, -0.15, 0.48), 0.03),
-    "mirei": ("caster", (0.14, -0.14, 0.38), (-0.15, -0.15, 0.35), 0.02),
-    "nocturne": ("caster", (0.14, -0.1, 0.4), (-0.14, -0.11, 0.38), 0.02),
-    "hex": ("caster", (0.13, -0.14, 0.38), (-0.13, -0.14, 0.38), 0.025),
-    "kagemaru": ("kunai", (0.17, -0.15, 0.34), (-0.17, -0.18, 0.32), 0.0),
-    "enra": ("fists", (0.16, -0.15, 0.36), (-0.16, -0.15, 0.36), 0.0),
+    "kaien": ("caster", (0.2, -0.1, 0.56), (-0.2, -0.11, 0.54), 0.03),
+    "mirei": ("caster", (0.14, -0.1, 0.4), (-0.15, -0.11, 0.38), 0.02),
+    "nocturne": ("caster", (0.14, -0.07, 0.42), (-0.14, -0.08, 0.4), 0.02),
+    "hex": ("caster", (0.13, -0.1, 0.4), (-0.13, -0.1, 0.4), 0.025),
+    "kagemaru": ("kunai", (0.17, -0.11, 0.37), (-0.17, -0.13, 0.35), 0.0),
+    "enra": ("fists", (0.2, -0.14, 0.44), (-0.2, -0.14, 0.44), 0.0),
     "haruto": ("pistol", (0.13, -0.12, 0.4), (0.06, -0.15, 0.36), 0.05),
     "tenkai": ("hammer", (0.24, -0.26, 0.38), (0.14, -0.3, 0.46), 0.0),
     "gorgoth": ("shotgun", (0.2, -0.19, 0.34), (0.05, -0.19, 0.62), 0.09),
@@ -68,7 +68,7 @@ STYLE = {
 # eye pushed forward past a high collar / bulky coat (metres), as FP_STYLE.push in FirstPerson.ts
 PUSH = {"enra": 0.05, "gantetsu": 0.08, "tomoe": 0.04}
 # near clip (m): cut geometry closer than this to the camera - a high collar wrapped around the eye (FP_STYLE.clip)
-CLIP = {"raijin": 0.14, "seiran": 0.14, "yuzu": 0.12}
+CLIP = {"raijin": 0.14, "seiran": 0.14, "yuzu": 0.12, "enra": 0.22}
 GRIP, REST_R, REST_L, RECOIL = STYLE.get(a.hero, ("rifle", (0.16, -0.15, 0.34), (0.03, -0.14, 0.5), 0.04))
 
 

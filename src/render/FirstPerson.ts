@@ -21,20 +21,23 @@ type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists'
 // drape: drop arm-weighted triangles further than this (x forearm length) from their bone - sleeve cloth and sashes that hang
 // off the arms and would fill the view
 // gunScale: the held guns' size in the viewmodel (the world model's props are concept-sized; up close they'd fill the view)
-interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; gunScale?: number; }
+// squeeze: pull arm geometry further than this (x forearm length) from its bone radially in to that distance - wide
+// sleeves become slim tubes in the viewmodel instead of walls of cloth or cut shards (a tailored first-person sleeve)
+interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; gunScale?: number; squeeze?: number; }
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
   raijin: { grip: 'katana', R: [0.22, -0.17, 0.46], L: [0.08, -0.19, 0.44], recoil: 0, clip: 0.14, keep: 0.97 },
   // the bow held left of the reticle and canted (an archer's first-person read), sized down for the viewmodel
   yuzu: { grip: 'bow', R: [0.1, -0.16, 0.4], L: [-0.17, -0.15, 0.5], recoil: 0, clip: 0.12, gunScale: 0.8 },
-  // the wide kimono sleeves hang off his forearms: drape cuts them so the talisman hands stay in view
-  kaien: { grip: 'caster', R: [0.18, -0.14, 0.5], L: [-0.18, -0.15, 0.48], recoil: 0.03, keep: 0.97, drape: 0.3 },
-  mirei: { grip: 'caster', R: [0.14, -0.14, 0.38], L: [-0.15, -0.15, 0.35], recoil: 0.02 },
-  nocturne: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.14, -0.11, 0.38], recoil: 0.02 },
-  hex: { grip: 'caster', R: [0.13, -0.14, 0.38], L: [-0.13, -0.14, 0.38], recoil: 0.025 },
-  kagemaru: { grip: 'kunai', R: [0.17, -0.15, 0.34], L: [-0.17, -0.18, 0.32], recoil: 0 },
-  enra: { grip: 'fists', R: [0.16, -0.15, 0.36], L: [-0.16, -0.15, 0.36], recoil: 0, push: 0.05 },
+  // the wide kimono sleeves are squeezed into slim tubes for the viewmodel (they'd fill the screen), hands well forward
+  kaien: { grip: 'caster', R: [0.2, -0.1, 0.56], L: [-0.2, -0.11, 0.54], recoil: 0.03, keep: 0.97, squeeze: 0.12 },
+  mirei: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.15, -0.11, 0.38], recoil: 0.02 },
+  nocturne: { grip: 'caster', R: [0.14, -0.07, 0.42], L: [-0.14, -0.08, 0.4], recoil: 0.02 },
+  hex: { grip: 'caster', R: [0.13, -0.1, 0.4], L: [-0.13, -0.1, 0.4], recoil: 0.025 },
+  kagemaru: { grip: 'kunai', R: [0.17, -0.11, 0.37], L: [-0.17, -0.13, 0.35], recoil: 0 },
+  // his spiked pauldrons and gauntlet spikes crowd the lens: clipped close, only hand-weighted triangles kept
+  enra: { grip: 'fists', R: [0.2, -0.14, 0.44], L: [-0.2, -0.14, 0.44], recoil: 0, push: 0.05, clip: 0.22, keep: 0.95, drape: 0.35 },
   haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
   tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
@@ -46,8 +49,8 @@ export const FP_STYLE: Record<string, Style> = {
   // koi-scale shuriken flicked from the chest (the scarf is cut out: it wraps the neck, not the arms)
   hayate: { grip: 'kunai', R: [0.17, -0.09, 0.42], L: [-0.17, -0.11, 0.4], recoil: 0, keep: 0.9 },
   // the Riverbow in the left hand, the draw hand on the right
-  // his robe sleeve is cut away (drape) and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
-  seiran: { grip: 'bow', R: [0.12, -0.17, 0.4], L: [-0.22, -0.2, 0.46], recoil: 0, keep: 0.9, drape: 0.35, clip: 0.14, gunScale: 0.75 },
+  // his robe sleeves squeezed to slim tubes and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
+  seiran: { grip: 'bow', R: [0.12, -0.17, 0.4], L: [-0.22, -0.2, 0.46], recoil: 0, keep: 0.9, squeeze: 0.16, clip: 0.14, gunScale: 0.75 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -96,7 +99,7 @@ export function viewmodelOffset(an: { rest: Partial<Record<string, { p: THREE.Ve
  * drop out of the viewmodel, so a high collar or a big pauldron can't fill the screen. The geometry is cloned: the
  * world view of the same hero shares the loaded buffers.
  */
-export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0): { kept: number; total: number } {
+export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0, squeeze = 0): { kept: number; total: number } {
   let kept = 0, total = 0;
   model.traverse(o => {
     const m = o as THREE.SkinnedMesh;
@@ -108,10 +111,11 @@ export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0): { kept:
     for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < 4; j++) if (arm[si.getComponent(i, j)]) s += sw.getComponent(i, j); w[i] = s; }
     // drape: each vertex's distance (bind space) from the segment of its heaviest arm bone; far = cloth hanging off the arm
     const far = new Uint8Array(n);
-    if (drape > 0) {
+    let moved: Float32Array | null = null;
+    if (drape > 0 || squeeze > 0) {
       const at = (name: string) => { const i = bones.findIndex(b => b.name === name); return i < 0 ? null : new THREE.Vector3().setFromMatrixPosition(m.skeleton.boneInverses[i].clone().invert()); };
       const seg = new Map<number, [THREE.Vector3, THREE.Vector3]>();
-      let limit = 0;
+      let limit = 0, limitS = 0;
       for (const S of ['L', 'R']) {
         const ua = at(`upperarm_${S}`), fa = at(`forearm_${S}`), hd = at(`hand_${S}`);
         if (!ua || !fa || !hd) continue;
@@ -120,16 +124,26 @@ export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0): { kept:
         seg.set(bones.findIndex(b => b.name === `forearm_${S}`), [fa, hd]);
         seg.set(bones.findIndex(b => b.name === `hand_${S}`), [hd, tip]);
         limit = Math.max(limit, fa.distanceTo(hd) * drape);
+        limitS = Math.max(limitS, fa.distanceTo(hd) * squeeze);
       }
-      const p = new THREE.Vector3(), q = new THREE.Vector3(), pos = g.attributes.position;
-      for (let i = 0; i < n && limit > 0; i++) {
+      const p = new THREE.Vector3(), q = new THREE.Vector3(), c = new THREE.Vector3(), pos = g.attributes.position;
+      const unbind = m.bindMatrix.clone().invert();
+      if (limitS > 0) moved = new Float32Array(pos.array as ArrayLike<number>);
+      for (let i = 0; i < n && (limit > 0 || limitS > 0); i++) {
         let best = -1, bw = 0;
         for (let j = 0; j < 4; j++) { const b = si.getComponent(i, j), x = sw.getComponent(i, j); if (seg.has(b) && x > bw) { bw = x; best = b; } }
         if (best < 0) continue;
         const [a, b] = seg.get(best)!;
         p.fromBufferAttribute(pos, i).applyMatrix4(m.bindMatrix);
         const ab = q.copy(b).sub(a), u = Math.max(0, Math.min(1, p.clone().sub(a).dot(ab) / Math.max(1e-9, ab.lengthSq())));
-        if (p.distanceTo(a.clone().addScaledVector(ab, u)) > limit) far[i] = 1;
+        c.copy(a).addScaledVector(ab, u);
+        const d = p.distanceTo(c);
+        if (limit > 0 && d > limit) far[i] = 1;
+        // squeeze: a wide sleeve pulled in to a slim tube around the bone (bind space, then back to the mesh's own)
+        if (moved && d > limitS) {
+          p.sub(c).multiplyScalar(limitS / d).add(c).applyMatrix4(unbind);
+          moved[i * 3] = p.x; moved[i * 3 + 1] = p.y; moved[i * 3 + 2] = p.z;
+        }
       }
     }
     const src = g.index ? g.index.array : Array.from({ length: n }, (_, i) => i);
@@ -137,6 +151,7 @@ export function armsOnly(model: THREE.Object3D, keep = 0.75, drape = 0): { kept:
     for (let t = 0; t + 2 < src.length; t += 3) if (w[src[t]] + w[src[t + 1]] + w[src[t + 2]] >= keep * 3 && !(far[src[t]] || far[src[t + 1]] || far[src[t + 2]])) out.push(src[t], src[t + 1], src[t + 2]);
     total += src.length / 3; kept += out.length / 3;
     const g2 = g.clone(); g2.setIndex(out); m.geometry = g2; m.userData.fpArms = true;
+    if (moved) { g2.setAttribute('position', new THREE.BufferAttribute(moved, 3)); g2.computeVertexNormals(); g2.computeBoundingSphere(); }
   });
   return { kept, total };
 }
@@ -190,7 +205,7 @@ export class FirstPersonArms {
       this.eye.copy(R.head!.p).add(new THREE.Vector3(0, H * 0.06, H * 0.05 + (this.style.push ?? 0) / Math.max(1e-6, this.view.scaleFit)));
       this.eye.sub(viewmodelOffset(an, this.eye, this.style, this.view.scaleFit));
     }
-    if (this.real) armsOnly(this.view.model, this.style.keep ?? 0.75, this.style.drape ?? 0);
+    if (this.real) armsOnly(this.view.model, this.style.keep ?? 0.75, this.style.drape ?? 0, this.style.squeeze ?? 0);
     // near cut in camera space (the camera sits at the origin looking down +Z): drops a collar wrapped around the eye
     const plane = this.style.clip ? [new THREE.Plane(new THREE.Vector3(0, 0, 1), -this.style.clip)] : null;
     for (const m of this.view.mats) { m.clippingPlanes = plane; m.needsUpdate = true; }
