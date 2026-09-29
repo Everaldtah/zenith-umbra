@@ -20,6 +20,8 @@ RIGGED = HERE / 'out' / 'rigged_tripo'
 WHITE = ['--hair-rgb', '0.9,0.9,0.9']
 # masks and shades: MediaPipe still finds a "face" on a skull mask or behind sunglasses, and skin lids would blink over them
 NO_BLINK = {'hex', 'kagemaru', 'hibiki', 'hibiki_armor'}
+# ...and the masks' sockets glow instead (the detected eyes are stored as glowEyes; CharacterView's EyeGlow)
+GLOW_EYES = {'hex', 'kagemaru'}
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
@@ -46,7 +48,7 @@ def rig(aid):
     line = next((l for l in r.stdout.splitlines() if l.startswith('RIG_DONE')), None)
     if not line: print(aid, 'RIG FAILED\n', r.stdout[-1500:], r.stderr[-1500:]); return None
     info = json.loads(line[9:])
-    if '--mech' not in flags and aid not in NO_BLINK:
+    if '--mech' not in flags and (aid not in NO_BLINK or aid in GLOW_EYES):
         # the painted eyes, for the runtime blink (blender/eyes.py: front render -> MediaPipe face landmarks -> raycast)
         e = subprocess.run(['blender', '-b', '-P', str(HERE / 'blender' / 'eyes.py'), '--', '--glb', str(RIGGED / f'{aid}.glb'), '--python', sys.executable],
                            capture_output=True, text=True, encoding='utf-8', errors='replace')
@@ -78,8 +80,10 @@ def main():
         src = RIGGED / f'{aid}.glb'
         ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(src, HQ / f'{aid}.glb', 4096 if hero else 2048)
         if ok:
+            eyes = info.get('eyes') or info.get('glowEyes')
+            key = 'glowEyes' if aid in GLOW_EYES else 'eyes'
             manifest['models'][aid] = {'height': TRIPO[aid][0], 'tris': info.get('tris', 0), 'bones': ['humanoid'], 'source': 'tripo',
-                                       'colliders': info.get('colliders', {}), **({'eyes': info['eyes']} if info.get('eyes') else {})}
+                                       'colliders': info.get('colliders', {}), **({key: eyes} if eyes else {})}
             print(f"published {aid}: {(PUB / f'{aid}.glb').stat().st_size / 1e6:.2f} MB web, {(HQ / f'{aid}.glb').stat().st_size / 1e6:.2f} MB desktop")
     report_p.write_text(json.dumps(report, indent=1))
     manifest_p.write_text(json.dumps(manifest, indent=1))

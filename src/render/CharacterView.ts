@@ -3,8 +3,8 @@
 import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator, type AnimState } from './Animator';
-import { hasModel, heroModel, loadManifest, modelInfo } from './Assets';
-import { Eyelids } from './Eyes';
+import { hasModel, heroModel, loadManifest, modelInfo, type EyeInfo } from './Assets';
+import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
@@ -273,6 +273,7 @@ export class CharacterView {
   private loadSeq = 0;
 
   lids: Eyelids | null = null;
+  eyeGlow: EyeGlow | null = null;
   /** the map the ragdolls collide with (set by the match; the Hero Viewer has none - a flat floor) */
   static level: Level | null = null;
   /** set by the match once its preload has run: warms a model that loads mid-match before it's shown */
@@ -484,7 +485,11 @@ export class CharacterView {
     const info = modelInfo(mid);
     if (info?.colliders) anim.colliders = info.colliders as Animator['colliders'];
     this.lids?.dispose(); this.lids = null;
+    this.eyeGlow?.dispose(); this.eyeGlow = null;
     if (info?.eyes?.length === 2 && anim.bones.head) this.lids = new Eyelids(m, anim.bones.head, info.eyes, BRIGHT_SUITS.has(id) ? 0.04 : 0.16);
+    // masked heroes: the sockets glow in the hero's colour instead (manifest glowEyes, from blender/eyes.py)
+    const glow = (info as { glowEyes?: EyeInfo[] } | undefined)?.glowEyes;
+    if (glow?.length === 2 && anim.bones.head && FULL) this.eyeGlow = new EyeGlow(m, anim.bones.head, glow, this.actor.def.glow);
     // the costume's own hues, for skin palette remaps
     const map = (this.mats.find(mt => (mt as THREE.MeshStandardMaterial).map) as THREE.MeshStandardMaterial | undefined)?.map ?? null;
     const pal = analysePalette(map);
@@ -609,6 +614,7 @@ export class CharacterView {
     this.inner.position.y = -Math.max(0, age - 2.6) * 0.6;
     if (!this.ragdoll.asleep) this.anim.placeGunsFromBones();
     this.lids?.update(time, a.anim.hitAt, true);
+    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
     return true;
   }
 
@@ -641,6 +647,8 @@ export class CharacterView {
       for (const j of this.jets) j.visible = false;
       this.anim.update({ ...this.animState(dt, time), vel: new THREE.Vector3(), dead: true, deathAge: age, grounded: true, flying: false });
       this.lids?.update(time, a.anim.hitAt, true);
+    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
+      this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
       return;
     }
     if (!a.alive) {
@@ -686,6 +694,7 @@ export class CharacterView {
     // animation
     this.anim.update(this.animState(dt, time));
     this.lids?.update(time, a.anim.hitAt, false);
+    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, false);
     // performance layer: squash & stretch (about the feet) and the whole-body tilt (about the hips)
     const an2 = this.anim, piv = a.height * 0.55;
     this.inner.scale.set(a.scale * an2.sqXZ, a.scale * an2.sqY, a.scale * an2.sqXZ);

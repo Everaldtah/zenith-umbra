@@ -81,3 +81,56 @@ export class Eyelids {
 
   dispose() { for (const l of this.lids) { l.parent?.remove(l); (l.material as THREE.MeshStandardMaterial).map?.dispose(); (l.material as THREE.Material).dispose(); l.geometry.dispose(); } }
 }
+
+
+/**
+ * Masked heroes' eyes (Hex's porcelain mask, Kagemaru's skull): a glow in each dark socket instead of a blink - the
+ * read Overwatch gives its masked characters. Camera-facing additive sprites hung from the head bone just inside the
+ * socket (the mask hides them from behind), breathing slowly, flaring on a cast or a hit, dark in death.
+ */
+export class EyeGlow {
+  private sprites: THREE.Sprite[] = [];
+  private flare = 0;
+  private lastCast = -9;
+  private lastHit = -9;
+
+  constructor(model: THREE.Object3D, head: THREE.Object3D, eyes: EyeInfo[], color: string) {
+    model.updateMatrixWorld(true);
+    const toHead = model.matrixWorld.clone().invert().multiply(head.matrixWorld).invert();
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d')!, col = new THREE.Color(color);
+    const rgb = (a: number, k = 1) => `rgba(${Math.round(Math.min(255, col.r * 255 * k))},${Math.round(Math.min(255, col.g * 255 * k))},${Math.round(Math.min(255, col.b * 255 * k))},${a})`;
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, rgb(1, 1.4)); gr.addColorStop(0.45, rgb(0.55)); gr.addColorStop(1, rgb(0));
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    for (const e of eyes) {
+      const mat = new THREE.SpriteMaterial({ map: tex, color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false });
+      const sp = new THREE.Sprite(mat);
+      const n = new THREE.Vector3(e.n[0], e.n[1], e.n[2]).normalize();
+      // just in front of the socket (the sockets are painted, not holes): the head still hides it from behind
+      const at = new THREE.Vector3(e.p[0], e.p[1], e.p[2]).addScaledVector(n, e.w * 0.35).applyMatrix4(toHead);
+      sp.position.copy(at);
+      const s0 = e.w * 2.6;
+      sp.scale.set(s0, s0, 1); sp.userData.s0 = s0;
+      sp.frustumCulled = false; sp.renderOrder = 2;
+      head.add(sp);
+      this.sprites.push(sp);
+    }
+  }
+
+  update(time: number, castAt: number, hitAt: number, dead: boolean) {
+    if (castAt > this.lastCast) { this.lastCast = castAt; this.flare = 1; }
+    if (hitAt > this.lastHit) { this.lastHit = hitAt; this.flare = Math.max(this.flare, 0.5); }
+    this.flare = Math.max(0, this.flare - 0.04);
+    const k = dead ? 0 : 0.85 + 0.15 * Math.sin(time * 2.1) + this.flare * 0.9;
+    for (const sp of this.sprites) {
+      const s = sp.userData.s0 * (0.9 + 0.35 * k);
+      sp.scale.set(s, s, 1);
+      (sp.material as THREE.SpriteMaterial).opacity = Math.min(1, k);
+      sp.visible = k > 0.01;
+    }
+  }
+
+  dispose() { for (const sp of this.sprites) { sp.parent?.remove(sp); sp.material.map?.dispose(); sp.material.dispose(); } this.sprites = []; }
+}
