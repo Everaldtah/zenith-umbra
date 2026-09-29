@@ -297,7 +297,8 @@ const FOUNDRY = (() => {
 // by buildings you can run through and by red rock you can climb. The high ground comes in tiers - a ledge reached by
 // ramps, then a sheer face above it that only climbers (Hibiki's wall ride, the Koryu brothers' wall run) and flyers take
 // - so wall climbers get routes no one else has. Climbable faces are vertical boxes 4-12m tall, well inside the arena
-// edge; every rooftop is flat or ramped, with parapets low enough to vault.
+// edge; every rooftop is flat or ramped, with parapets low enough to vault. The canyon walls around the arena stand 22m:
+// 10m over the highest summit, so no jump from a summit reaches their top.
 
 // ---------------------------------------------------------------- Sunset Mile (Mikoshi Rush: the float rides a road hauler)
 // A highway town under the red mesas. The Mikoshi's hauler rolls down the old road past the gas station (a canopy perch over the
@@ -625,7 +626,7 @@ export const MAPS: MapDef[] = [
     story: 'A highway town under the red mesas, where the old road runs past the pumps, the diner and the motel. The Mikoshi rides a road hauler through town - push it home, and take the rock the long way up.',
     size: [72, 34],
     floors: [{ x: 0, z: 0, w: 144, d: 68, h: 0.01, mat: 'ground' }],
-    boxes: [...border(72, 34, 14).map(b => ({ ...b, mat: 'rock' as const })), ...MILE.boxes], decor: MILE.decor,
+    boxes: [...border(72, 34, 22).map(b => ({ ...b, mat: 'rock' as const })), ...MILE.boxes], decor: MILE.decor,
     props: mirrorProps([
       { id: 'prop_mile_gaspump', x: -33, z: -8, s: 2.2, solid: 0.5 }, { id: 'prop_mile_gaspump', x: -27, z: -8, s: 2.2, solid: 0.5 },
       { id: 'prop_mile_sign', x: -11, z: 18, y: 4.6, s: 8 }, { id: 'prop_mile_sign', x: -38, z: 9, s: 8, solid: 0.4 },
@@ -648,9 +649,9 @@ export const MAPS: MapDef[] = [
     story: 'A frontier rail yard at the bottom of a canyon, all boxcars, timber and red rock. Haul the Mikoshi down the main line - fight over the boxcars, across the trestle and up the crags.',
     size: [72, 32],
     floors: [{ x: 0, z: 0, w: 144, d: 64, h: 0.01, mat: 'ground' }],
-    boxes: [...border(72, 32, 14).map(b => ({ ...b, mat: 'rock' as const })), ...GULCH.boxes], decor: GULCH.decor,
+    boxes: [...border(72, 32, 22).map(b => ({ ...b, mat: 'rock' as const })), ...GULCH.boxes], decor: GULCH.decor,
     props: mirrorProps([
-      { id: 'prop_gulch_loco', x: -50, z: -12, rot: Math.PI / 2, s: 5 },
+      { id: 'prop_gulch_loco', x: -50, z: -12, y: 0, rot: Math.PI / 2, s: 5 },
       { id: 'prop_gulch_watertower', x: -6, z: 9, s: 11, solid: 1.6 },
       { id: 'prop_gulch_windpump', x: -11, z: -29, y: 12, s: 9 }, { id: 'prop_gulch_windpump', x: -44, z: 27, y: 8, s: 9, solid: 0.5 },
       { id: 'prop_gulch_minecart', x: -32, z: 28, s: 1.6, solid: 0.9 }, { id: 'prop_gulch_minecart', x: -30, z: 24.5, rot: 0.6, s: 1.6, solid: 0.9 },

@@ -50,6 +50,19 @@ describe('climbers\' maps: the climb routes climb', () => {
     });
   }
 
+  // the canyon wall can't be reached from a summit: Hayate running at it from the top, tapping jump, stays in the arena
+  for (const [map, x, z, yaw, lim] of [['mile', -28, 31, 0, 34], ['gulch', -11, -30.5, Math.PI, 32]] as const) {
+    it(`${map}: no jump from the 12 m summit reaches the top of the boundary wall`, () => {
+      const w = new World(map, 'practice');
+      const a: Actor = w.addHero('hayate', 'zenith'); a.clear('spawnprot');
+      a.pos = { x, y: 12, z }; a.vel = { x: 0, y: 0, z: 0 }; a.yaw = a.input.yaw = yaw; a.input.mz = 1; a.input.jumpHeld = true;
+      let f = 0, maxY = 0, maxZ = 0;
+      run(w, 6, () => { a.input.jump = f++ % 12 === 0; maxY = Math.max(maxY, a.pos.y); maxZ = Math.max(maxZ, Math.abs(a.pos.z)); });
+      expect(maxZ).toBeLessThan(lim);
+      expect(a.pos.y).toBeLessThan(13);
+    });
+  }
+
   // Hibiki's Mag-Grind: airborne beside a face with grind held, riding along it (+x) looking up, he climbs and mantles on
   const rides: [string, string, number, number, number][] = [
     // map, route, start x, face z (the wall on the +z side if wallSide > 0), top ... wall side packed into the sign of top
