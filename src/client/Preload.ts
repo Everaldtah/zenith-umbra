@@ -78,19 +78,31 @@ export async function uploadTextures(renderer: THREE.WebGLRenderer, tex: Iterabl
   return list.length;
 }
 
-/** compile every material in `root` against `scene`'s lights / fog / environment without drawing anything */
-export async function compileFor(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene) {
+/**
+ * compile every material in `root` against `scene`'s lights / fog / environment without drawing anything. `target`: the
+ * render target the programs are built for (the output colour space is part of every program's key) - bound only for
+ * the synchronous compile() call inside, then restored: a target left bound across the awaits leaked into the frames
+ * drawn meanwhile, and two overlapping compiles could restore each other's stale target for good (the first-person
+ * viewmodel then drew into the composer's buffer - hands and guns gone after a mid-match hero swap)
+ */
+export async function compileFor(renderer: THREE.WebGLRenderer, root: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene, target?: THREE.WebGLRenderTarget | null) {
   try {
     const r = renderer as THREE.WebGLRenderer & { compileAsync?: (s: THREE.Object3D, c: THREE.Camera, t?: THREE.Scene | null) => Promise<unknown> };
-    if (r.compileAsync) await r.compileAsync(root, camera, root === scene ? null : scene);
-    else renderer.compile(root, camera, root === scene ? null : scene);
+    const prev = renderer.getRenderTarget();
+    if (target !== undefined) renderer.setRenderTarget(target);
+    let ready: Promise<unknown> | null = null;
+    try {
+      if (r.compileAsync) ready = r.compileAsync(root, camera, root === scene ? null : scene);
+      else renderer.compile(root, camera, root === scene ? null : scene);
+    } finally { if (target !== undefined) renderer.setRenderTarget(prev); }
+    await ready;
   } catch { /* compiled on first draw instead */ }
 }
 
 /** upload + compile one object that arrives mid-match (hidden until done, so it never pops in half-ready) */
-export async function warmObject(renderer: THREE.WebGLRenderer, obj: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene) {
+export async function warmObject(renderer: THREE.WebGLRenderer, obj: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene, target?: THREE.WebGLRenderTarget | null) {
   await uploadTextures(renderer, texturesOf(obj));
-  await compileFor(renderer, obj, camera, scene);
+  await compileFor(renderer, obj, camera, scene, target);
 }
 
 // ---------------------------------------------------------------- 4. effects

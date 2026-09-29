@@ -412,10 +412,7 @@ export class Game {
     // compiled into the composer's buffer: the scene is drawn there (linear output), not straight to the screen, and
     // the output colour space is part of every program's key
     const into = this.composer ? (this.composer as unknown as { readBuffer: THREE.WebGLRenderTarget }).readBuffer : null;
-    const rt0 = r.getRenderTarget();
-    r.setRenderTarget(into);
-    await compileFor(r, this.scene, this.camera, this.scene);
-    r.setRenderTarget(rt0);
+    await compileFor(r, this.scene, this.camera, this.scene, into);
     shaders(0.7);
     if (this.fp) await compileFor(r, this.fp.scene, this.fp.camera, this.fp.scene);
     shaders(1); phase('shaders');
@@ -447,16 +444,14 @@ export class Game {
       this.camera.quaternion.setFromEuler(new THREE.Euler(e0.x, e0.y + turn, 0, 'YXZ'));
       this.camera.updateMatrixWorld();
       if (this.composer) this.composer.render(); else r.render(this.scene, this.camera);
-      if (this.fp) { r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false; }
+      if (this.fp) { r.setRenderTarget(null); r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false; }
       warm(Math.min(1, (i + 1) / (N + HOLD)));
       await nextFrame();
     }
     this.camera.quaternion.copy(q0);
     // hidden parts the warm-up camera never saw (a sheathed blade behind the viewmodel's frame): compiled while still
     // shown, into the same targets they're drawn to (compile ignores the camera's view)
-    r.setRenderTarget(into);
-    await compileFor(r, this.scene, this.camera, this.scene);
-    r.setRenderTarget(rt0);
+    await compileFor(r, this.scene, this.camera, this.scene, into);
     if (this.fp) await compileFor(r, this.fp.scene, this.fp.camera, this.fp.scene);
     for (const o of revealed) o.visible = false;
     // the sample effects played out and gone, the far-off copies removed
@@ -467,9 +462,9 @@ export class Game {
     const aniso = Math.min(r.capabilities.getMaxAnisotropy(), this.settings.video.texFilter);
     CharacterView.warm = async (o: THREE.Object3D) => {
       o.traverse(ob => { const m = (ob as THREE.Mesh).material; for (const mt of Array.isArray(m) ? m : m ? [m] : []) { const t = (mt as THREE.MeshStandardMaterial).map; if (t && t.anisotropy !== aniso) { t.anisotropy = aniso; t.needsUpdate = true; } } });
-      const target = this.composer ? (this.composer as unknown as { readBuffer: THREE.WebGLRenderTarget }).readBuffer : null, prev = r.getRenderTarget();
-      r.setRenderTarget(target);                     // compiled for where the scene is drawn (the composer's buffer)
-      try { await warmObject(r, o, this.camera, this.scene); } finally { r.setRenderTarget(prev); }
+      // compiled for where the scene is drawn (the composer's buffer) - bound only for the compile call itself
+      const target = this.composer ? (this.composer as unknown as { readBuffer: THREE.WebGLRenderTarget }).readBuffer : null;
+      await warmObject(r, o, this.camera, this.scene, target);
     };
     this.preloadStats = { ms: Math.round(performance.now() - t0), textures: nTex, programs: r.info.programs?.length ?? 0, phases };
     console.info('[preload]', JSON.stringify(this.preloadStats));
@@ -636,9 +631,10 @@ export class Game {
     // ---- render
     if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     if (this.fp && wantFp) {
-      // viewmodel pass: own depth so the arms never clip into walls
+      // viewmodel pass: own depth so the arms never clip into walls; always to the screen, whatever target the passes
+      // before it left bound
       const r = this.renderer;
-      r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false;
+      r.setRenderTarget(null); r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false;
     }
     this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.video.perfStats !== 'off' ? this.fpsAvg : 0, this.input.held('score'), this.spectateLabel());
