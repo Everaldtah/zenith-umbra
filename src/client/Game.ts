@@ -112,9 +112,14 @@ export class Game {
   /** barrier free look: the shield's facing, held while the camera pans (hold primary fire with the shield up) */
   private freeLook: { yaw: number; pitch: number } | null = null;
   /** abilities that play in third person (as in Overwatch) */
-  static readonly THIRD_PERSON: Record<string, (a: Actor) => boolean> = {
+  static readonly THIRD_PERSON: Record<string, (a: Actor, t: number) => boolean> = {
     tenkai: a => a.barrier.up || a.forced?.kind === 'dawncharge',
+    // Gantetsu's Tachiai Rush and the Shiko leap: a chase camera, as Overwatch shows Mauga's Overrun and its stomp
+    gantetsu: (a, t) => a.has('tachiai', t) || a.has('stompair', t),
   };
+  /** ...and how long the camera stays out after the ability ends (Gantetsu: to see the slam land and its victims fall) */
+  static readonly THIRD_HOLD: Record<string, number> = { gantetsu: 0.45 };
+  private abilityCamUntil = 0;
   specIdx = 0; specNextSwitch = 0; freeCam = false;
   camPos = new THREE.Vector3();
   timeScale = 1;
@@ -566,7 +571,10 @@ export class Game {
     if (!this.paused || online) {
       if (me) {
         this.camYaw = this.input.yaw; this.camPitch = this.input.pitch;
-        const tp = this.view === 'first' && me.alive && !!Game.THIRD_PERSON[me.def.id]?.(me);
+        const tpOn = this.view === 'first' && me.alive && !!Game.THIRD_PERSON[me.def.id]?.(me, w.time);
+        if (tpOn) this.abilityCamUntil = w.time + (Game.THIRD_HOLD[me.def.id] ?? 0);
+        else if (this.abilityCamUntil - w.time > 2) this.abilityCamUntil = 0;          // a new match: its clock starts over
+        const tp = tpOn || (this.view === 'first' && me.alive && w.time < this.abilityCamUntil);
         this.abilityCam += ((tp ? 1 : 0) - this.abilityCam) * Math.min(1, dt * 9);
         // barrier free look: primary fire held with the shield up pans the camera; the shield keeps its facing
         const fl = this.settings.controls.barrierFreeLook && me.barrier.up && this.input.held('fire');
