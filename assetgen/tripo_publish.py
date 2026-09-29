@@ -2,7 +2,8 @@
 """Publish Tripo Studio models: Mixamo-rigged exports -> game rig (blender/tripo_rig.py) -> web (2K) + desktop (4K) GLBs.
 
     python tripo_publish.py kaien raijin ...      (ids from TRIPO below; --skip-rig re-optimises out/rigged_tripo/<id>.glb)
-Inputs  out/tripo/<id>_rig.glb (Tripo "Export" GLB, skeleton on, Mixamo preset), out/tripo/<id>_hd.glb (optional, HD source)
+Inputs  out/tripo/<id>_rig.glb (Tripo "Export" GLB, skeleton on, Mixamo preset), out/tripo/<id>_hd.glb (optional, HD source:
+        the original generation, unskinned - mechs use it for both editions, humanoid heroes for the desktop edition)
         out/tripo/prop_<name>.glb (props: no rig)
 Outputs ../public/models/<id>.glb, out/models_hq/<id>.glb, ../public/models/manifest.json
 """
@@ -22,6 +23,9 @@ WHITE = ['--hair-rgb', '0.9,0.9,0.9']
 NO_BLINK = {'hex', 'kagemaru', 'hibiki', 'hibiki_armor'}
 # ...and the masks' sockets glow instead (the detected eyes are stored as glowEyes; CharacterView's EyeGlow)
 GLOW_EYES = {'hex', 'kagemaru'}
+# desktop heroes: the original high-detail generation (real fingers, folds, 4K maps with normals) decimated to this budget,
+# skinned with the retopo rig's weights - the web edition keeps the light retopo mesh
+HD_TRIS = 90000
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
@@ -36,18 +40,21 @@ TRIPO = {
 }
 
 
-def rig(aid):
+def rig(aid, hq=False):
     h, flags = TRIPO[aid]
     src = SRC / f'{aid}_rig.glb'
     if not src.exists(): print('missing', src); return None
     hd = SRC / f'{aid}_hd.glb'
-    cmd = ['blender', '-b', '-P', str(HERE / 'blender' / 'tripo_rig.py'), '--', '--glb', str(src), '--out', str(RIGGED / f'{aid}.glb'), '--height', str(h), *flags]
-    if hd.exists() and '--tris' in flags: cmd += ['--hd', str(hd)]
+    out = RIGGED / f'{aid}_hq.glb' if hq else RIGGED / f'{aid}.glb'
+    cmd = ['blender', '-b', '-P', str(HERE / 'blender' / 'tripo_rig.py'), '--', '--glb', str(src), '--out', str(out), '--height', str(h), *flags]
+    if hq: cmd += ['--hd', str(hd), '--tris', str(HD_TRIS), '--hd-late']
+    elif hd.exists() and '--tris' in flags: cmd += ['--hd', str(hd)]
     elif '--tris' in flags: cmd = [c for i, c in enumerate(cmd) if not (c == '--tris' or (i and cmd[i - 1] == '--tris'))]
     r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
     line = next((l for l in r.stdout.splitlines() if l.startswith('RIG_DONE')), None)
-    if not line: print(aid, 'RIG FAILED\n', r.stdout[-1500:], r.stderr[-1500:]); return None
+    if not line: print(aid, 'HQ ' if hq else '', 'RIG FAILED\n', r.stdout[-1500:], r.stderr[-1500:]); return None
     info = json.loads(line[9:])
+    if hq: print(aid, 'HQ', {k: info.get(k) for k in ('hd_fit', 'hd_tris', 'seam_copies_hd', 'unweighted_hd', 'chains', 'deform_max')}); return info
     if '--mech' not in flags and (aid not in NO_BLINK or aid in GLOW_EYES):
         # the painted eyes, for the runtime blink (blender/eyes.py: front render -> MediaPipe face landmarks -> raycast)
         e = subprocess.run(['blender', '-b', '-P', str(HERE / 'blender' / 'eyes.py'), '--', '--glb', str(RIGGED / f'{aid}.glb'), '--python', sys.executable],
@@ -78,7 +85,11 @@ def main():
         report[aid] = info
         hero = aid in HERO_IDS
         src = RIGGED / f'{aid}.glb'
-        ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(src, HQ / f'{aid}.glb', 4096 if hero else 2048)
+        # desktop: the high-detail generation, when there is one (same skeleton, eyes and colliders as the retopo rig)
+        hq_src = src
+        if hero and '--mech' not in TRIPO[aid][1] and (SRC / f'{aid}_hd.glb').exists() and '--no-hq' not in sys.argv:
+            if (skip and (RIGGED / f'{aid}_hq.glb').exists()) or rig(aid, hq=True): hq_src = RIGGED / f'{aid}_hq.glb'
+        ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(hq_src, HQ / f'{aid}.glb', 4096 if hero else 2048)
         if ok:
             eyes = info.get('eyes') or info.get('glowEyes')
             key = 'glowEyes' if aid in GLOW_EYES else 'eyes'

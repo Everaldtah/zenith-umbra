@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { ARROW_GONE } from './HeldProps';
 
-export type Grip = 'relaxed' | 'fist' | 'trigger' | 'hook' | 'open' | 'pinch' | 'claw';
+export type Grip = 'relaxed' | 'fist' | 'trigger' | 'hook' | 'open' | 'pinch' | 'claw' | 'hammer';
 const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
 /** radians per joint (1..3), per finger, thumb first */
 const CURL: Record<Grip, number[][]> = {
@@ -21,9 +21,11 @@ const CURL: Record<Grip, number[][]> = {
   open: [[0.04, 0.05, 0.04], [0.04, 0.08, 0.05], [0.04, 0.08, 0.05], [0.06, 0.1, 0.06], [0.08, 0.1, 0.06]],
   pinch: [[0.45, 0.5, 0.35], [0.55, 0.55, 0.3], [0.6, 0.6, 0.35], [1.25, 1.45, 0.9], [1.3, 1.45, 0.9]],
   claw: [[0.3, 0.4, 0.3], [0.55, 0.85, 0.6], [0.6, 0.9, 0.6], [0.6, 0.9, 0.6], [0.65, 0.9, 0.6]],
+  // a two-handed wrap around a thick haft (Reinhardt's hammer): fingers round a ~5 cm handle, the thumb over them
+  hammer: [[0.75, 0.85, 0.6], [1.15, 1.35, 0.95], [1.2, 1.4, 0.95], [1.2, 1.4, 0.95], [1.25, 1.4, 0.95]],
 };
 /** how far a grip closes the fingers' rest spread (a fist packs them together, an open palm fans them a little) */
-const CLOSE: Record<Grip, number> = { relaxed: 0.35, fist: 0.9, trigger: 0.85, hook: 0.7, open: -0.15, pinch: 0.6, claw: 0.2 };
+const CLOSE: Record<Grip, number> = { relaxed: 0.35, fist: 0.9, trigger: 0.85, hook: 0.7, open: -0.15, pinch: 0.6, claw: 0.2, hammer: 0.95 };
 
 interface Joint { o: THREE.Object3D; rest: THREE.Quaternion; curl: THREE.Vector3; splay: THREE.Vector3 | null; spread: number; f: number; k: number }
 interface Hand { joints: Joint[]; cur: Float32Array; tgt: Float32Array; close: number; closeTgt: number }
@@ -110,7 +112,7 @@ export class Fingers {
 const BASE: Record<string, [Grip, Grip]> = {
   raijin: ['fist', 'fist'], hayate: ['relaxed', 'fist'], yuzu: ['fist', 'hook'], seiran: ['fist', 'hook'],
   kaien: ['open', 'pinch'], mirei: ['relaxed', 'open'], nocturne: ['claw', 'claw'], hex: ['claw', 'claw'],
-  kagemaru: ['pinch', 'fist'], enra: ['fist', 'fist'], haruto: ['fist', 'trigger'], tenkai: ['fist', 'fist'],
+  kagemaru: ['pinch', 'fist'], enra: ['fist', 'fist'], haruto: ['fist', 'trigger'], tenkai: ['hammer', 'hammer'],
   gorgoth: ['fist', 'trigger'], gantetsu: ['trigger', 'trigger'], hibiki: ['relaxed', 'trigger'], hibiki_armor: ['relaxed', 'trigger'],
   tomoe: ['fist', 'trigger'],
 };

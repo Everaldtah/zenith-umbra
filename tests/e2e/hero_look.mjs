@@ -7,7 +7,7 @@ const [hero = 'tomoe', mode = 'idle', at = '0.2,0.5', yaw = '0'] = process.argv.
 const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'], defaultViewport: { width: 1600, height: 900 } });
 const p = await b.newPage();
 const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.goto('http://localhost:5199/play.html', { waitUntil: 'domcontentloaded', timeout: 180000 });
+await p.goto(`http://localhost:${process.env.ZU_PORT ?? 5199}/play.html${process.env.Q ?? ''}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await p.waitForFunction(() => !!window.__zu?.menu, { timeout: 60000 });
 await p.evaluate(() => window.__zu.menu.viewer());
 await p.waitForFunction(() => !!window.__zu?.viewer, { timeout: 30000 });

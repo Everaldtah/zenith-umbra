@@ -44,11 +44,14 @@ function load(url: string): Promise<GLTF | null> {
   return p;
 }
 
+/** dev only: ?hq loads the desktop edition's hero models (assetgen/out/models_hq) - checks before a desktop build */
+const HQ_DEV = !!(import.meta as any).env?.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('hq');
+
 /** a fresh, independently animatable copy of a hero model (skinned meshes rebound), or null */
 export async function heroModel(id: string): Promise<THREE.Object3D | null> {
   await loadManifest();
   if (!hasModel(id)) return null;
-  const g = await load(`${BASE}models/${id}.glb`);
+  const g = await load(HQ_DEV ? `${BASE}assetgen/out/models_hq/${id}.glb` : `${BASE}models/${id}.glb`);
   if (!g) return null;
   const c = SkeletonUtils.clone(g.scene);
   c.traverse(o => {

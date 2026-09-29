@@ -12,7 +12,7 @@ const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chro
 const p = await b.newPage();
 const errors = [];
 p.on('pageerror', e => errors.push(String(e)));
-await p.goto(`http://localhost:${port}/play.html`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+await p.goto(`http://localhost:${port}/play.html${process.env.Q ?? ''}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 for (let i = 0; i < 60 && !(await p.evaluate(() => !!window.__zu?.menu)); i++) await wait(500);
 await p.evaluate(() => window.__zu.menu.viewer());
 for (const id of ids.split(',')) {

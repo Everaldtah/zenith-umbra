@@ -10,7 +10,7 @@ const b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chro
 const p = await b.newPage();
 const errors = [];
 p.on('pageerror', e => errors.push(String(e)));
-await p.goto(`http://localhost:${port}/play.html`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+await p.goto(`http://localhost:${port}/play.html${process.env.Q ?? ''}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 for (let i = 0; i < 60 && !(await p.evaluate(() => !!window.__zu?.game)); i++) await wait(500);
 for (const hero of ids.split(',')) {
   await p.evaluate(h => window.__zu.game.start({ mode: 'training', map: 'training', hero: h }), hero);

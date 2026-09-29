@@ -21,6 +21,10 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
 ap.add_argument("--glb", required=True); ap.add_argument("--out", required=True); ap.add_argument("--height", type=float, default=1.8)
 ap.add_argument("--hd", default=""); ap.add_argument("--tris", type=int, default=0)
+# --hd-late: the high-detail mesh is swapped in at the END, taking the finished weights (body + chains, welded, smoothed)
+# by nearest surface - for humanoids, whose HD generation is many loose shells (hair strands, cloth layers) that would
+# each be classified on their own and tear apart; --hd alone swaps it in first (mechs: rigid plates, no chains)
+ap.add_argument("--hd-late", action="store_true")
 ap.add_argument("--wings", action="store_true"); ap.add_argument("--chains", action="store_true"); ap.add_argument("--mech", action="store_true")
 # --chains: skirt panels + cape / coat tails; --hair: long hanging hair (colour-matched to the scalp, grown from the head
 # so torso armour and robes never join it); --crown: hair piled on the head (topknot, buns, dreadlocks) as an upright
@@ -216,7 +220,8 @@ def apply_weights(obj, W):
 
 
 # ---------------------------------------------------------------- optional: the high-detail mesh, Tripo's weights transferred
-if a.hd:
+def load_hd(ref_co):
+    """the HD generation in the rig frame, fitted onto the rigged mesh's bounds, decimated to --tris"""
     hd_new = import_glb(a.hd)
     hd_meshes = [o for o in hd_new if o.type == "MESH"]
     for o in hd_new:
@@ -226,7 +231,7 @@ if a.hd:
     hd.data.transform(X @ Mh)
     # Tripo re-centres / re-scales a model between generation and rigging: fit the HD bounds onto the rigged mesh's
     hv = np.empty(len(hd.data.vertices) * 3); hd.data.vertices.foreach_get("co", hv); hv = hv.reshape(-1, 3)
-    lo_b, hi_b = co.min(0), co.max(0); lo_h, hi_h = hv.min(0), hv.max(0)
+    lo_b, hi_b = ref_co.min(0), ref_co.max(0); lo_h, hi_h = hv.min(0), hv.max(0)
     s = float(np.median((hi_b - lo_b) / np.maximum(hi_h - lo_h, 1e-6)))
     off = (lo_b + hi_b) / 2 - (lo_h + hi_h) / 2 * s
     hd.data.transform(Matrix.Translation(Vector(off)) @ Matrix.Scale(s, 4))
@@ -236,15 +241,25 @@ if a.hd:
         dm = hd.modifiers.new("Dec", "DECIMATE"); dm.ratio = a.tris / ntri; dm.use_collapse_triangulate = True
         bpy.context.view_layer.objects.active = hd; bpy.ops.object.modifier_apply(modifier=dm.name)
     LOG["hd_tris"] = sum(len(p.vertices) - 2 for p in hd.data.polygons)
-    # weights onto the HD mesh: body gets clean named groups first, then a data-transfer
-    apply_weights(body, Wt)
-    for n in names_out: hd.vertex_groups.new(name=n)
-    dt = hd.modifiers.new("DT", "DATA_TRANSFER"); dt.object = body
+    return hd
+
+
+def transfer_weights(src, dst, names):
+    """every named vertex group of src onto dst, interpolated from the nearest face"""
+    for n in names: dst.vertex_groups.new(name=n)
+    dt = dst.modifiers.new("DT", "DATA_TRANSFER"); dt.object = src
     dt.use_vert_data = True; dt.data_types_verts = {"VGROUP_WEIGHTS"}; dt.vert_mapping = "POLYINTERP_NEAREST"
     dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
-    bpy.context.view_layer.objects.active = hd
+    bpy.context.view_layer.objects.active = dst
     bpy.ops.object.datalayout_transfer(modifier=dt.name)
     bpy.ops.object.modifier_apply(modifier=dt.name)
+
+
+if a.hd and not a.hd_late:
+    hd = load_hd(co)
+    # weights onto the HD mesh: body gets clean named groups first, then a data-transfer
+    apply_weights(body, Wt)
+    transfer_weights(body, hd, names_out)
     bpy.data.objects.remove(body)
     body = hd
     co = np.empty(len(body.data.vertices) * 3); body.data.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
@@ -574,6 +589,19 @@ except Exception as e:
     LOG["smooth_error"] = str(e)[:120]
     try: bpy.ops.object.mode_set(mode="OBJECT")
     except Exception: pass
+if a.hd and a.hd_late:
+    # the finished weights - body, chains, welded and smoothed on the clean retopo - onto the HD mesh by nearest surface:
+    # a loose HD shell (a hair card, a cloth layer) follows the surface it lies on, whatever chain that is
+    try: bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception: pass
+    hd = load_hd(co)
+    transfer_weights(body, hd, names_out)
+    bpy.data.objects.remove(body)
+    body = hd
+    co = np.empty(len(body.data.vertices) * 3); body.data.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
+    Wh, LOG["seam_copies_hd"] = weld_weights(read_weights(body))
+    LOG["unweighted_hd"] = apply_weights(body, Wh)
+    LOG["verts"] = len(co); LOG["tris"] = sum(len(p.vertices) - 2 for p in body.data.polygons)
 body.parent = arm
 am = body.modifiers.new("Armature", "ARMATURE"); am.object = arm
 # drop whatever else the imports left (the source armature, empties)
