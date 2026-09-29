@@ -1,9 +1,14 @@
 // Ability implementations. Each returns true when it actually fired (so cooldown / ult charge is spent).
-import { isAbility } from '../data/heroes';
+import { isAbility, type WeaponDef } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from './Actor';
 import { dist3, norm, type Proj, type World, type Zone } from './World';
 import { ignite, wound } from './weapons';
+
+/** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
+export const DRAGONBLADE_SECS = 15;
+export const DRAGONBLADE: WeaponDef = { kind: 'melee', name: 'Dragon Gate Blade', damage: 110, rate: 1.25, range: 5, sfx: 'katana', fx: 'slash' };
+
 
 let ZID = 1;
 type Impl = (w: World, a: Actor) => boolean;
@@ -275,26 +280,17 @@ const I: Record<string, Impl> = {
     return true;
   },
   dragongate(w, a) {
-    const tgs = w.enemies(a).filter(x => dist3(x.pos, a.pos) < 18 && w.level.lineOfSight(a.eye, x.center)).sort((p, q) => dist3(p.pos, a.pos) - dist3(q.pos, a.pos)).slice(0, 6);
-    if (!tgs.length) return false;
-    a.set('phased', w.time, tgs.length * 0.18 + 0.1);
+    // Dragon Gate Blade (after Genji's Dragonblade): 15 s with the nodachi drawn - the primary becomes a sweeping blade
+    // (DRAGONBLADE: 110 a slash, 0.8 s apart, 5 m), he moves 30% faster and every slash streaks the koi-dragon through
+    // what it cuts; Current Dash still resets on an elimination. World.step puts his own weapons back when it ends.
+    if (a.has('dragonblade', w.time)) return false;
+    a.set('dragonblade', w.time, DRAGONBLADE_SECS);
+    a.def = { ...a.baseDef, primary: DRAGONBLADE };
+    a.nextShot = w.time + 0.45;                        // the draw
+    a.anim.castAt = w.time; a.anim.castId = 'dragongate';
     w.fx('ultflash', a.center, { color: '#b36bff', actor: a }); w.sfx('ultcall', a.center, a);
-    // the koi-dragon coils up around him as the nodachi is drawn, then streaks through every cut (SpiritDragon.ts)
+    // the koi-dragon coils up around him as the nodachi is drawn (SpiritDragon.ts: once, at the draw)
     w.fx('dragoncoil', a.center, { actor: a, color: '#b36bff' });
-    tgs.forEach((x, i) => w.after(0.12 + i * 0.18, () => {
-      if (!a.alive) return;
-      const from = { ...a.center };
-      if (x.alive) {
-        const b = x.forward();
-        const p = { x: x.pos.x - b.x * 1.4, y: x.pos.y, z: x.pos.z - b.z * 1.4 };
-        const g = w.level.groundAt(p.x, p.z, x.pos.y + 1);
-        a.pos = { x: p.x, y: g > -Infinity ? g : x.pos.y, z: p.z };
-        a.yaw = a.input.yaw = Math.atan2(x.pos.x - a.pos.x, x.pos.z - a.pos.z);
-        a.clear('phased'); w.damage(a, x, 140, { kind: 'ability' }); a.set('phased', w.time, (tgs.length - i) * 0.18);
-        a.anim.attackAt = w.time; a.anim.attackKind = 'secondary';
-      }
-      w.fx('cut', from, { to: a.center, color: '#b36bff' }); w.fx('dragoncut', from, { to: a.center, color: '#b36bff' }); w.sfx('cut', a.center, a);
-    }));
     return true;
   },
   // ================================================================ Seiran

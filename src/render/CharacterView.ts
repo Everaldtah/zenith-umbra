@@ -341,6 +341,19 @@ export class CharacterView {
         const g = this.guns[i].group, vis = heldVisible(a.def.id, i as 0 | 1, a, time);
         // a hand with a stand-in (Hayate: the shuriken while the nodachi is sheathed) never goes empty
         if (g.userData.swap) { (g.userData.body as THREE.Object3D).visible = vis; (g.userData.swap as THREE.Object3D).visible = !vis; }
+        // Dragon Gate Blade: the drawn nodachi burns with the koi-dragon's violet for the whole 15 s
+        if (g.userData.body) {
+          const k = a.has('dragonblade', time) ? 0.9 + 0.35 * Math.sin(time * 9) : 0;
+          if (k !== g.userData.glowK) {
+            g.userData.glowK = k;
+            (g.userData.body as THREE.Object3D).traverse(o => {
+              const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+              if (!m || !('emissive' in m)) return;
+              m.userData.e0 ??= [m.emissive.getHex(), m.emissiveIntensity];          // its own glow, restored after
+              if (k > 0) { m.emissive.set('#b36bff'); m.emissiveIntensity = k; } else { m.emissive.setHex(m.userData.e0[0]); m.emissiveIntensity = m.userData.e0[1]; }
+            });
+          }
+        }
         else hide[i] = !vis;
       }
       this.anim.gunHide = hide;
@@ -556,7 +569,7 @@ export class CharacterView {
       // a swoop skimming the floor is still flight (no running gait at 20 m/s)
       grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
-      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), beam: a.beamOn || a.flameOn,
+      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), climb: a.has('wallclimb', time), beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,

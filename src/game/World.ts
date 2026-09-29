@@ -16,6 +16,8 @@ export const TITAN_SCALE = 2.2;
 export const G = 24;
 /** Hibiki's Groove: the top of his jump-rhythm speed multiplier (tapping jump ~8x a second holds it) */
 export const GROOVE_MAX = 20;
+/** the Koryu brothers' wall climb: seconds of climbing per touch of the ground (jump taps add a little back) */
+export const CLIMB_SECS = 2.2;
 /** Grand Dohyo: height of the rope wall above the ring floor (m) */
 export const RING_H = 8;
 export type Mode = 'training' | 'skirmish' | 'stadium' | 'spectate' | 'aitest' | 'campaign' | 'gallery' | 'quickplay' | 'competitive' | 'practice';
@@ -645,6 +647,8 @@ export class World {
 
   private updateActor(a: Actor, dt: number) {
     const t = this.time;
+    // Hayate's Dragon Gate Blade ran out (or he fell with it drawn): his own weapons back, full magazine
+    if (a.def !== a.baseDef && a.def.id === 'hayate' && !a.has('dragonblade', t)) { a.def = a.baseDef; a.ammo = a.maxAmmo; a.nextShot = Math.max(a.nextShot, t + 0.3); }
     if (!a.alive) {
       if (a.respawnAt && t >= a.respawnAt && this.winner === null) this.respawn(a);
       return;
@@ -730,6 +734,7 @@ export class World {
       if (a.flameOn) spd *= 0.9;
       if (a.has('reapwind', t)) spd *= 0.55;           // Tomoe heaving the axe round
       if (d.id === 'hibiki') spd *= this.grooveStep(a, dt);
+      if (a.has('dragonblade', t)) spd *= 1.3;         // Hayate's Dragon Gate Blade
       const rooted = a.has('root', t) || a.has('stun', t);
       let mx = inp.mx, mz = inp.mz;
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
@@ -753,7 +758,7 @@ export class World {
         }
       }
       // Mirei - Starwing Swoop: the swoop drives her velocity this step (flight, steering and gravity sit it out)
-      const swooping = this.swoopStep(a, dt) || this.grindStep(a, dt, spd, rooted);
+      const swooping = this.swoopStep(a, dt) || this.grindStep(a, dt, spd, rooted) || this.climbStep(a, dt, rooted);
       // flight
       const canFly = (d.frame === 'flyer' || d.frame === 'drone' || !!d.jets) && !a.has('grounded', t) && !rooted && !swooping;
       if (d.frame === 'drone') a.flying = true;
@@ -1002,6 +1007,49 @@ export class World {
     // deep in the groove his skates leave a light trail
     if (a.sv.rhythm > 4 && t >= (a.sv.rhythmFx ?? 0)) { a.sv.rhythmFx = t + 0.3; this.fx('chargetrail', a.pos, { actor: a, dur: 0.4, color: a.def.glow }); }
     return a.sv.rhythm;
+  }
+
+  /**
+   * The Koryu brothers climb (after Genji): run at a wall and jump - or keep tapping jump - and they run straight up it.
+   * Holding jump climbs for CLIMB_SECS per touch of the ground; every tap adds a little back, so a fast rhythm of taps
+   * keeps a climb going up a tall building (Lucio-style). Seiran's Heir of the Falls also climbs just by moving into a
+   * wall while airborne. At the top they vault onto the roof; the arena's boundary walls stop the climb short.
+   */
+  private climbStep(a: Actor, dt: number, rooted: boolean): boolean {
+    const id = a.def.id;
+    if (id !== 'hayate' && id !== 'seiran') return false;
+    const t = this.time, inp = a.input, L = this.level;
+    if (a.grounded) a.sv.climbLeft = CLIMB_SECS;
+    const stop = () => { if (a.has('wallclimb', t)) a.clear('wallclimb'); return false; };
+    if (rooted || a.forced || a.has('stun', t) || inp.mz < 0.3) return stop();
+    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), reach = a.radius + 0.5;
+    const wall = (y: number) => { const h = L.ray({ x: a.pos.x, y, z: a.pos.z }, { x: fx, y: 0, z: fz }, reach); return h && Math.abs(h.ny) < 0.35 ? h : null; };
+    const h = wall(a.pos.y + a.height * 0.55);
+    const on = a.has('wallclimb', t);
+    if (!h) {
+      // the wall ended under his hands: over the top and onto the roof
+      if (on && this.mantle(a)) { a.clear('wallclimb'); return false; }
+      return stop();
+    }
+    const [X, Z] = L.size;
+    if (Math.abs(a.pos.x) > X - 2.5 || Math.abs(a.pos.z) > Z - 2.5) return stop();
+    const tap = this.pressed(a, 'jump');
+    // (holding jump into a wall starts a climb too - Genji's - as does Seiran just moving into one in the air)
+    const want = tap || inp.jumpHeld || (id === 'seiran' && !a.grounded && (on || a.vel.y < 2));
+    if (!want) return on ? true : false;
+    if (tap) a.sv.climbLeft = Math.min(CLIMB_SECS, (a.sv.climbLeft ?? CLIMB_SECS) + 0.14);
+    if ((a.sv.climbLeft ?? CLIMB_SECS) <= 0) return stop();
+    a.sv.climbLeft = (a.sv.climbLeft ?? CLIMB_SECS) - dt;
+    const nl = Math.hypot(h.nx, h.nz) || 1;
+    a.sv.grindNx = h.nx / nl; a.sv.grindNz = h.nz / nl; a.sv.grindDir = 1;
+    const up = 6.8 * (a.has('dragonblade', t) ? 1.25 : 1);
+    a.vel.y = up; a.vel.x = -a.sv.grindNx * 1.2; a.vel.z = -a.sv.grindNz * 1.2;          // hug the wall
+    a.grounded = false; a.flying = false; a.lastGroundedAt = -9;
+    if (!on) { a.anim.jumpAt = t; this.sfx('jump', a.pos, a); }
+    a.set('wallclimb', t, 0.18);
+    // reaching the top: the wall is gone at head height - vault over
+    if (!wall(a.pos.y + a.height + 0.35) && this.mantle(a)) { a.clear('wallclimb'); return false; }
+    return true;
   }
 
   /** Mag-Grind top-out: if the wall he's riding ends in a roof within reach above his feet, pop up over the edge and land

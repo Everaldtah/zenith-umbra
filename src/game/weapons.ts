@@ -164,6 +164,10 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
       });
     } else {
       const f = a.forward();
+      if (a.has('dragonblade', t)) {
+        // Dragon Gate Blade: the koi-dragon streaks through the cut (one per slash - SpiritDragon.ts)
+        w.fx('dragoncut', a.center, { to: { x: a.center.x + f.x * 4.5, y: a.center.y, z: a.center.z + f.z * 4.5 }, color: '#b36bff' });
+      }
       const n = meleeArc(w, a, W.range * a.scale, W.damage * mult, 0.35, 2.5, (x) => {
         if (a.has('judgment', t)) {
           const chain = w.enemies(a).filter(o => o !== x && dist3(o.pos, x.pos) < 8).slice(0, 2);

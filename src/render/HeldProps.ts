@@ -114,7 +114,7 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
 export function heldVisible(heroId: string, side: 0 | 1, a: { has(s: string, t: number): boolean; anim: { castId?: string; castAt: number; attackAt: number; attackKind?: string } }, t: number) {
   if (heroId !== 'hayate' || side !== 1) return true;
   const cast = t - a.anim.castAt, atk = t - a.anim.attackAt;
-  return a.has('parry', t) || a.has('phased', t) && a.anim.castId === 'dragongate'
+  return a.has('dragonblade', t) || a.has('parry', t) || a.has('phased', t) && a.anim.castId === 'dragongate'
     || a.anim.castId === 'currentdash' && cast < 0.45 || a.anim.castId === 'dragongate' && cast < 1.4
     || (a.anim.attackKind === 'punch' || a.anim.attackKind === 'secondary' && a.has('phased', t)) && atk < 0.5;
 }

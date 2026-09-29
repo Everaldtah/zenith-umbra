@@ -60,6 +60,7 @@ export interface AnimState {
   attackAge: number; attackKind: string; castAge: number; castId: string; hitAge: number; landAge: number; jumpAge: number;
   stunned: boolean; charging: boolean; beam: boolean; barrier: boolean; rooted: boolean;
   parry?: boolean;          // a blade deflect held (Raijin's Thunder Parry, Hayate's Mirror Water)
+  climb?: boolean;          // running up a wall (the Koryu brothers)
   melee?: boolean;          // primary is a melee weapon (bigger swings, lunges)
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
   move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets' | 'reaping' | 'tide' (Tomoe's axe)
@@ -1186,6 +1187,12 @@ export class Animator {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
+      } else if (s.climb) {
+        // up the wall hand over hand: each hand reaches high on the wall in turn, pulls down past the shoulder
+        const Lr = l1 + l2, ph = s.time * 7 + (i === 0 ? 0 : Math.PI);
+        const reach = 0.5 + 0.5 * Math.sin(ph);
+        const hand = shoulder.clone().add(new THREE.Vector3(side * 0.28 * Lr, (-0.1 + 0.95 * reach) * Lr, 0.62 * Lr).applyQuaternion(Dc));
+        over = { hand, w: 1, pole: new THREE.Vector3(side * 0.8, -0.6, -0.2) };
       } else if (archer && this.drawW > 0.02) {
         // the draw: the bow arm straight out along the aim, the string hand pulled back to the cheek with the elbow
         // high behind; on the release the string hand snaps back and open (follow-through), the bow arm holds
