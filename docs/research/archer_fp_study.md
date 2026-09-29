@@ -57,5 +57,37 @@ spirit dragons spiral off the arrow. Storm Arrows (OW2 rapid fire), quick melee 
 | draw | 450-500 ms, the bow lifts ~0.11 | the bow doesn't lift | the bow doesn't lift | lift the bow ~0.11 screen (about 0.035 m at z 0.5) as it draws |
 | camera | no kick | - | - | keep the camera still; recoil in the viewmodel only |
 
-## 2. Freja: crossbow (auto bolts, Take Aim charge, reload, Bola)
-_in progress - next_
+## 2. Freja: crossbow (auto bolts, Take Aim charge, reload) - measured from the OW2 gameplay (1080p60)
+
+### What it looks like
+A two-handed crossbow in the **bottom-right quadrant**. The wide white-and-teal front limbs (with the wheel) run along
+the bottom from x ~0.38 to ~0.95 at y 0.82-0.93. The rail/barrel angles up-left, the muzzle near (0.60, 0.66-0.68)
+(right of and below the reticle). Hands are mostly hidden under the weapon. Nothing crosses the reticle except the
+teal bolt trail.
+
+| phase | t (ms) | weapon | hands | FOV / camera | notes |
+|---|---|---|---|---|---|
+| idle | - | limbs along the bottom (0.38 -> 0.95, y 0.82-0.93), muzzle (0.60, 0.67) | hidden under the stock | 1.0 | a slow breathe only |
+| auto-fire | each bolt | a small per-bolt kick, <= 0.02 of screen / ~2-3 deg pitch, recovered in 2-3 frames (60-100 ms) | - | no view kick | a teal trail from the muzzle to the reticle; the weapon hardly moves (a clean, stable read) |
+| **Take Aim** (hold) | 0 -> ~150 ms in, held | slides RIGHT and rotates so the glowing barrel runs down the line of sight; the front limbs drop mostly out of the bottom of frame | hidden | **zoom ~1.3-1.4x** (FOV narrows over ~150 ms) | the barrel glows cyan, stronger as it charges |
+| Take Aim release | +0 -> +170 ms | snaps back to the idle pose | - | zoom restores over ~150 ms; the view jumps a little on the charged shot | a bigger kick than auto-fire |
+| reload | 0 -> ~1400 ms | tilts UP ~200 ms to near-vertical on the right (the white limb upright at x 0.55-0.6, the muzzle upper-right ~(0.75, 0.25)), held ~1.0 s, back down ~170 ms | the gloved left hand works at the bottom centre-right (0.55-0.62, 0.90-1.0) during the hold | no view change | it covers the right-centre column (x 0.52-1.0) during the hold |
+Not captured cleanly (the trailer's first-person shots are cut too fast): Bola Shot. Treat it as one heavy shot:
+3-4 deg kick, ~150 ms recovery, the bola leaving the muzzle.
+
+## 3. What to take for our two archers (c1 decides)
+- **Both:** Hanzo's hold (section 1). Bow across the bottom at ~80 deg from vertical, fist at bottom-centre, arrow
+  down the view, upper ~60% clear, string hand out of frame at full draw, a 530 ms loose -> nocked cycle with the
+  over-the-shoulder quiver reach from the upper right.
+- **Yuzu's Hawk Eye (RMB zoom) = Freja's Take Aim:** hold -> zoom ~1.35x over 150 ms. The bow rolls a little more
+  upright and rises so the arrow lines up just under the reticle, the lower limb drops out of frame, and the nocked
+  arrowhead glows as it charges. Release -> snap back over 150-170 ms with a small view kick on the charged shot.
+- **Seiran's Scatter Current (snap draw) = Freja's auto-bolts feel / Hanzo's Storm Arrows:** short draws with small
+  per-shot kicks (<= 0.02 screen, 60-100 ms recovery), no idle between shots, the bow barely leaving the low band.
+- **Reload analogue:** Freja's big "tilt up, load, tilt back" is a crossbow thing. Our bows keep Hanzo's per-arrow
+  quiver reach; no magazine reload.
+
+## Sources (section 2)
+- Freja gameplay (no commentary), https://www.youtube.com/watch?v=45r158YILWI (the 0:40-3:40 section): idle 41.0 s,
+  auto-fire 42.9-43.6 s, Take Aim 42.1-43.1 s, reload 49.7-51.1 s (times relative to the downloaded section).
+- Freja New Hero Gameplay Trailer, https://www.youtube.com/watch?v=GM85xnXH6JQ: first-person cuts 56-61 s.
