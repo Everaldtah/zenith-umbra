@@ -25,7 +25,7 @@ import type { Mode, GameEvent } from '../game/World';
 import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
-import { FirstPersonArms } from '../render/FirstPerson';
+import { FirstPersonArms, FP_STYLE } from '../render/FirstPerson';
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
@@ -610,7 +610,8 @@ export class Game {
       if (a === me && this.view === 'first' && this.abilityCam < 0.08) v.group.visible = false;
     }
     // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
-    const wantFp = !!me && me.alive && this.view === 'first' && !me.sv.zoom && !this.bossCam && this.abilityCam < 0.08;
+    // (a scope hides the viewmodel; an archer's Hawk Eye aims down the arrow with the bow still in view - Freja's Take Aim)
+    const wantFp = !!me && me.alive && this.view === 'first' && (!me.sv.zoom || FP_STYLE[me.def.id]?.grip === 'bow') && !this.bossCam && this.abilityCam < 0.08;
     if (this.fp && (!me || this.fp.actor !== me || this.fp.defId !== me.def.id)) { this.fp.dispose(); this.fp = null; }
     if (wantFp && !this.fp) this.fp = new FirstPersonArms(me!, equippedSkin(me!.def.id));
     if (this.fp && wantFp) {

@@ -275,6 +275,8 @@ export class FirstPersonArms {
   private clips = new Map<string, THREE.AnimationClip>();
   private playing: { name: string; action: THREE.AnimationAction } | null = null;
   private walk = 0; private swayX = 0; private swayY = 0; private dip = 0; private dipV = 0;
+  /** an archer's aim-down (Yuzu's Hawk Eye), eased in ~150 ms like Freja's Take Aim */
+  private aimK = 0;
   private prev = { attack: 9, cast: 9, hit: 9, land: 9 };
   private swings = 0;
   private oneShot: { name: string; until: number } | null = null;
@@ -370,7 +372,11 @@ export class FirstPersonArms {
     // rig placement: eye at the origin, then the whole viewmodel offset by bob / sway
     // (a loaded GLB sits inside a scaled wrapper, lifted so its feet touch the ground)
     const k = this.view.scaleFit, off = an.model !== this.view.model ? an.model.position : new THREE.Vector3();
-    this.view.group.position.set(-(this.eye.x + off.x) * k - bob[0], -(this.eye.y + off.y) * k + bob[1], -(this.eye.z + off.z) * k);
+    // aiming down the arrow (Freja's Take Aim, docs/research/archer_fp_study.md s.2-3): the bow comes up and a little to
+    // the right so the arrow runs just under the reticle, rolled more upright; the limbs leave the frame
+    this.aimK += ((this.style.grip === 'bow' && a.sv.zoom ? 1 : 0) - this.aimK) * Math.min(1, dt * 14);
+    const ak = this.aimK * this.aimK * (3 - 2 * this.aimK);
+    this.view.group.position.set(-(this.eye.x + off.x) * k - bob[0] - 0.035 * ak, -(this.eye.y + off.y) * k + bob[1] + 0.035 * ak, -(this.eye.z + off.z) * k);
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
     this.view.inner.scale.setScalar(1);
     this.view.updateGuns(dt, t);
@@ -405,7 +411,7 @@ export class FirstPersonArms {
         if (an.prop) an.prop.visible = true;
         // held weapons (Raijin's katana, the bows, Hayate's nodachi) follow the clip's hands; bows canted in
         // (Hanzo's hold: the bow rolled nearly flat, upper limb to the right, tilted so that limb recedes into the view)
-        an.bowCant = this.style.grip === 'bow' ? -1.35 : 0; an.bowTilt = this.style.grip === 'bow' ? 0.35 : 0;
+        an.bowCant = this.style.grip === 'bow' ? -1.35 + 0.45 * this.aimK : 0; an.bowTilt = this.style.grip === 'bow' ? 0.35 - 0.15 * this.aimK : 0;
         an.placeGunsFromBones();
         driveFingers(this.view.fingers, a, t, dt, { fp: true });
         this.source = `clip:${want}`;
