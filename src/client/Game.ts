@@ -76,7 +76,9 @@ function colorBlindFilter(kind: string, strength: number): string {
 // physics rate: the desktop build simulates at 120 Hz (finer collisions, snappier input); the web build at 60 Hz
 const DT = 1 / (IS_DESKTOP ? 120 : 60);
 
-export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; skill?: number; }
+export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; skill?: number;
+  /** extra actors / controllers before the preload (the Hero Viewer's Ult Viewer: its dummies and routine) */
+  setup?: (m: Match) => void; }
 
 /** modes whose camera is fixed (Overwatch 2 style): Normal matches in first person, Stadium in third person */
 const FIXED_VIEW: Partial<Record<string, 'first' | 'third'>> = { skirmish: 'first', stadium: 'third', quickplay: 'first', competitive: 'first', practice: 'first' };
@@ -118,6 +120,8 @@ export class Game {
   timeScale = 1;
   labMapIdx = 0;
   galleryAngle = 0;
+  /** drives the camera on the gallery bench instead of the slow orbit (the Ult Viewer: UltShowcase.camera) */
+  showcaseCam: ((cam: THREE.PerspectiveCamera, dt: number) => void) | null = null;
   framesRendered = 0;
   envTex: THREE.Texture | null = null;
   bossCam: { actor: Actor; until: number; t0: number } | null = null;
@@ -281,6 +285,7 @@ export class Game {
         ? createCampaign(o.map, o.squad ?? [{ hero: o.hero ?? 'tenkai', netId: 'local' }], this.settings.difficulty)
         : createMatch(o.map, o.mode, o.hero, o.skill ?? this.settings.difficulty);
       if (o.net?.role === 'host') this.hostSync = new HostSync(this.match.world, o.net.coop);
+      o.setup?.(this.match);
     }
     this.bossCam = null;
     const w = this.match.world;
@@ -755,7 +760,8 @@ export class Game {
       }
       const f = new THREE.Vector3(Math.sin(this.camYaw) * Math.cos(this.camPitch), Math.sin(this.camPitch), Math.cos(this.camYaw) * Math.cos(this.camPitch));
       cam.lookAt(cam.position.clone().add(f));
-    } else if (this.match?.world.mode === 'gallery') {
+    } else if (this.match?.world.mode === 'gallery' && this.showcaseCam) this.showcaseCam(cam, dt);
+    else if (this.match?.world.mode === 'gallery') {
       // animation bench: slow orbit, close enough to read the rig
       const a = this.match.world.actors[0], t = this.match.world.time * 0.35 + (this.galleryAngle ?? 0);
       const r = Math.max(3.2, a.height * 2.3);

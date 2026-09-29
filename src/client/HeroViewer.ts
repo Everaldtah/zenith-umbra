@@ -23,6 +23,9 @@ const EXTRA: HeroDef[] = [
   ...Object.values(ENEMIES).map(e => ({ ...e, lore: `${e.title}: one of the Star-Forger's mass-produced robots in Operation Starfall.` })),
 ];
 const ALL: Record<string, HeroDef> = Object.fromEntries([...HEROES, ...EXTRA].map(h => [h.id, h]));
+/** one WebGL context for every visit: a context per visit runs into the browser's cap (~16), which then drops the
+ *  OLDEST context - the game's own renderer, so every match after that draws black (Hero Viewer <-> Ult Viewer) */
+let SHARED: THREE.WebGLRenderer | null = null;
 type AnimMode = 'idle' | 'walk' | 'run' | 'strafe' | 'back' | 'attack' | 'alt' | 'melee' | 'shift' | 'e' | 'cast' | 'ult' | 'jump' | 'fly' | 'hit' | 'swoop' | 'descend' | 'superjump';
 
 export class HeroViewer {
@@ -39,10 +42,13 @@ export class HeroViewer {
   private drag: { x: number; y: number } | null = null;
   private tmpV = new THREE.Vector3();
   private stage: HTMLElement;
+  private listeners = new AbortController();
+  private disposed = false;
   // framing box of the posed model (model-local): drones / colossi are much wider than their nominal height
   private fit: { model: THREE.Object3D | null; minY: number; maxY: number; rad: number; age: number } = { model: null, minY: 0, maxY: 1, rad: 0.5, age: 0 };
 
-  constructor(host: HTMLElement, private onClose: () => void) {
+  /** onUlt: open the Ult Viewer for a hero (Menu.ultShowcase - the ult played for real, full edition) */
+  constructor(host: HTMLElement, private onClose: () => void, private onUlt?: (id: string) => void) {
     this.root = document.createElement('div');
     this.root.className = 'viewer';
     this.root.innerHTML = `
@@ -54,10 +60,10 @@ export class HeroViewer {
       <div class="vstage"><div class="vname"></div>
         <div class="vanims">${(['idle', 'walk', 'run', 'strafe', 'back', 'attack', 'alt', 'melee', 'shift', 'e', 'ult', 'jump', 'fly', 'swoop', 'descend', 'superjump', 'hit'] as AnimMode[]).map(m => `<button data-a="${m}">${m === 'alt' ? 'ALT' : m === 'melee' ? 'MELEE (C)' : m === 'shift' ? 'SHIFT' : m === 'e' ? 'E' : m.toUpperCase()}</button>`).join('')}<button class="spin">⟳ AUTO</button></div>
         <div class="vhint">Drag to rotate · wheel to zoom · double-click to reset</div><div class="vhint vclip" style="bottom:auto;top:12px"></div></div>
-      <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="vback">BACK</button></div>`;
+      <div class="vside"><div class="vskins"></div><div class="vinfo"></div><button class="primary vult" style="display:none">▶ ULT VIEWER</button><button class="vback">BACK</button></div>`;
     host.append(this.root);
     this.stage = this.root.querySelector('.vstage') as HTMLElement;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    this.renderer = SHARED ??= new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping; this.renderer.toneMappingExposure = 0.95;
@@ -65,8 +71,8 @@ export class HeroViewer {
     this.stage.prepend(this.renderer.domElement);
     this.buildStudio();
     this.bind();
-    Promise.all([loadManifest(), animLibrary()]).then(() => this.select(this.id));
-    const loop = () => { this.raf = requestAnimationFrame(loop); this.frame(); };
+    Promise.all([loadManifest(), animLibrary()]).then(() => { if (!this.disposed) this.select(this.id); });
+    const loop = () => { if (this.disposed) return; this.raf = requestAnimationFrame(loop); this.frame(); };
     loop();
   }
 
@@ -91,20 +97,22 @@ export class HeroViewer {
   }
 
   private bind() {
-    const c = this.renderer.domElement;
-    c.addEventListener('pointerdown', e => { this.drag = { x: e.clientX, y: e.clientY }; this.auto = false; c.setPointerCapture(e.pointerId); });
+    // (the canvas is shared across visits: its listeners go when this viewer does)
+    const c = this.renderer.domElement, signal = this.listeners.signal;
+    c.addEventListener('pointerdown', e => { this.drag = { x: e.clientX, y: e.clientY }; this.auto = false; c.setPointerCapture(e.pointerId); }, { signal });
     c.addEventListener('pointermove', e => {
       if (!this.drag) return;
       this.yaw -= (e.clientX - this.drag.x) * 0.01; this.tilt = Math.max(-0.25, Math.min(0.9, this.tilt + (e.clientY - this.drag.y) * 0.005));
       this.drag = { x: e.clientX, y: e.clientY };
-    });
-    c.addEventListener('pointerup', () => { this.drag = null; });
-    c.addEventListener('wheel', e => { e.preventDefault(); this.zoom = Math.max(0.3, Math.min(2.2, this.zoom * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false });
-    c.addEventListener('dblclick', () => { this.yaw = 0.5; this.tilt = 0.12; this.zoom = 1; this.auto = true; });
+    }, { signal });
+    c.addEventListener('pointerup', () => { this.drag = null; }, { signal });
+    c.addEventListener('wheel', e => { e.preventDefault(); this.zoom = Math.max(0.3, Math.min(2.2, this.zoom * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false, signal });
+    c.addEventListener('dblclick', () => { this.yaw = 0.5; this.tilt = 0.12; this.zoom = 1; this.auto = true; }, { signal });
     this.root.querySelectorAll<HTMLElement>('.vchip').forEach(b => b.onclick = () => { sfx.play('ui_click'); this.select(b.dataset.h!); });
     this.root.querySelectorAll<HTMLElement>('[data-a]').forEach(b => b.onclick = () => { this.setMode(b.dataset.a as AnimMode); });
     (this.root.querySelector('.spin') as HTMLElement).onclick = () => { this.auto = !this.auto; };
     (this.root.querySelector('.vback') as HTMLElement).onclick = () => this.close();
+    (this.root.querySelector('.vult') as HTMLElement).onclick = () => { sfx.play('ui_click'); this.onUlt?.(this.id); };
   }
 
   private setMode(m: AnimMode) {
@@ -127,6 +135,8 @@ export class HeroViewer {
     (this.root.querySelector('.vring') as HTMLElement | null);
     const ring = this.scene.getObjectByName('ring') as THREE.Mesh; ring.scale.setScalar(Math.max(1, def.radius * 1.6));
     this.renderSkins(); this.renderInfo(def);
+    // the Ult Viewer plays the ten-plus playable heroes' ultimates (not pilots / campaign models)
+    (this.root.querySelector('.vult') as HTMLElement).style.display = this.onUlt && HERO[id] ? '' : 'none';
     this.setMode('idle');
   }
 
@@ -276,10 +286,22 @@ export class HeroViewer {
   }
 
   close() {
-    cancelAnimationFrame(this.raf);
-    this.view?.dispose();
-    this.renderer.dispose();
-    this.root.remove();
+    this.dispose();
     this.onClose();
+  }
+
+  /** tear down without going back to the menu (the Ult Viewer takes over the screen) */
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    cancelAnimationFrame(this.raf);
+    this.listeners.abort();
+    if (this.view) { this.scene.remove(this.view.group); this.view.dispose(); this.view = null; }
+    // the renderer (and its context) stays for the next visit (SHARED); this visit's studio goes
+    this.scene.environment?.dispose();
+    this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } });
+    this.renderer.renderLists.dispose();
+    this.renderer.domElement.remove();
+    this.root.remove();
   }
 }

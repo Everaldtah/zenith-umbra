@@ -13,6 +13,7 @@ import { LEVELS, LEVEL, BOSSES, CAMPAIGN_HEROES } from '../campaign/data';
 import { playStory } from '../campaign/Cinematic';
 import { Coop } from '../net/Coop';
 import { HeroViewer } from './HeroViewer';
+import { startUltShowcase } from './UltShowcase';
 
 const h = (html: string) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild as HTMLElement; };
 const HEROES = rosterFor(FULL);
@@ -323,9 +324,21 @@ export class Menu {
   viewer(id?: string) {
     this.close();
     this.root.style.display = '';
-    const v = new HeroViewer(this.root, () => this.title());
+    // one viewer at a time (they share one WebGL canvas: a stale one would keep drawing into it)
+    this.heroViewer?.dispose();
+    // the Ult Viewer (full edition): the hero's ultimate played for real on the Proving Grounds
+    const v: HeroViewer = this.heroViewer = new HeroViewer(this.root, () => this.title(), FULL ? h => { v.dispose(); this.ultShowcase(h); } : undefined);
     if (id) v.select(id);
     (window as any).__zu.viewer = v;
+  }
+  private heroViewer: HeroViewer | null = null;
+
+  async ultShowcase(id: string) {
+    const h = HERO[id];
+    this.show(`<div class="loading"><div class="bg" style="background-image:url(${BASE}img/key_${id}.webp)"></div><h2>${h.ult.name}</h2><p>${h.name} · ULT VIEWER</p><div class="spin"></div>
+      <p class="tips">R replay · T slow-mo · drag to orbit · wheel to zoom · Esc back to the Hero Viewer</p></div>`);
+    await startUltShowcase(this.game, id, { back: () => this.viewer(id), pick: h2 => this.ultShowcase(h2) });
+    setTimeout(() => { if (this.game.running) this.close(); }, 600);
   }
 
   // ================================================================ campaign
