@@ -28,6 +28,7 @@ const TIMES = {
   jab: [0, 0.03, 0.06, 0.1, 0.14, 0.25, 0.35, 0.45],
 };
 fs.mkdirSync('tests/e2e/shots/strip', { recursive: true });
+fs.mkdirSync('tests/e2e/shots/fp', { recursive: true });            // (a fresh checkout has no shots folders)
 for (const what of whatArg.split(',')) {
   const shots = [];
   for (const [i, T] of TIMES[what].entries()) {
