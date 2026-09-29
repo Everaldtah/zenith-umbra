@@ -91,6 +91,9 @@ void main() {
   gl_FragColor = vec4(body * bodyA * k + rim * k, bodyA * k);   // premultiplied: dst * (1 - a) + body + rim
 }`;
 
+/** the summoning seal's parts, shared by every cast: outer, middle and inner rings and one petal */
+const SIGIL_RINGS = [new THREE.RingGeometry(2.3, 2.5, 64), new THREE.RingGeometry(1.55, 1.65, 64), new THREE.RingGeometry(0.5, 0.62, 32)];
+const SIGIL_PETAL = new THREE.PlaneGeometry(0.16, 1.1);
 const WHITE = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); WHITE.needsUpdate = true;
 const V = () => new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0), XAX = new THREE.Vector3(1, 0, 0);
@@ -185,19 +188,19 @@ export class SpiritDragons {
 
   /** Dragonstrike's summoning sigil: concentric rings and a spinning eight-petal seal facing down the aim */
   private sigil(o: V3, d: THREE.Vector3, now: number, c: THREE.Color, size = 1) {
-    const g = new THREE.Group(), mats: THREE.MeshBasicMaterial[] = [];
-    const mk = (geo: THREE.BufferGeometry) => {
-      const m = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
-      mats.push(m); const me = new THREE.Mesh(geo, m); g.add(me); return me;
-    };
-    mk(new THREE.RingGeometry(2.3, 2.5, 64)); mk(new THREE.RingGeometry(1.55, 1.65, 64)); mk(new THREE.RingGeometry(0.5, 0.62, 32));
+    // one material for the whole seal (every part fades together) on shared geometry, never frustum-culled: the match
+    // preloader's warm-up cast happens out of view, and a culled seal would compile its program on the first real ult
+    const g = new THREE.Group();
+    const m = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+    const mk = (geo: THREE.BufferGeometry) => { const me = new THREE.Mesh(geo, m); me.frustumCulled = false; g.add(me); return me; };
+    for (const ring of SIGIL_RINGS) mk(ring);
     for (let k = 0; k < 8; k++) {
-      const petal = mk(new THREE.PlaneGeometry(0.16, 1.1)); petal.position.set(Math.cos(k * Math.PI / 4) * 1.95, Math.sin(k * Math.PI / 4) * 1.95, 0);
+      const petal = mk(SIGIL_PETAL); petal.position.set(Math.cos(k * Math.PI / 4) * 1.95, Math.sin(k * Math.PI / 4) * 1.95, 0);
       petal.rotation.z = k * Math.PI / 4 + Math.PI / 2;
     }
     g.scale.setScalar(size); g.userData.size = size;
     g.position.set(o.x, o.y, o.z); g.lookAt(o.x + d.x, o.y + d.y, o.z + d.z);
-    this.group.add(g); this.sigils.push({ obj: g, born: now, dur: 1.5, mats });
+    this.group.add(g); this.sigils.push({ obj: g, born: now, dur: 1.5, mats: [m] });
   }
 
   // ------------------------------------------------------------------ per frame
@@ -207,7 +210,7 @@ export class SpiritDragons {
       sg.obj.scale.setScalar((sg.obj.userData.size ?? 1) * (0.3 + 0.7 * Math.min(1, k * 5)));
       sg.obj.children.forEach((c, i) => { c.rotation.z += (i % 2 ? -1 : 1) * 0.02; });
       sg.mats.forEach(m => { m.opacity = Math.min(1, k * 6) * (1 - Math.max(0, (k - 0.55) / 0.45)); });
-      if (k >= 1) { this.group.remove(sg.obj); sg.obj.traverse(o => (o as THREE.Mesh).geometry?.dispose()); sg.mats.forEach(m => m.dispose()); }
+      if (k >= 1) { this.group.remove(sg.obj); sg.mats.forEach(m => m.dispose()); }   // geometry is shared (SIGIL_*)
     }
     this.sigils = this.sigils.filter(sg => now - sg.born < sg.dur);
     this.swims = this.swims.filter(s => {
