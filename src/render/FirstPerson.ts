@@ -56,7 +56,7 @@ export const FP_STYLE: Record<string, Style> = {
   // mech claws half a metre across: out in the bottom corners and well forward (as Gantetsu's guns), the near arm cut away
   gorgoth: { grip: 'shotgun', R: [0.34, -0.34, 0.56], L: [-0.34, -0.34, 0.56], recoil: 0.09, clip: 0.25, gunScale: 0.8 },
   // hip-held twin chainguns in the bottom corners, angled in on the reticle, the rear of each gun out of view
-  gantetsu: { grip: 'dual', R: [0.4, -0.28, 0.56], L: [-0.4, -0.28, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.8 },
+  gantetsu: { grip: 'dual', R: [0.4, -0.28, 0.56], L: [-0.4, -0.28, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.7 },
   hibiki: { grip: 'pistol', R: [0.2, -0.2, 0.44], L: [-0.18, -0.21, 0.4], recoil: 0.05 },
   // the scattergun one-handed on the right, the Crescent Fang held low in the left fist
   tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.21, -0.19, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
