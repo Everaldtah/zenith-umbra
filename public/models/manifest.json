@@ -1317,6 +1317,9 @@
   },
   "prop_chain_link": {
    "height": 1
+  },
+  "prop_hex_puppet": {
+   "height": 1
   }
  },
  "textures": [
