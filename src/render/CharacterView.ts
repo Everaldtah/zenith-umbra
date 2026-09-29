@@ -8,7 +8,7 @@ import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
-import { HELD, buildHeld, heldVisible, ARROW_GONE } from './HeldProps';
+import { HELD, buildHeld, heldVisible, ARROW_GONE, CARD_GONE } from './HeldProps';
 import { Fingers, driveFingers } from './Fingers';
 import { Ragdoll } from './Ragdoll';
 import type { Level } from '../engine/Physics';
@@ -224,11 +224,11 @@ export class CharacterView {
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
-  /** close-up views (the first-person viewmodel, the Hero Viewer) load the high-detail model */
-  readonly hd: boolean;
+  /** close-up views load the high-detail model; the first-person viewmodel its own hand model ('fp': arms only) */
+  readonly hd: boolean | 'fp';
 
-  constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic', opts: { hd?: boolean } = {}) {
-    this.hd = !!opts.hd;
+  constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic', opts: { hd?: boolean | 'fp' } = {}) {
+    this.hd = opts.hd ?? false;
     this.defId = actor.def.id;
     this.rimColor = new THREE.Color(actor.team === viewerTeam ? UI_COLORS.ally : UI_COLORS.enemy);
     this.look = lookUniforms(this.rimColor);
@@ -355,6 +355,12 @@ export class CharacterView {
           hide[i] = gone || (!this.noSmear && this.anim.drawW < 0.45);
           continue;
         }
+        if (g.userData.card) {
+          // the talisman leaves the fingers on each throw; the next one is drawn a beat later
+          const since = time - a.anim.attackAt, thrown = a.anim.attackKind === 'primary' || a.anim.attackKind === 'secondary';
+          hide[i] = thrown && since > CARD_GONE[0] && since < CARD_GONE[1];
+          continue;
+        }
         const vis = heldVisible(a.def.id, i as 0 | 1, a, time);
         // a hand with a stand-in (Hayate: the shuriken while the nodachi is sheathed) never goes empty
         if (g.userData.swap) { (g.userData.body as THREE.Object3D).visible = vis; (g.userData.swap as THREE.Object3D).visible = !vis; }
@@ -453,6 +459,8 @@ export class CharacterView {
     this.loadedModel = mid;
     // normalise: feet on the ground, height = hero height (the rig script already faces +Z)
     const box = new THREE.Box3().setFromObject(m);
+    const fb = m.userData.fullBody as { minY: number; maxY: number } | undefined;      // an arms-only hand model
+    if (fb) { box.min.y = fb.minY; box.max.y = fb.maxY; }
     const h = box.max.y - box.min.y || 1;
     const wrap = new THREE.Group();
     wrap.add(m);

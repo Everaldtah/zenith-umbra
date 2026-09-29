@@ -285,7 +285,7 @@ export class FirstPersonArms {
   source = '';
 
   constructor(public actor: Actor, skinId = 'classic') {
-    this.view = new CharacterView(actor, actor.team, skinId, { hd: true });      // the high-detail hands (desktop)
+    this.view = new CharacterView(actor, actor.team, skinId, { hd: 'fp' });      // the hero's first-person hand model (desktop)
     this.view.noSmear = true;
     this.style = FP_STYLE[actor.def.id] ?? DEFAULT;
     this.view.anim.useClips(null);                 // body clips don't apply to a viewmodel

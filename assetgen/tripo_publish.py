@@ -29,6 +29,9 @@ GLOW_EYES = {'hex', 'kagemaru'}
 # first-person model
 HD_TRIS = 90000
 HD_OUT = HERE / 'out' / 'models_hd'
+# first-person hand models: the arms + hands of the full-resolution HD generation (fingers re-skinned per joint), capped
+FP_TRIS = 80000
+FP_OUT = HERE / 'out' / 'models_fp'
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
@@ -43,21 +46,22 @@ TRIPO = {
 }
 
 
-def rig(aid, hq=False):
+def rig(aid, hq=False, fp=False):
     h, flags = TRIPO[aid]
     src = SRC / f'{aid}_rig.glb'
     if not src.exists(): print('missing', src); return None
     hd = SRC / f'{aid}_hd.glb'
-    out = RIGGED / f'{aid}_hq.glb' if hq else RIGGED / f'{aid}.glb'
+    out = RIGGED / f'{aid}_fp.glb' if fp else RIGGED / f'{aid}_hq.glb' if hq else RIGGED / f'{aid}.glb'
     cmd = ['blender', '-b', '-P', str(HERE / 'blender' / 'tripo_rig.py'), '--', '--glb', str(src), '--out', str(out), '--height', str(h), *flags]
-    if hq: cmd += ['--hd', str(hd), '--tris', str(HD_TRIS), '--hd-late']
+    if fp: cmd += ['--hd', str(hd), '--tris', str(FP_TRIS), '--hd-late', '--fp-arms']
+    elif hq: cmd += ['--hd', str(hd), '--tris', str(HD_TRIS), '--hd-late']
     elif hd.exists() and '--tris' in flags: cmd += ['--hd', str(hd)]
     elif '--tris' in flags: cmd = [c for i, c in enumerate(cmd) if not (c == '--tris' or (i and cmd[i - 1] == '--tris'))]
     r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
     line = next((l for l in r.stdout.splitlines() if l.startswith('RIG_DONE')), None)
     if not line: print(aid, 'HQ ' if hq else '', 'RIG FAILED\n', r.stdout[-1500:], r.stderr[-1500:]); return None
     info = json.loads(line[9:])
-    if hq: print(aid, 'HQ', {k: info.get(k) for k in ('hd_fit', 'hd_tris', 'seam_copies_hd', 'unweighted_hd', 'chains', 'deform_max')}); return info
+    if hq or fp: print(aid, 'FP' if fp else 'HQ', {k: info.get(k) for k in ('hd_fit', 'hd_tris', 'fp_full_tris', 'tris', 'fp_hand_L', 'fp_hand_R', 'unweighted_hd', 'deform_max')}); return info
     if '--mech' not in flags and (aid not in NO_BLINK or aid in GLOW_EYES):
         # the painted eyes, for the runtime blink (blender/eyes.py: front render -> MediaPipe face landmarks -> raycast)
         e = subprocess.run(['blender', '-b', '-P', str(HERE / 'blender' / 'eyes.py'), '--', '--glb', str(RIGGED / f'{aid}.glb'), '--python', sys.executable],
@@ -94,12 +98,17 @@ def main():
             if (skip and (RIGGED / f'{aid}_hq.glb').exists()) or rig(aid, hq=True):
                 HD_OUT.mkdir(parents=True, exist_ok=True)
                 hd = gltf(RIGGED / f'{aid}_hq.glb', HD_OUT / f'{aid}.glb', 4096)
+        fp_ok = False
+        if hero and '--mech' not in TRIPO[aid][1] and (SRC / f'{aid}_hd.glb').exists() and '--no-fp' not in sys.argv:
+            if (skip and (RIGGED / f'{aid}_fp.glb').exists() and '--fp' not in sys.argv) or rig(aid, fp=True):
+                FP_OUT.mkdir(parents=True, exist_ok=True)
+                fp_ok = gltf(RIGGED / f'{aid}_fp.glb', FP_OUT / f'{aid}.glb', 4096)
         ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(src, HQ / f'{aid}.glb', 4096 if hero else 2048)
         if ok:
             eyes = info.get('eyes') or info.get('glowEyes')
             key = 'glowEyes' if aid in GLOW_EYES else 'eyes'
             manifest['models'][aid] = {'height': TRIPO[aid][0], 'tris': info.get('tris', 0), 'bones': ['humanoid'], 'source': 'tripo',
-                                       'colliders': info.get('colliders', {}), **({key: eyes} if eyes else {}), **({'hd': True} if hd else {})}
+                                       'colliders': info.get('colliders', {}), **({key: eyes} if eyes else {}), **({'hd': True} if hd else {}), **({'fpArms': True} if fp_ok else {})}
             print(f"published {aid}: {(PUB / f'{aid}.glb').stat().st_size / 1e6:.2f} MB web, {(HQ / f'{aid}.glb').stat().st_size / 1e6:.2f} MB desktop")
     report_p.write_text(json.dumps(report, indent=1))
     manifest_p.write_text(json.dumps(manifest, indent=1))

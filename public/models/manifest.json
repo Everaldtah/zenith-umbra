@@ -140,7 +140,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "nocturne": {
    "height": 1.75,
@@ -214,7 +215,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "kaien": {
    "height": 1.8,
@@ -288,7 +290,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "raijin": {
    "height": 1.8,
@@ -362,7 +365,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "yuzu": {
    "height": 1.62,
@@ -436,7 +440,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "hex": {
    "height": 1.95,
@@ -510,7 +515,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "kagemaru": {
    "height": 1.78,
@@ -584,7 +590,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "enra": {
    "height": 2.05,
@@ -607,7 +614,8 @@
     "shin_L": 0.10373,
     "shin_R": 0.08257
    },
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "haruto": {
    "height": 1.75,
@@ -681,7 +689,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "vorn": {
    "height": 1.85,
@@ -914,7 +923,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "hibiki": {
    "height": 1.82,
@@ -938,7 +948,8 @@
     "shin_L": 0.05475,
     "shin_R": 0.05471
    },
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "tomoe": {
    "height": 2.0,
@@ -1012,7 +1023,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "hayate": {
    "height": 1.78,
@@ -1036,7 +1048,8 @@
     "shin_L": 0.058,
     "shin_R": 0.06038
    },
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "seiran": {
    "height": 1.84,
@@ -1110,7 +1123,8 @@
      ]
     }
    ],
-   "hd": true
+   "hd": true,
+   "fpArms": true
   },
   "hibiki_armor": {
    "height": 1.82,
@@ -1134,7 +1148,8 @@
     "shin_L": 0.0594,
     "shin_R": 0.05801
    },
-   "hd": true
+   "hd": true,
+   "fpArms": true
   }
  },
  "props": {

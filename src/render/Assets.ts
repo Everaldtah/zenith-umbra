@@ -53,18 +53,26 @@ const HD_OFF = DEV && typeof location !== 'undefined' && new URLSearchParams(loc
 /** the desktop edition's high-detail heroes (manifest `hd`): the Windows app ships them in models/hd, the dev server reads
  * them where the publisher writes them */
 const hdUrl = (id: string) => DEV ? `${BASE}assetgen/out/models_hd/${id}.glb` : `${BASE}models/hd/${id}.glb`;
+/** the first-person hand models (manifest `fpArms`): arms + hands only, from the full-resolution generation */
+const fpUrl = (id: string) => DEV ? `${BASE}assetgen/out/models_fp/${id}.glb` : `${BASE}models/fparms/${id}.glb`;
 
 /**
  * A fresh, independently animatable copy of a hero model (skinned meshes rebound), or null. `hd`: the high-detail mesh
  * for close-ups - the first-person viewmodel, the Hero Viewer (desktop edition; falls back to the match model)
  */
-export async function heroModel(id: string, hd = false): Promise<THREE.Object3D | null> {
+export async function heroModel(id: string, hd: boolean | 'fp' = false): Promise<THREE.Object3D | null> {
   await loadManifest();
   if (!hasModel(id)) return null;
-  const wantHd = FULL && !HD_OFF && (hd || HD_ALL) && !!(manifest?.models[id] as { hd?: boolean } | undefined)?.hd;
-  const g = (wantHd ? await load(hdUrl(id)) : null) ?? await load(`${BASE}models/${id}.glb`);
+  const info = manifest?.models[id] as (ModelInfo & { hd?: boolean; fpArms?: boolean }) | undefined;
+  const wantFp = FULL && !HD_OFF && hd === 'fp' && !!info?.fpArms;
+  const wantHd = FULL && !HD_OFF && (!!hd || HD_ALL) && !!info?.hd;
+  const gFp = wantFp ? await load(fpUrl(id)) : null;
+  const g = gFp ?? (wantHd ? await load(hdUrl(id)) : null) ?? await load(`${BASE}models/${id}.glb`);
   if (!g) return null;
   const c = SkeletonUtils.clone(g.scene);
+  // an arms-only hand model: its bounds are the arms', not the body's - the view sizes it by the full body instead
+  // (every rigged hero spans y 0 .. its manifest height in model units)
+  if (gFp) c.userData.fullBody = { minY: 0, maxY: info?.height ?? 1.8 };
   c.traverse(o => {
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = false; m.frustumCulled = false; }

@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { hasProp, loadManifest, propModel } from './Assets';
 import { fitProp } from './TomoeProps';
 
-type Kind = 'blade' | 'bow' | 'arrow';
+type Kind = 'blade' | 'bow' | 'arrow' | 'card';
 interface Item { id: string; kind: Kind; size: number; color: string; glow: string; pitch?: number }
 export interface HeldSpec { L?: Item; R?: Item }
 
@@ -20,7 +20,13 @@ export const HELD: Record<string, HeldSpec> = {
   // one drawn from the quiver over the right shoulder - Hanzo's cycle)
   yuzu: { L: { id: 'prop_yuzu_bow', kind: 'bow', size: 0.72, color: '#f2c14e', glow: '#ffd76a' }, R: { id: 'prop_yuzu_arrow', kind: 'arrow', size: 0.4, color: '#f7e2a8', glow: '#ffb347' } },
   seiran: { L: { id: 'prop_seiran_bow', kind: 'bow', size: 0.86, color: '#1d2433', glow: '#6fa8ff' }, R: { id: 'prop_seiran_arrow', kind: 'arrow', size: 0.42, color: '#dfe6f0', glow: '#6fa8ff' } },
+  // Kaien's ofuda: a paper talisman pinched between the index and middle fingers of the throwing hand (gone for a beat
+  // after each throw while the next one is drawn - CARD_GONE)
+  kaien: { R: { id: 'prop_kaien_talisman', kind: 'card', size: 0.12, color: '#f2e6c4', glow: '#ffcf5a' } },
 };
+
+/** after a throw the talisman hand is empty until the next card is drawn from the sleeve (seconds after the throw) */
+export const CARD_GONE: [number, number] = [0.04, 0.24];
 
 export interface HeldProp { group: THREE.Group; kind: Kind }
 
@@ -103,6 +109,15 @@ function buildArrow(L: number, it: Item, body: THREE.Group) {
   }
 }
 
+/** a paper talisman along +Z past the fingertips, its face up (+Y): cream paper, a red seal, a glowing border */
+function buildCard(L: number, it: Item, body: THREE.Group) {
+  const len = it.size * L, w = len * 0.36;
+  const paper = new THREE.MeshStandardMaterial({ color: it.color, roughness: 0.85, side: THREE.DoubleSide, emissive: new THREE.Color(it.glow), emissiveIntensity: 0.12 });
+  const ink = new THREE.MeshStandardMaterial({ color: '#b3202a', roughness: 0.6, side: THREE.DoubleSide });
+  put(body, new THREE.BoxGeometry(w, 0.0015 * L, len), paper, 0, 0, len * 0.5);
+  put(body, new THREE.BoxGeometry(w * 0.55, 0.0018 * L, len * 0.55), ink, 0, 0, len * 0.55);
+}
+
 export function buildHeld(modelHeight: number, it: Item): HeldProp {
   const g = new THREE.Group(), body = new THREE.Group(), L = modelHeight;
   g.add(body);
@@ -110,6 +125,7 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
   if (it.id === 'prop_hayate_nodachi') { const sh = buildShuriken(L); g.add(sh); g.userData.swap = sh; }
   if (it.kind === 'blade') { buildBlade(L, it, body); body.rotation.x = it.pitch ?? -0.5; }
   else if (it.kind === 'arrow') { buildArrow(L, it, body); g.userData.arrow = true; return { group: g, kind: it.kind }; }
+  else if (it.kind === 'card') { buildCard(L, it, body); g.userData.card = true; }
   else buildBow(L, it, body);
   void (async () => {
     await loadManifest();
@@ -122,6 +138,8 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
     const fitted = fitProp(m, 'blade', len);
     const wrap = new THREE.Group(); wrap.add(fitted);
     if (it.kind === 'blade') fitted.position.z += len * 0.38;
+    // the card: fitted like a blade (length on +Z, width on +Y), rolled flat so its face is up, out past the fingertips
+    else if (it.kind === 'card') { fitted.position.z += len * 0.5; wrap.rotation.z = Math.PI / 2; }
     else wrap.rotation.x = -Math.PI / 2;
     body.clear(); body.position.set(0, 0, 0);
     body.add(wrap);

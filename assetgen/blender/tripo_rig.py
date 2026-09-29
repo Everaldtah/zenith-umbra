@@ -25,6 +25,10 @@ ap.add_argument("--hd", default=""); ap.add_argument("--tris", type=int, default
 # by nearest surface - for humanoids, whose HD generation is many loose shells (hair strands, cloth layers) that would
 # each be classified on their own and tear apart; --hd alone swaps it in first (mechs: rigid plates, no chains)
 ap.add_argument("--hd-late", action="store_true")
+# --fp-arms (with --hd --hd-late): the first-person hand model - only the arms and hands of the FULL-resolution HD
+# generation (no whole-body decimation: every finger keeps the generation's detail), each finger joint re-skinned from
+# the finger bones' geometry, then capped at --tris
+ap.add_argument("--fp-arms", action="store_true")
 ap.add_argument("--wings", action="store_true"); ap.add_argument("--chains", action="store_true"); ap.add_argument("--mech", action="store_true")
 # --chains: skirt panels + cape / coat tails; --hair: long hanging hair (colour-matched to the scalp, grown from the head
 # so torso armour and robes never join it); --crown: hair piled on the head (topknot, buns, dreadlocks) as an upright
@@ -237,11 +241,41 @@ def load_hd(ref_co):
     hd.data.transform(Matrix.Translation(Vector(off)) @ Matrix.Scale(s, 4))
     LOG["hd_fit"] = {"scale": round(s, 4), "offset": [round(float(x), 4) for x in off]}
     ntri = sum(len(p.vertices) - 2 for p in hd.data.polygons)
-    if a.tris and ntri > a.tris:
-        dm = hd.modifiers.new("Dec", "DECIMATE"); dm.ratio = a.tris / ntri; dm.use_collapse_triangulate = True
-        bpy.context.view_layer.objects.active = hd; bpy.ops.object.modifier_apply(modifier=dm.name)
+    if a.tris and ntri > a.tris and not a.fp_arms: decimate(hd, a.tris)
     LOG["hd_tris"] = sum(len(p.vertices) - 2 for p in hd.data.polygons)
     return hd
+
+
+def decimate(obj, tris):
+    ntri = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+    if ntri <= tris: return
+    dm = obj.modifiers.new("Dec", "DECIMATE"); dm.ratio = tris / ntri; dm.use_collapse_triangulate = True
+    bpy.context.view_layer.objects.active = obj; bpy.ops.object.modifier_apply(modifier=dm.name)
+
+
+def reskin_hands(W):
+    """hand + finger weights rebuilt from the bones: each vertex the hand owns goes to its two nearest joints (the hand
+    bone or a finger segment), falling off with distance - clean finger separation whatever the retopo's hands were
+    (some were mitten-like, and the nearest-surface transfer smeared a finger's weight onto its neighbours). The
+    forearm's share at the wrist is kept."""
+    import re
+    sig = H * 0.006
+    for S in ("L", "R"):
+        names = [f"hand_{S}"] + [n for n in names_out if re.match(rf"^(thumb|index|middle|ring|pinky)\d_{S}$", n)]
+        names = [n for n in names if n in bones and n in oi and (bones[n][1] - bones[n][0]).length > 1e-5]
+        if len(names) < 6: continue
+        idx = [oi[n] for n in names]
+        own = W[:, idx].sum(1)
+        region = own > 0.5
+        if not region.any(): continue
+        D = np.stack([seg_dist(bones[n][0], bones[n][1]) for n in names], 1)[region]
+        G = np.exp(-(D - D.min(1, keepdims=True)) / sig)
+        order = np.argsort(D, 1)
+        mask = np.zeros(G.shape, bool); np.put_along_axis(mask, order[:, :2], True, 1)
+        G = np.where(mask, G, 0.0); G /= G.sum(1, keepdims=True)
+        Wr = W[region]; Wr[:, idx] = G * own[region][:, None]; W[region] = Wr
+        LOG[f"fp_hand_{S}"] = int(region.sum())
+    return W
 
 
 def transfer_weights(src, dst, names):
@@ -600,7 +634,20 @@ if a.hd and a.hd_late:
     body = hd
     co = np.empty(len(body.data.vertices) * 3); body.data.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
     Wh, LOG["seam_copies_hd"] = weld_weights(read_weights(body))
+    if a.fp_arms: Wh = reskin_hands(Wh)
     LOG["unweighted_hd"] = apply_weights(body, Wh)
+    if a.fp_arms:
+        # arms and hands only (the viewmodel's armsOnly cut, done once here with a margin): shoulders down
+        import re, bmesh
+        armre = re.compile(r"^(upperarm|forearm|hand|(thumb|index|middle|ring|pinky)\d)_[LR]$")
+        ai = [oi[n] for n in names_out if armre.match(n)]
+        drop = np.where(Wh[:, ai].sum(1) <= 0.3)[0]
+        bm = bmesh.new(); bm.from_mesh(body.data); bm.verts.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.verts[int(i)] for i in drop], context="VERTS")
+        bm.to_mesh(body.data); bm.free(); body.data.update()
+        LOG["fp_full_tris"] = sum(len(p.vertices) - 2 for p in body.data.polygons)
+        if a.tris: decimate(body, a.tris)
+        co = np.empty(len(body.data.vertices) * 3); body.data.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
     LOG["verts"] = len(co); LOG["tris"] = sum(len(p.vertices) - 2 for p in body.data.polygons)
 body.parent = arm
 am = body.modifiers.new("Armature", "ARMATURE"); am.object = arm
