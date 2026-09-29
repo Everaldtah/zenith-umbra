@@ -12,7 +12,7 @@ export interface BuildingSpec {
   x: number; z: number; w: number; d: number;         // outer footprint (centre, size along X / Z)
   storeys?: number; storeyH?: number;                 // default 1 storey, 4.2m
   y?: number;                                         // base height (a building on a terrace)
-  doors?: Opening[];                                  // doorways (level 0) and balcony openings (level >= 1): 2.9m tall
+  doors?: Opening[];                                  // doorways (level 0) and balcony openings (level >= 1): 3.8m tall
   windows?: Opening[];                                // window openings, sill 1m, head 2.6m, per storey
   roof?: 'flat' | 'gable-x' | 'gable-z';               // flat: walkable, parapet; gable: walkable slopes, ridge along X / Z
   stair?: Side;                                       // interior stair ramps rise toward this side (needed for storeys > 1 or a flat roof)
@@ -21,8 +21,9 @@ export interface BuildingSpec {
   atrium?: [number, number];                          // a double-height void (w, d) through the upper floors: a gallery ring around a hall
 }
 const T = 0.6;           // wall thickness
-// doorways clear the frame mechs (3.3m) - every hero fits through every door, as in Overwatch
-const DOOR_H = 3.4, SILL = 1.0, HEAD = 2.6;
+// doorways clear the frame mechs with room to spare (Gorgoth stands 3.4m: a 3.4m lintel stopped him dead at every door,
+// and bots piloting him stuck there) - every hero fits through every door, as in Overwatch; storeys are 4m or more
+const DOOR_H = 3.8, SILL = 1.0, HEAD = 2.6;
 
 /** 1D interval subtraction: the solid runs of [lo, hi] left after cutting the openings out */
 function runs(lo: number, hi: number, cuts: [number, number][]): [number, number][] {

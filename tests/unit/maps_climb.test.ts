@@ -37,6 +37,19 @@ describe('climbers\' maps: the climb routes climb', () => {
     });
   }
 
+  // doorways clear the tallest frame mech: Gorgoth (3.4 m) walks through the Gulch depot's side door both ways (a 3.4 m
+  // lintel once stopped him dead there - bots piloting him sat stuck at that door for minutes)
+  for (const [from, to] of [[-19, -30], [-30, -19]]) {
+    it(`gulch: Gorgoth walks through the depot side door (${from} -> ${to})`, () => {
+      const w = new World('gulch', 'practice');
+      const a: Actor = w.addHero('gorgoth', 'zenith'); a.clear('spawnprot');
+      a.pos = { x: from, y: 0, z: -17 }; a.vel = { x: 0, y: 0, z: 0 };
+      a.yaw = a.input.yaw = to > from ? Math.PI / 2 : -Math.PI / 2; a.input.mz = 1;
+      run(w, 3);
+      expect(Math.sign(a.pos.x - (-23))).toBe(Math.sign(to - (-23)));      // the wall line is x = -23: he's out the other side
+    });
+  }
+
   // Hibiki's Mag-Grind: airborne beside a face with grind held, riding along it (+x) looking up, he climbs and mantles on
   const rides: [string, string, number, number, number][] = [
     // map, route, start x, face z (the wall on the +z side if wallSide > 0), top ... wall side packed into the sign of top
