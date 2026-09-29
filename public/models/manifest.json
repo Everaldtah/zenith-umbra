@@ -222,8 +222,8 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.17569,
-    "spine": 0.1633,
+    "hips": 0.17439,
+    "spine": 0.16351,
     "chest": 0.11364,
     "neck": 0.06444,
     "head": 0.08913,
@@ -231,16 +231,16 @@
     "upperarm_R": 0.09472,
     "forearm_L": 0.11689,
     "forearm_R": 0.11591,
-    "thigh_L": 0.17469,
-    "thigh_R": 0.15892,
-    "shin_L": 0.14937,
-    "shin_R": 0.15015
+    "thigh_L": 0.1696,
+    "thigh_R": 0.15738,
+    "shin_L": 0.14865,
+    "shin_R": 0.14847
    },
    "eyes": [
     {
      "p": [
       -0.05786,
-      1.6071,
+      1.60709,
       0.04383
      ],
      "n": [
@@ -263,7 +263,7 @@
     },
     {
      "p": [
-      0.00494,
+      0.00493,
       1.60762,
       0.05686
      ],
@@ -272,7 +272,7 @@
       -0.40825,
       0.8165
      ],
-     "w": 0.03162,
+     "w": 0.03163,
      "h": 0.01107,
      "skin": [
       0.864,
@@ -295,8 +295,8 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.1323,
-    "spine": 0.13336,
+    "hips": 0.13204,
+    "spine": 0.13211,
     "chest": 0.06703,
     "neck": 0.07762,
     "head": 0.09527,
@@ -304,10 +304,10 @@
     "upperarm_R": 0.0764,
     "forearm_L": 0.07502,
     "forearm_R": 0.07996,
-    "thigh_L": 0.12871,
-    "thigh_R": 0.12225,
-    "shin_L": 0.06045,
-    "shin_R": 0.06764
+    "thigh_L": 0.12211,
+    "thigh_R": 0.12032,
+    "shin_L": 0.06411,
+    "shin_R": 0.06858
    },
    "eyes": [
     {
@@ -441,7 +441,7 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.14669,
+    "hips": 0.14633,
     "spine": 0.15835,
     "chest": 0.1009,
     "neck": 0.10035,
@@ -450,8 +450,8 @@
     "upperarm_R": 0.06623,
     "forearm_L": 0.04883,
     "forearm_R": 0.04871,
-    "thigh_L": 0.11854,
-    "thigh_R": 0.11632,
+    "thigh_L": 0.12277,
+    "thigh_R": 0.11839,
     "shin_L": 0.06535,
     "shin_R": 0.06522
    }
@@ -464,7 +464,7 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.1826,
+    "hips": 0.18386,
     "spine": 0.15003,
     "chest": 0.0843,
     "neck": 0.08545,
@@ -473,10 +473,10 @@
     "upperarm_R": 0.09607,
     "forearm_L": 0.05311,
     "forearm_R": 0.06031,
-    "thigh_L": 0.14174,
-    "thigh_R": 0.15053,
+    "thigh_L": 0.14294,
+    "thigh_R": 0.1525,
     "shin_L": 0.05714,
-    "shin_R": 0.06413
+    "shin_R": 0.06747
    }
   },
   "enra": {
@@ -495,10 +495,10 @@
     "upperarm_R": 0.2415,
     "forearm_L": 0.15054,
     "forearm_R": 0.17345,
-    "thigh_L": 0.20217,
-    "thigh_R": 0.14606,
-    "shin_L": 0.1009,
-    "shin_R": 0.08226
+    "thigh_L": 0.20733,
+    "thigh_R": 0.14655,
+    "shin_L": 0.10373,
+    "shin_R": 0.08257
    }
   },
   "haruto": {
@@ -582,7 +582,7 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.14289,
+    "hips": 0.14315,
     "spine": 0.15954,
     "chest": 0.1287,
     "neck": 0.07835,
@@ -591,8 +591,8 @@
     "upperarm_R": 0.08681,
     "forearm_L": 0.06713,
     "forearm_R": 0.06832,
-    "thigh_L": 0.12863,
-    "thigh_R": 0.13888,
+    "thigh_L": 0.13334,
+    "thigh_R": 0.13936,
     "shin_L": 0.07598,
     "shin_R": 0.07506
    },
@@ -662,9 +662,9 @@
     "forearm_L": 0.20959,
     "forearm_R": 0.37585,
     "thigh_L": 0.1772,
-    "thigh_R": 0.3664,
-    "shin_L": 0.29806,
-    "shin_R": 1.03938
+    "thigh_R": 0.35465,
+    "shin_L": 0.29703,
+    "shin_R": 1.03094
    }
   },
   "minion_lancer": {
@@ -742,7 +742,7 @@
    "source": "tripo",
    "colliders": {
     "hips": 0.32394,
-    "spine": 0.35187,
+    "spine": 0.35199,
     "chest": 0.21052,
     "neck": 0.12429,
     "head": 0.12285,
@@ -750,10 +750,10 @@
     "upperarm_R": 0.21782,
     "forearm_L": 0.14856,
     "forearm_R": 0.14944,
-    "thigh_L": 0.30194,
-    "thigh_R": 0.30661,
-    "shin_L": 0.20052,
-    "shin_R": 0.20318
+    "thigh_L": 0.3047,
+    "thigh_R": 0.30966,
+    "shin_L": 0.20519,
+    "shin_R": 0.20663
    },
    "eyes": [
     {
@@ -837,7 +837,7 @@
    ],
    "source": "tripo",
    "colliders": {
-    "hips": 0.1233,
+    "hips": 0.12377,
     "spine": 0.10356,
     "chest": 0.03801,
     "neck": 0.06791,
@@ -846,8 +846,8 @@
     "upperarm_R": 0.08708,
     "forearm_L": 0.04247,
     "forearm_R": 0.04746,
-    "thigh_L": 0.10265,
-    "thigh_R": 0.11243,
+    "thigh_L": 0.10313,
+    "thigh_R": 0.11247,
     "shin_L": 0.05759,
     "shin_R": 0.10504
    },

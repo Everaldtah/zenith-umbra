@@ -191,4 +191,60 @@ describe('Hibiki', () => {
     expect(Math.hypot(r.pos.x - ring.x, r.pos.z - ring.z)).toBeGreaterThan(ring.r);
     expect(events).toContain('Tempo Rush breaks out of the Grand Dohyo');
   });
+
+  describe('Groove (jump rhythm)', () => {
+    /** tap jump `hz` times a second for `secs`, holding forward along the clear lane */
+    const rhythm = (w: World, h: Actor, hz: number, secs: number) => {
+      const every = Math.max(2, Math.round(1 / hz / DT)); let f = 0;
+      // hopping on the spot: the rhythm builds from the taps alone (at 20x he'd leave the lane in a second)
+      h.input.mz = 0;
+      run(w, secs, () => { h.input.jump = f % every === 0; f++; });
+      h.input.jump = false;
+    };
+    const flatSpeed = (h: Actor) => Math.hypot(h.vel.x, h.vel.z);
+
+    it('tapping jump ~8x a second builds his speed toward 20x', () => {
+      const w = arena();
+      const h = place(w, 'hibiki', 'zenith', 0, 0, 0);
+      rhythm(w, h, 8, 3);
+      expect(h.sv.rhythm).toBeGreaterThan(15);
+      expect(h.sv.rhythm).toBeLessThanOrEqual(20.001);
+      expect(h.has('rhythm', w.time)).toBe(true);
+      // and it's real speed: a short burst forward, still tapping, is many times his normal skate
+      let f = 0; h.input.mz = 1; let top = 0;
+      run(w, 0.4, () => { h.input.jump = f++ % 8 === 0; top = Math.max(top, flatSpeed(h)); });
+      expect(top).toBeGreaterThan(HERO.hibiki.speed * 5);
+    });
+
+    it('a casual jump now and then leaves him at his normal speed', () => {
+      const w = arena();
+      const h = place(w, 'hibiki', 'zenith', 0, 0, 0);
+      rhythm(w, h, 1, 3);
+      expect(h.sv.rhythm ?? 1).toBeLessThan(1.3);
+      expect(flatSpeed(h)).toBeLessThan(HERO.hibiki.speed * 1.4);
+    });
+
+    it('the groove bleeds off once the beat stops', () => {
+      const w = arena();
+      const h = place(w, 'hibiki', 'zenith', 0, 0, 0);
+      rhythm(w, h, 8, 3);
+      const peak = h.sv.rhythm;
+      run(w, 4);
+      expect(h.sv.rhythm).toBeLessThan(peak * 0.2);
+    });
+
+    it('at the top of the groove he still cannot skate through a wall', () => {
+      const w = arena();
+      const h = w.addHero('hibiki', 'zenith');
+      const hit = w.level.ray({ x: -30, y: 2, z: 20 }, { x: 0, y: 0, z: 1 }, 20)!;
+      const face = 20 + hit.t;
+      h.pos = { x: -30, y: Math.max(0, w.level.groundAt(-30, face - 12, 30)), z: face - 12 }; h.vel = { x: 0, y: 0, z: 0 };
+      h.yaw = h.input.yaw = 0; h.clear('spawnprot');
+      h.sv.rhythm = 20; h.sv.tapRate = 12; h.sv.tapAt = w.time;
+      h.vel = { x: 0, y: 0, z: HERO.hibiki.speed * 20 };
+      h.input.mz = 1;
+      run(w, 1);
+      expect(h.pos.z).toBeLessThan(face);
+    });
+  });
 });

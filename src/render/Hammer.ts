@@ -160,6 +160,8 @@ export function buildChaingun(modelHeight: number, side: 'L' | 'R'): ChaingunPro
  * forward on +Z, flat top up, pistol grip in the fist), then the front of the mesh - the six-barrel cluster - is cut
  * into its own mesh and hung in the spin group on the cluster's own axis, so the barrels still spin up as he fires.
  */
+const GUN_ROLL: Record<string, number> = { prop_gantetsu_hanabi: Math.PI };
+
 function upgradeChaingun(prop: ChaingunProp, id: string, L: number) {
   void (async () => {
     await loadManifest();
@@ -168,6 +170,9 @@ function upgradeChaingun(prop: ChaingunProp, id: string, L: number) {
     if (!m) return;
     const size = 0.46 * L;
     const fitted = fitProp(m, 'gun', size);
+    // fitProp decides "up" by which side of the gun reaches further out; Hanabi's tall carry handle out-reaches its drum
+    // magazine, so it comes out upside down - rolled over here (checked in the Hero Viewer, profile view)
+    fitted.rotation.z = GUN_ROLL[id] ?? 0;
     const g = prop.group;
     // bake the fitted model into gun-frame geometry
     const holder = new THREE.Group(); holder.add(fitted); holder.updateMatrixWorld(true);

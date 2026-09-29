@@ -182,6 +182,12 @@ export class Hud {
         const tr = me.sv.track ? ['TEMPO RUSH', '#ffd23f'] : ['HEALING GROOVE', '#7dffcf'];
         this.flight.innerHTML = `<div class="fb"><i style="height:${g}%;background:${pumped ? '#ffd23f' : '#9ef6ff'}"></i></div><span>${pumped ? 'PUMPED' : 'MAG-GRIND'}</span>`
           + `<span class="sw on" style="color:${tr[1]};border-color:${tr[1]}">${tr[0]}${me.has('amp', t) ? ' · MAX' : ''}</span>`;
+        // the Groove: tap jump in rhythm to build speed (up to GROOVE_MAX x) - the chip heats from teal to gold to magenta
+        const gv = me.sv.rhythm ?? 1;
+        if (gv > 1.15) {
+          const hue = gv < 8 ? 165 - (gv - 1) / 7 * 120 : 45 - Math.min(1, (gv - 8) / 12) * 75;
+          this.flight.innerHTML += `<span class="sw on" style="color:hsl(${hue},100%,65%);border-color:hsl(${hue},100%,65%)">GROOVE ×${gv.toFixed(gv < 10 ? 1 : 0)}</span>`;
+        }
       }
       // Mirei: the swoop's cooldown sits under the flight gauge (F)
       const swoop = me.def.id === 'mirei' ? (me.has('swoop', t) ? 'SWOOP' : me.cdLeft('swoop', t) > 0 ? `F ${me.cdLeft('swoop', t).toFixed(1)}` : 'F SWOOP') : '';

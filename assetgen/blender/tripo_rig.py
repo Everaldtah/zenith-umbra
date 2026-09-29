@@ -28,6 +28,7 @@ ap.add_argument("--wings", action="store_true"); ap.add_argument("--chains", act
 # e.g. white hair under a gold circlet); --scarf seeds the --hair chains around the neck instead of on the scalp)
 ap.add_argument("--hair", action="store_true"); ap.add_argument("--crown", action="store_true"); ap.add_argument("--sleeves", action="store_true")
 ap.add_argument("--hair-rgb", default=""); ap.add_argument("--hair-tol", type=float, default=0.16); ap.add_argument("--scarf", action="store_true")
+ap.add_argument("--no-cape", action="store_true", help="--chains without the cape / coat-tail chain (a heavy hero's own back reads as one)")
 a = ap.parse_args(argv)
 T0 = time.time()
 LOG = {"id": os.path.basename(a.out)[:-4]}
@@ -404,6 +405,14 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
     # skirts / robes / coat tails: below the hips, clear of both legs and the hanging hands
     leg_r = H * 0.07
     cloth = (co[:, 2] < hz - H * 0.06) & (co[:, 2] > H * 0.05) & (legd > leg_r) & (armd > H * 0.11)
+    # trousers, not a skirt: the seat and crotch between the thighs, at the body's own depth. A skirt panel hangs in front
+    # of or behind the legs; baggy hakama / trousers sit far enough from the leg bones to pass the test above, and bound
+    # to a skirt chain they stay behind when the legs split and tear into long loops (Gantetsu's run)
+    hip_half = abs(bones["thigh_L"][0].x - hx)
+    thigh_r = max(COLL.get("thigh_L", H * 0.06), COLL.get("thigh_R", H * 0.06))
+    crotch = (np.abs(co[:, 0] - hx) < hip_half * 1.15) & (np.abs(co[:, 1] - hy) < thigh_r * 1.25) & (co[:, 2] < hz)
+    cloth &= ~crotch
+    LOG["crotch_excluded"] = int(crotch.sum())
     if a.wings: cloth &= co[:, 1] <= back_plane + H * 0.02
     ang = np.arctan2(co[:, 0] - hx, -(co[:, 1] - hy))                  # 0 = front (-Y), +pi/2 = left (+X)
     panels = {"skirt_F": 0.0, "skirt_L": np.pi / 2, "skirt_B": np.pi, "skirt_R": -np.pi / 2}
@@ -417,7 +426,8 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
             chain(k, cloth & (shares[k] > 0.02), "hips", share=shares[k] / np.maximum(tot, 1e-6), fade=legfade)
     # a cape / long coat back hanging from the shoulders
     cape = (co[:, 1] > back_plane + H * 0.02) & (co[:, 2] < neck_z - H * 0.05) & (co[:, 2] > hz - H * 0.3) & (np.abs(co[:, 0]) < sh_x * 1.1)
-    if a.chains and not a.wings and cape.sum() > 150: chain("cape_B", cape, "chest")
+    cape &= ~crotch                                             # a coat tail hangs behind the seat, never between the legs
+    if a.chains and not a.no_cape and not a.wings and cape.sum() > 150: chain("cape_B", cape, "chest")
     # ---- hair (and scarves): colour-matched to the hair on the scalp and grown out from the head through the mesh, so
     # the upper back, a quiver strap or a chest plate can never join a hair chain (the old geometric masks did)
     hb, ht = bones["head"][0], bones["head"][1]

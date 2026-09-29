@@ -285,7 +285,9 @@ export class Animator {
   private gripG = new THREE.Vector3(); private gripH = new THREE.Vector3(0, 1, 0); private gripT = new THREE.Vector3(1, 0, 0);
   // hair / cloth chains (see DYN): discovered from the rig at bind time
   private chains: { pf: ChainPrefix; kind: DynKind; segs: BoneName[]; tip: BoneName; par: BoneName; len: number[];
-    x: THREE.Vector3[]; prev: THREE.Vector3[]; anchor: THREE.Vector3 | null }[] = [];
+    x: THREE.Vector3[]; prev: THREE.Vector3[]; anchor: THREE.Vector3 | null;
+    /** per particle, per collider: its rest distance from that capsule (model units) - the most it may be pushed out to */
+    rmax: Partial<Record<BoneName, number>>[] }[] = [];
   private ring: { a: number; b: number; d: number[] }[] = [];
   /** collider radii (model units) measured from the mesh by the rigger (tripo_rig.py); missing = fractions of the height */
   colliders: Partial<Record<BoneName, number>> = {};
@@ -412,7 +414,24 @@ export class Animator {
         ?? (pf.startsWith('hair') ? 'head' : pf === 'sleeve_L' ? 'forearm_L' : pf === 'sleeve_R' ? 'forearm_R' : 'hips');
       if (!this.rest[par]) continue;
       const len = segs.map((n, k) => this.rest[n]!.p.distanceTo(this.rest[idx[k + 1]]!.p));
-      this.chains.push({ pf, kind: kindOf(pf), segs, tip, par, len, x: [], prev: [], anchor: null });
+      // cloth modelled inside a collider (a heavy hero's measured hip capsule is wider than the robe hanging off it) must
+      // not be shoved out of it every frame - that stretched Gantetsu's back panel into long dark spikes. Each particle
+      // may be pushed out only as far as it sat from that capsule in the bind pose (less a hair).
+      const kind = kindOf(pf);
+      const rmax = idx.slice(1).map(n => {
+        const q = this.rest[n]!.p, out: Partial<Record<BoneName, number>> = {};
+        for (const cn of DYN[kind].cols) {
+          const c = COLL[cn];
+          if (!c || !this.rest[cn] || !this.rest[c.to]) continue;
+          let A = this.rest[cn]!.p.clone(), B = this.rest[c.to]!.p.clone();
+          if (cn === 'head') { const r = (this.colliders.head ?? c.r * this.height); A = A.add(new THREE.Vector3(0, r * 0.85, 0)); B = A.clone(); }
+          const ab = B.clone().sub(A), l2 = ab.lengthSq();
+          const u = l2 > 1e-9 ? Math.max(0, Math.min(1, q.clone().sub(A).dot(ab) / l2)) : 0;
+          out[cn] = q.distanceTo(A.addScaledVector(ab, u)) * 0.97;
+        }
+        return out;
+      });
+      this.chains.push({ pf, kind, segs, tip, par, len, x: [], prev: [], anchor: null, rmax });
     }
     // neighbouring skirt panels keep their rest spacing (within +-25%) level by level
     this.ring = [];
@@ -469,6 +488,16 @@ export class Animator {
       const parObj = this.bones[c.segs[0]]!.parent!;
       const pq = this.modelQ.get(parObj) ?? this.rest[c.par]!.q;
       const base = pq.clone().multiply(this.rest[c.par]!.q.clone().invert());
+      // leg-driven skirts (the way games rig long coats and robes): a side panel follows its own thigh part of the way, the
+      // front / back panel the thigh swinging into it, so the legs don't sweep through the cloth and the cloth doesn't
+      // hang back while the trousers under it stride away (the torn strands behind Gantetsu's run); physics rides on top
+      if (c.kind === 'skirt' && this.bones.thigh_L && this.bones.thigh_R && this.rest.thigh_L && this.rest.thigh_R) {
+        const dq = (n: 'thigh_L' | 'thigh_R') => (this.modelQ.get(this.bones[n]!) ?? this.rest[n]!.q).clone().multiply(this.rest[n]!.q.clone().invert());
+        const qL = dq('thigh_L'), qR = dq('thigh_R');
+        const zL = this.rest.thigh_L.dir.clone().applyQuaternion(qL).z, zR = this.rest.thigh_R.dir.clone().applyQuaternion(qR).z;
+        const [q, w] = c.pf === 'skirt_L' ? [qL, 0.55] : c.pf === 'skirt_R' ? [qR, 0.55] : c.pf === 'skirt_F' ? [zL > zR ? qL : qR, 0.45] : [zL < zR ? qL : qR, 0.45];
+        base.slerp(q, w);
+      }
       const anchor = toW(this.modelPos(c.segs[0]));
       const rigid = c.segs.map(n => this.rest[n]!.dir.clone().applyQuaternion(base));
       return { anchor, rigid };
@@ -505,7 +534,9 @@ export class Animator {
           // body colliders (capsules swept through the frame) and the ground
           for (const n of P.cols) {
             const C = cols[n]; if (!C) continue;
-            pushOut(x, CA.copy(C.a0).lerp(C.a1, u), CB.copy(C.b0).lerp(C.b1, u), C.r + 0.008 * H);
+            const lim = c.rmax[k]?.[n];
+            const r = Math.min(C.r + 0.008 * H, lim !== undefined ? lim * sc : Infinity);
+            if (r > 0) pushOut(x, CA.copy(C.a0).lerp(C.a1, u), CB.copy(C.b0).lerp(C.b1, u), r);
           }
           if (s.grounded && x.y < s.pos.y + 0.01 * H) x.y = s.pos.y + 0.01 * H;
           // hard segment length, and an angular limit off the animated pose

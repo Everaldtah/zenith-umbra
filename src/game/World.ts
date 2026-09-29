@@ -14,6 +14,8 @@ import { FULL } from '../edition';
 export const TITAN_SCALE = 2.2;
 
 export const G = 24;
+/** Hibiki's Groove: the top of his jump-rhythm speed multiplier (tapping jump ~8x a second holds it) */
+export const GROOVE_MAX = 20;
 /** Grand Dohyo: height of the rope wall above the ring floor (m) */
 export const RING_H = 8;
 export type Mode = 'training' | 'skirmish' | 'stadium' | 'spectate' | 'aitest' | 'campaign' | 'gallery' | 'quickplay' | 'competitive' | 'practice';
@@ -727,6 +729,7 @@ export class World {
       if (a.barrier.up) spd *= 0.65;
       if (a.flameOn) spd *= 0.9;
       if (a.has('reapwind', t)) spd *= 0.55;           // Tomoe heaving the axe round
+      if (d.id === 'hibiki') spd *= this.grooveStep(a, dt);
       const rooted = a.has('root', t) || a.has('stun', t);
       let mx = inp.mx, mz = inp.mz;
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
@@ -893,7 +896,7 @@ export class World {
     if (a.grounded) a.sv.climbT = 0;
     if (rooted || a.forced || a.has('stun', t)) return on ? off(false) : false;
     if (!hold) return on ? off(true) : false;
-    const y = a.pos.y + a.height * 0.5, reach = a.radius + 0.6;
+    const y = a.pos.y + a.height * 0.5, reach = a.radius + 1.1;
     const probe = (nx: number, nz: number, py = y) => {
       const h = L.ray({ x: a.pos.x, y: py, z: a.pos.z }, { x: nx, y: 0, z: nz }, reach);
       return h && Math.abs(h.ny) < 0.35 ? h : null;
@@ -904,7 +907,8 @@ export class World {
       const air = a.pos.y - L.groundAt(a.pos.x, a.pos.z, a.pos.y + 0.2);
       // from the ground he only latches running at a wall while looking up it (skating up the wall); in the air, any wall
       const fromGround = a.grounded || air < 0.5;
-      if (fromGround && look < 0.3) return false;
+      // (or skating fast straight at it - the groove carries him up without having to look)
+      if (fromGround && look < 0.12 && !(hs > 8 && (a.vel.x * Math.sin(a.yaw) + a.vel.z * Math.cos(a.yaw)) / hs > 0.7)) return false;
       const fx0 = Math.sin(a.yaw), fz0 = Math.cos(a.yaw);
       const vx = hs > 0.5 ? a.vel.x / hs : fx0, vz = hs > 0.5 ? a.vel.z / hs : fz0;
       let best: { t: number; nx: number; nz: number } | null = null;
@@ -942,24 +946,62 @@ export class World {
     // climb: looking up angles the ride upward (for a while), looking down drops along the wall
     a.sv.climbT = (a.sv.climbT ?? 0) + dt;
     // head-on he can only skate a storey or so straight up; riding along the wall he climbs at an angle for longer
-    const headOn = !!a.sv.grindHeadOn, climbMax = headOn ? 1.1 : 2.4;
-    const climbing = look > 0.12 && a.sv.climbT < climbMax;
-    const up = climbing ? look * Math.min(1, (climbMax - a.sv.climbT) / 0.35) : 0;
+    const headOn = !!a.sv.grindHeadOn, climbMax = headOn ? 3.0 : 4.5;
+    // wall hop: tapping jump on the wall kicks him up it and refreshes the climb (and keeps the groove going)
+    if (this.pressed(a, 'jump')) {
+      a.vel.y = Math.max(a.vel.y, 7.5); a.sv.climbT = Math.max(0, a.sv.climbT - 1.2); a.anim.jumpAt = t;
+      this.sfx('jump', a.pos, a);
+    }
+    const climbing = look > 0.05 && a.sv.climbT < climbMax;
+    let up = climbing ? look * Math.min(1, (climbMax - a.sv.climbT) / 0.35) : 0;
+    // the arena's boundary walls: he can ride them, but the climb stops short of their top (no leaving the map)
+    const [BX, BZ] = L.size;
+    const border = Math.abs(a.pos.x) > BX - 2.5 || Math.abs(a.pos.z) > BZ - 2.5;
+    const capped = border && !probe(-nx, -nz, a.pos.y + a.height + 1.2);
+    if (capped) up = 0;
     const sp = spd * 1.3 * (headOn ? 0.15 : 1 - 0.55 * Math.max(0, up)), cur = a.vel.x * tx + a.vel.z * tz;
     const v = cur + (sp - cur) * Math.min(1, dt * 6);
     // a light pull toward the wall keeps the skates on it
     const gap = (probe(-nx, -nz)?.t ?? reach) - a.radius;
     const pull = Math.max(0, gap - 0.05) * 6;
     a.vel.x = tx * v - nx * pull; a.vel.z = tz * v - nz * pull;
-    const vyT = up > 0 ? (headOn ? 5.4 : 4.4) * up : look < -0.25 ? -5 * -look : 0;
+    const lift = Math.min(2.5, Math.sqrt(a.sv.rhythm ?? 1));       // the groove climbs faster too
+    const vyT = up > 0 ? (headOn ? 7 : 6) * up * lift : look < -0.25 ? -5 * -look : 0;
     a.vel.y += (vyT - a.vel.y) * Math.min(1, dt * (up > 0 ? 8 : 12));
+    if (capped) a.vel.y = Math.min(a.vel.y, 0);
     // nearing the top of the wall on the way up: over the edge and onto the roof
-    if (a.vel.y > 0.5 && !probe(-nx, -nz, a.pos.y + a.height + 0.25) && this.mantle(a)) return false;
+    if (a.vel.y > 0.5 && (!probe(-nx, -nz, a.pos.y + a.height + 0.25) || !probe(-nx, -nz, a.pos.y + a.height + 1.2)) && this.mantle(a)) return false;
     a.set('grinding', t, 0.15); a.flying = false;
     a.sv.grindUp = up;
     // which side the wall is on relative to where he's facing (the animator leans away from it)
     a.sv.grindSide = (nx * rx + nz * rz) > 0 ? -1 : 1;
     return true;
+  }
+
+  /**
+   * Hibiki - Groove: the faster he taps jump, the faster he skates. The tap rate (a smoothed taps-per-second, counted on
+   * the ground, in the air and on walls) sets a target multiplier on his speed - nothing below ~1.8 taps/s, the full
+   * GROOVE_MAX at ~7.8 - and his speed ramps toward it over a couple of seconds of rhythm and bleeds off when the beat
+   * stops. Movement sub-steps every 0.3m, so even at the top of the groove he can't skate through a wall.
+   */
+  private grooveStep(a: Actor, dt: number): number {
+    const t = this.time;
+    if (this.pressed(a, 'jump')) {
+      const gap = t - (a.sv.tapAt ?? -9);
+      a.sv.tapAt = t;
+      const inst = gap > 0.04 ? Math.min(12, 1 / gap) : 12;
+      a.sv.tapRate = (a.sv.tapRate ?? 0) * 0.45 + inst * 0.55;
+    }
+    if (t - (a.sv.tapAt ?? -9) > 0.45) a.sv.tapRate = Math.max(0, (a.sv.tapRate ?? 0) - dt * 6);
+    const x = Math.max(0, Math.min(1, ((a.sv.tapRate ?? 0) - 1.8) / 6));
+    const target = 1 + (GROOVE_MAX - 1) * x * x * (3 - 2 * x);
+    // (sv.rhythm / status 'rhythm': 'groove' is the Healing Groove aura's status, which writes sv.groove every tick)
+    const g0 = a.sv.rhythm ?? 1;
+    a.sv.rhythm = g0 + (target - g0) * Math.min(1, dt * (target > g0 ? 0.9 + 0.12 * g0 : 1.4));
+    if (a.sv.rhythm > 1.5) a.set('rhythm', t, 0.25);
+    // deep in the groove his skates leave a light trail
+    if (a.sv.rhythm > 4 && t >= (a.sv.rhythmFx ?? 0)) { a.sv.rhythmFx = t + 0.3; this.fx('chargetrail', a.pos, { actor: a, dur: 0.4, color: a.def.glow }); }
+    return a.sv.rhythm;
   }
 
   /** Mag-Grind top-out: if the wall he's riding ends in a roof within reach above his feet, pop up over the edge and land
@@ -971,9 +1013,9 @@ export class World {
       const px = a.pos.x - nx * inset, pz = a.pos.z - nz * inset;
       // never onto the arena's boundary walls
       if (Math.abs(px) > X - 1 || Math.abs(pz) > Z - 1) return false;
-      const roof = L.groundAt(px, pz, a.pos.y + 1.6, a.radius * 0.5);
-      // his hands reach the edge: the roof is at most ~1.3m above his skates
-      if (!Number.isFinite(roof) || roof < a.pos.y - 0.3 || roof > a.pos.y + 1.3) continue;
+      const roof = L.groundAt(px, pz, a.pos.y + 2.8, a.radius * 0.5);
+      // his hands reach the edge: the roof is at most ~2.4m above his skates (he vaults a ledge above his head)
+      if (!Number.isFinite(roof) || roof < a.pos.y - 0.3 || roof > a.pos.y + 2.4) continue;
       // room to stand up there?
       if (L.ceilingAt(px, pz, roof + 0.05) < roof + a.height * 0.9) continue;
       const t = this.time;

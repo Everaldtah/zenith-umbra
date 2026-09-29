@@ -346,7 +346,8 @@ export class CharacterView {
       const col = a.sv.track ? '#ffd23f' : '#39d6ff', amp = a.has('amp', time) ? 1.6 : 1;
       g.core.emissive.set(col); g.core.emissiveIntensity = 2.2 * amp;
       const roll = Math.hypot(a.vel.x, a.vel.z) * dt / (0.016 * this.anim.height);
-      for (const s of this.skates) { s.glow.emissive.set(col); s.glow.emissiveIntensity = (a.has('grinding', time) ? 3.2 : 2) * amp; for (const w of s.wheels) w.rotation.x += roll; }
+      const groove = 1 + Math.min(2.5, ((a.sv.rhythm ?? 1) - 1) * 0.15);          // the Groove brightens the wheels
+      for (const s of this.skates) { s.glow.emissive.set(col); s.glow.emissiveIntensity = (a.has('grinding', time) ? 3.2 : 2) * amp * groove; for (const w of s.wheels) w.rotation.x += roll; }
       return;
     }
     for (let i = 0; i < 2; i++) {

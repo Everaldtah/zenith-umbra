@@ -25,7 +25,7 @@ TRIPO = {
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
     'kaien': (1.8, ['--chains', '--hair', '--crown', '--sleeves']), 'raijin': (1.8, ['--chains']), 'yuzu': (1.62, ['--crown']),
     'hex': (1.95, ['--chains']), 'kagemaru': (1.78, ['--chains']), 'enra': (2.05, ['--chains']), 'haruto': (1.75, []),
-    'vorn': (1.85, ['--chains']), 'gantetsu': (2.4, ['--chains', '--crown']), 'hibiki': (1.82, ['--crown']),
+    'vorn': (1.85, ['--chains']), 'gantetsu': (2.4, ['--chains', '--no-cape', '--crown']), 'hibiki': (1.82, ['--crown']),
     'tomoe': (2.0, ['--chains']), 'hayate': (1.78, ['--hair', '--scarf', '--hair-rgb', '0.153,0.416,0.384', '--hair-tol', '0.2']),
     'seiran': (1.84, ['--chains', '--hair']), 'hibiki_armor': (1.82, ['--crown']),
     'qelvaris': (2.3, ['--chains']), 'minion_lancer': (2.0, []), 'minion_sentinel': (2.2, ['--mech']),
