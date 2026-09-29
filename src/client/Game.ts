@@ -408,11 +408,20 @@ export class Game {
     const at = cam.clone().addScaledVector(fwd, 7), side = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
     const pos = { x: at.x, y: at.y, z: at.z }, to = { x: at.x + side.x * 3, y: at.y, z: at.z + side.z * 3 };
     const actor = me ?? w.actors[0], target = w.actors.find(a => a !== actor) ?? actor;
+    // zones (a seal, a sanctuary, a singularity, a boss's warning shape) draw with shaders of their own and only exist
+    // while someone's ability does: samples shown to the effects for the warm-up only - a copy of the world with them
+    // added, the real world never holds them (they'd silence and pull)
+    const zoneSamples = actor ? (['seal', 'sanctuary', 'singularity', 'tele', 'tele'] as const).map((kind, k) => ({
+      id: -9000 - k, kind, owner: actor, team: actor.team, x: pos.x + (k - 2) * 1.5, y: pos.y - 1, z: pos.z, r: 3, born: w.time - 1, until: w.time + 100, next: 1e9,
+      data: kind === 'tele' ? { shape: k === 4 ? 'line' : 'circle', color: '#ff3355', fireAt: w.time + 50, done: false, x: pos.x, z: pos.z, x2: to.x, z2: to.z } : undefined,
+    })) : [];
+    const wz = Object.create(w) as typeof w;
+    Object.defineProperty(wz, 'zones', { value: [...w.zones, ...zoneSamples] });
     if (this.fx && actor) {
       for (const kind of FX_KINDS) {
         try { this.fx.onEvent({ t: 'fx', kind, pos, to, actor, target, color: '#ffffff', r: 3, dur: 0.6 } as unknown as Parameters<Fx['onEvent']>[0], w.time, this.camera.position); } catch { /* an effect that needs more context */ }
       }
-      this.fx.update(1 / 60, w, w.time);
+      this.fx.update(1 / 60, wz, w.time);
     }
     // compiled into the composer's buffer: the scene is drawn there (linear output), not straight to the screen, and
     // the output colour space is part of every program's key
@@ -443,7 +452,7 @@ export class Game {
     for (let i = 0; i < N + HOLD || (wantDragons && !seenDragons && i < N + HOLD + 60); i++) {
       if (i === 2) stealth(true);
       if (i === 4) stealth(false);
-      this.fx?.update(1 / 60, w, w.time + i * 0.1);
+      this.fx?.update(1 / 60, wz, w.time + i * 0.1);
       if (swims() > 0) seenDragons = true;
       const turn = i < HOLD || (wantDragons && !seenDragons) ? 0 : ((i - HOLD) % N) / N * Math.PI * 2;
       this.camera.quaternion.setFromEuler(new THREE.Euler(e0.x, e0.y + turn, 0, 'YXZ'));
