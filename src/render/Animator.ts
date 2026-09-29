@@ -259,6 +259,8 @@ export class Animator {
   hammerLen = 1;
   /** twin chaingun props (model-space children of the rig root) [left hand, right hand], barrels along the forearms */
   guns: [THREE.Object3D, THREE.Object3D] | null = null;
+  /** first person: roll a held bow by this much (radians) so it reads canted, the way archers hold it on screen */
+  bowCant = 0;
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
   gunHide: [boolean, boolean] = [false, false];
   /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
@@ -374,6 +376,37 @@ export class Animator {
       const Yv = new THREE.Vector3(0, 1, 0).addScaledVector(Zv, -Zv.y);
       if (Yv.lengthSq() < 1e-4) Yv.set(0, 0, 1);
       Yv.normalize();
+      const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
+      g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
+      g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
+      g.visible = !this.gunHide[i];
+    });
+  }
+
+  /**
+   * Held props when a mixer (the first-person Blender clips) drives the bones directly: the animator's own pose state
+   * doesn't move then, so read the real forearm / hand transforms back into the props' parent space - the same frame
+   * placeGuns builds (origin in the fist, +Z along the forearm, +Y up across it).
+   */
+  placeGunsFromBones(aim?: THREE.Vector3) {
+    if (!this.guns) return;
+    this.model.updateMatrixWorld(true);
+    const wa = new THREE.Vector3(), wh = new THREE.Vector3();
+    (['L', 'R'] as const).forEach((S, i) => {
+      const g = this.guns![i], fa = this.bones[`forearm_${S}` as BoneName], hn = this.bones[`hand_${S}` as BoneName] ?? fa;
+      const par = g.parent;
+      if (!fa || !hn || !par) { g.visible = false; return; }
+      fa.getWorldPosition(wa); hn.getWorldPosition(wh);
+      const at = par.worldToLocal(wh.clone()), from = par.worldToLocal(wa.clone());
+      let Zv = aim ? aim.clone().sub(at) : at.clone().sub(from);
+      if (Zv.lengthSq() < 1e-10) Zv.set(0, 0, 1);
+      Zv.normalize();
+      if (this.gunUpright[i]) { Zv = new THREE.Vector3(Zv.x, 0, Zv.z); if (Zv.lengthSq() < 0.09) Zv.set(0, 0, 1); Zv.normalize(); }
+      const Yv = new THREE.Vector3(0, 1, 0).addScaledVector(Zv, -Zv.y);
+      if (Yv.lengthSq() < 1e-4) Yv.set(0, 0, 1);
+      Yv.normalize();
+      // an archer's cant in first person: the bow's top limb tipped in toward the reticle
+      if (this.gunUpright[i] && this.bowCant) Yv.applyAxisAngle(Zv, -this.bowCant).normalize();
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));

@@ -9,6 +9,8 @@ import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
 import { HELD, buildHeld, heldVisible } from './HeldProps';
+import { Ragdoll } from './Ragdoll';
+import type { Level } from '../engine/Physics';
 
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
@@ -271,6 +273,13 @@ export class CharacterView {
   private loadSeq = 0;
 
   lids: Eyelids | null = null;
+  /** the map the ragdolls collide with (set by the match; the Hero Viewer has none - a flat floor) */
+  static level: Level | null = null;
+  /** Overwatch-style death: the body goes limp and is thrown by the killing blow (desktop edition, humanoid rigs) */
+  private ragdoll: Ragdoll | null = null;
+  private ragdollDone = false;
+  private boneSnap: { o: THREE.Object3D; p: THREE.Vector3; q: THREE.Quaternion }[] | null = null;
+  private hammerParent: THREE.Object3D | null = null;
   /** twin chainguns: model-space props the animator lays along the forearms each frame */
   skates: SkateProp[] = [];
   /** the hero holds a HeldProps blade / bow (anim.guns) */
@@ -322,7 +331,14 @@ export class CharacterView {
     if (!this.guns.length) return;
     const a = this.actor;
     if (this.heldHero) {
-      this.anim.gunHide = [!heldVisible(a.def.id, 0, a, time), !heldVisible(a.def.id, 1, a, time)];
+      const hide: [boolean, boolean] = [false, false];
+      for (let i = 0; i < 2; i++) {
+        const g = this.guns[i].group, vis = heldVisible(a.def.id, i as 0 | 1, a, time);
+        // a hand with a stand-in (Hayate: the shuriken while the nodachi is sheathed) never goes empty
+        if (g.userData.swap) { (g.userData.body as THREE.Object3D).visible = vis; (g.userData.swap as THREE.Object3D).visible = !vis; }
+        else hide[i] = !vis;
+      }
+      this.anim.gunHide = hide;
       return;
     }
     if (a.def.id === 'tomoe') {
@@ -546,6 +562,54 @@ export class CharacterView {
     };
   }
 
+  private ragdollable() {
+    const a = this.actor, b = this.anim.bones;
+    return FULL && this.anim.ok && a.def.frame !== 'mech' && a.def.frame !== 'drone' && !a.isBoss
+      && ['hips', 'chest', 'head', 'upperarm_L', 'forearm_L', 'hand_L', 'upperarm_R', 'forearm_R', 'hand_R', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R']
+        .every(n => b[n as keyof typeof b]);
+  }
+
+  /** runs the ragdoll while the hero is dead; false when this hero doesn't ragdoll (then the older deaths play) */
+  private deathRagdoll(dt: number, time: number): boolean {
+    const a = this.actor, age = time - a.deathAt;
+    if (!this.ragdoll && !this.ragdollDone) {
+      this.ragdollDone = true;
+      if (!this.ragdollable() || age > 0.5) return false;
+      this.group.updateMatrixWorld(true);
+      const bones = this.anim.bones as Record<string, THREE.Object3D | undefined>;
+      this.boneSnap = Object.values(bones).filter((o): o is THREE.Object3D => !!o).map(o => ({ o, p: o.position.clone(), q: o.quaternion.clone() }));
+      // the killing blow: away from the killer, a little up, harder for a bigger hit (Overwatch's ragdolls fly)
+      const fling = new THREE.Vector3();
+      const k = a.lastHitBy && time - a.lastHitAt < 1 ? a.lastHitBy : null;
+      if (k) {
+        fling.set(a.pos.x - k.pos.x, 0, a.pos.z - k.pos.z);
+        if (fling.lengthSq() < 1e-6) fling.set(-Math.sin(a.yaw), 0, -Math.cos(a.yaw));
+        fling.normalize().setY(0.45).normalize().multiplyScalar(Math.min(9, 2.5 + (a.sv.lastHitDmg ?? 30) * 0.03));
+      }
+      const v = new THREE.Vector3(a.vel.x, a.vel.y, a.vel.z);
+      this.ragdoll = new Ragdoll(bones, a.height * a.scale, v, fling, CharacterView.level, a.pos.y);
+      this.hammerParent = this.hammer?.group.parent ?? null;
+      this.hammer?.group.parent?.remove(this.hammer.group);
+      if (this.backAxe) this.backAxe.visible = false;
+      for (const j of this.jets) j.visible = false;
+    }
+    if (!this.ragdoll) return false;
+    this.rim.value = 0;
+    this.group.visible = age < 3.8;
+    this.ragdoll.step(dt, age > 2.6 ? dt * 0.6 : 0);
+    this.anim.placeGunsFromBones();
+    this.lids?.update(time, a.anim.hitAt, true);
+    return true;
+  }
+
+  /** back to life: the skeleton the ragdoll threw around returns to its bind pose (the animator takes it from there) */
+  private endRagdoll() {
+    for (const s of this.boneSnap ?? []) { s.o.position.copy(s.p); s.o.quaternion.copy(s.q); }
+    this.boneSnap = null; this.ragdoll = null; this.ragdollDone = false;
+    if (this.hammer && !this.hammer.group.parent && this.hammerParent) this.hammerParent.add(this.hammer.group);
+    this.hammerParent = null;
+  }
+
   update(dt: number, time: number, viewer: { team: string; sees: (a: Actor) => boolean }) {
     const a = this.actor;
     this.look.zuTime.value = time;
@@ -553,7 +617,10 @@ export class CharacterView {
     this.group.rotation.y = a.yaw;
     this.inner.scale.setScalar(a.scale); this.inner.quaternion.identity(); this.inner.position.set(0, 0, 0);
     this.look.zuSmear.value.set(0, 0, 0);
-    // death: a death clip when the library has one (the body crumples, then sinks), else tip over and sink
+    // death: a ragdoll thrown by the killing blow (desktop), else a death clip when the library has one (the body
+    // crumples, then sinks), else tip over and sink
+    if (!a.alive && this.deathRagdoll(dt, time)) return;
+    if (a.alive && (this.ragdoll || this.ragdollDone)) this.endRagdoll();
     if (!a.alive && this.anim.clipDeath) {
       const age = time - a.deathAt;
       this.inner.rotation.x = 0;

@@ -12,7 +12,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PUB = HERE.parent / 'public'
 WORK = HERE.parent / 'work' / 'fp'
-HEROES = ['raijin', 'yuzu', 'kaien', 'mirei', 'nocturne', 'hex', 'kagemaru', 'enra', 'haruto', 'gorgoth']
+HEROES = ['raijin', 'yuzu', 'kaien', 'mirei', 'nocturne', 'hex', 'kagemaru', 'enra', 'haruto', 'gorgoth', 'hayate', 'seiran']
 FP = HERE / 'blender' / 'fp_arms.py'
 
 

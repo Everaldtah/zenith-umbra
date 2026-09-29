@@ -22,6 +22,25 @@ export const HELD: Record<string, HeldSpec> = {
 
 export interface HeldProp { group: THREE.Group; kind: Kind }
 
+/** Hayate's koi-scale shuriken: in his throwing hand whenever the nodachi is on his back (group.userData.swap) */
+function buildShuriken(L: number): THREE.Group {
+  const g = new THREE.Group();
+  const s = new THREE.Shape(), r = 0.045 * L, ri = 0.012 * L;
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * Math.PI * 2 + Math.PI / 8, rr = k % 2 ? ri : r;
+    if (k) s.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); else s.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  s.holes.push(new THREE.Path().absarc(0, 0, ri * 0.45, 0, Math.PI * 2, true));
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.003 * L, bevelEnabled: true, bevelThickness: 0.001 * L, bevelSize: 0.0015 * L, bevelSegments: 1 });
+  geo.translate(0, 0, -0.0015 * L);
+  const steel = new THREE.MeshStandardMaterial({ color: '#dfe7e3', metalness: 0.85, roughness: 0.25, emissive: new THREE.Color('#4fe3c1'), emissiveIntensity: 0.25 });
+  const m = new THREE.Mesh(geo, steel); m.castShadow = true;
+  // held edge-on between the fingers, the flat facing across the forearm (YZ plane), just past the fist
+  m.rotation.y = Math.PI / 2; m.position.set(0, 0.012 * L, 0.035 * L);
+  g.add(m);
+  return g;
+}
+
 const put = (g: THREE.Object3D, geo: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0) => {
   const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o;
 };
@@ -69,6 +88,8 @@ function buildBow(L: number, it: Item, body: THREE.Group) {
 export function buildHeld(modelHeight: number, it: Item): HeldProp {
   const g = new THREE.Group(), body = new THREE.Group(), L = modelHeight;
   g.add(body);
+  g.userData.body = body;
+  if (it.id === 'prop_hayate_nodachi') { const sh = buildShuriken(L); g.add(sh); g.userData.swap = sh; }
   if (it.kind === 'blade') { buildBlade(L, it, body); body.rotation.x = it.pitch ?? -0.5; }
   else buildBow(L, it, body);
   void (async () => {

@@ -149,12 +149,12 @@ def yuzu(R, L):
     forward, then she nocks the next arrow from the quiver over the right shoulder - all inside the 0.9 s shot cycle."""
     C = {}
     C["fp_idle"] = idle(R, L, amp=0.004, sway=0.003, Lr=(0, 0, -10))
-    draw = (0.1, -0.06, 0.08)
+    draw = (0.24, -0.11, -0.01)         # string hand drawn back past the jaw, out of frame on the right (the forearm never crosses the lens)
     C["fp_draw"] = {"keys": [K(0, R, L, (0, 0, 0), (0, 0, -10)), K(20, draw, off(L, 0, 0.01, 0.03), (0, 10, 0), (0, 0, -15), "out")]}
     C["fp_fire"] = {"keys": [K(0, draw, off(L, 0, 0.01, 0.03), (0, 10, 0), (0, 0, -15)),
-                             K(1, (0.16, -0.04, 0.02), off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
-                             K(6, (0.17, -0.05, 0.02), off(L, 0, 0.0, 0.02), None, (0, 0, -10), "out"),
-                             K(12, (0.2, 0.02, -0.02), None, (40, 30, 30), None, "io"),
+                             K(1, (0.34, -0.1, -0.06), off(L, 0, 0.015, 0.05), (10, 25, 20), (-4, 0, -15), "snap"),
+                             K(6, (0.35, -0.11, -0.06), off(L, 0, 0.0, 0.02), None, (0, 0, -10), "out"),
+                             K(12, (0.3, -0.06, -0.02), None, (40, 30, 30), None, "io"),
                              K(20, off(R, 0.02, 0.0, 0.0), None, (0, 0, 0), None, "io"),
                              K(27, R, L, (0, 0, 0), (0, 0, -10), "io")]}
     C["fp_alt"] = {"keys": [K(0, R, L), K(10, off(R, 0, 0.01, -0.01), off(L, 0, 0.01, 0.02), None, None, "io"), K(30, R, L, None, None, "io")]}
@@ -328,9 +328,57 @@ def gorgoth(R, L):
     return C
 
 
+def hayate(R, L):
+    """HAYATE - the rebuilt cyber-ninja, loose and quick. Koi-scale shuriken flicked from the chest in threes (0.08 s
+    apart, the wrist doing the work); RMB fans three across with a flat backhand sweep. The nodachi only leaves his back
+    for the moments that matter: Current Dash cuts across the view, Mirror Water holds it upright in front of him, and
+    the Dragon Gate draws it over the right shoulder in one long arc. Reload: three new scales slid off the left
+    palm into the throwing fingers. Inspect: a scale spun on a fingertip."""
+    C = {}
+    Rr0, Lr0 = (-15, 0, -20), (-10, 0, 25)
+    C["fp_idle"] = idle(R, L, amp=0.005, sway=0.006, Rr=Rr0, Lr=Lr0)
+    back, out = off(R, 0.02, 0.01, -0.07), off(R, -0.05, 0.03, 0.11)
+    C["fp_fire"] = {"keys": [K(0, R, L, Rr0), K(1, back, None, (10, 0, -60), None, "snap"), K(2, out, None, (-30, 0, 10), None, "snap"),
+                             K(3, back, None, (10, 0, -60), None, "snap"), K(5, out, None, (-30, 0, 10), None, "snap"),
+                             K(6, back, None, (10, 0, -60), None, "snap"), K(7, out, None, (-30, 0, 10), None, "snap"),
+                             K(9, off(out, 0.01, -0.01, -0.01), None, None, None, "out"), K(14, R, L, Rr0, None, "io")]}
+    C["fp_alt"] = {"keys": [K(0, R, L, Rr0), K(2, (0.3, -0.06, 0.28), None, (0, 60, -90), None, "snap"),
+                            K(5, (-0.06, -0.08, 0.5), None, (0, -40, -90), None, "snap"), K(8, (-0.08, -0.09, 0.48), None, None, None, "out"),
+                            K(16, R, L, Rr0, None, "io")]}
+    C["fp_reload"] = {"keys": [K(0, R, L, Rr0, Lr0), K(6, (0.08, -0.18, 0.34), (0.0, -0.17, 0.36), (-20, 0, 70), (-40, 0, -60), "io"),
+                               K(12, (0.05, -0.16, 0.37), None, (0, 0, 90), None, "out"), K(18, off(R, 0, -0.02), L, (-10, 0, 0), Lr0, "io"),
+                               K(24, R, None, Rr0, None, "back")]}
+    C["fp_melee"] = quick_melee(R, L)
+    C["fp_ability1"] = {"keys": [K(0, R, L, Rr0, Lr0), K(2, (0.3, -0.12, 0.2), off(L, -0.04, -0.06), (-30, 40, 60), None, "snap"),
+                                 K(6, (-0.22, -0.18, 0.5), None, (-10, -50, -40), None, "snap"), K(10, (-0.24, -0.2, 0.46), None, None, None, "out"),
+                                 K(20, R, L, Rr0, Lr0, "io")]}
+    guard = (0.04, -0.1, 0.4)
+    C["fp_ability2"] = {"keys": [K(0, R, L, Rr0, Lr0), K(3, guard, off(L, 0.06, 0.04, 0.04), (0, 0, -80), (20, 0, 40), "snap"),
+                                 K(56, off(guard, 0, 0.005), None, (0, 0, -84), None, "hold"), K(64, R, L, Rr0, Lr0, "io")]}
+    C["fp_ult"] = {"keys": [K(0, R, L, Rr0, Lr0), K(4, (0.2, 0.12, 0.02), off(L, 0, 0.04), (80, 0, 20), None, "snap"),
+                            K(12, (0.08, -0.04, 0.5), None, (-20, 0, -10), None, "out"), K(18, (-0.12, -0.14, 0.5), None, (-40, -30, -40), None, "snap"),
+                            K(32, R, L, Rr0, Lr0, "io")]}
+    C["fp_inspect"] = {"keys": [K(0, R, L, Rr0), K(8, (0.1, -0.06, 0.36), None, (0, 0, 0), None, "io"),
+                                K(16, None, None, (0, 0, 360), None, "lin"), K(24, None, None, (0, 0, 720), None, "out"),
+                                K(34, R, None, Rr0, None, "io")]}
+    return C
+
+
+def seiran(R, L):
+    """SEIRAN - the elder brother: the same archer's craft as Yuzu, carried heavier and stiller (less idle drift, a
+    longer settle after each shot). Twin Koi: both hands lift the bow skyward and the release throws both arms wide."""
+    C = yuzu(R, L)
+    C["fp_idle"] = idle(R, L, amp=0.0025, sway=0.002, Lr=(0, 0, -8))
+    C["fp_ult"] = {"keys": [K(0, R, L), K(5, (0.04, 0.12, 0.32), (0.0, 0.16, 0.46), (60, 0, 0), (60, 0, -10), "snap"),
+                            K(20, (0.1, 0.18, 0.12), (0.0, 0.2, 0.46), (70, 10, 10), None, "out"),
+                            K(22, (0.3, 0.1, 0.1), (-0.1, 0.18, 0.5), (80, 40, 40), None, "snap"), K(38, R, L, (0, 0, 0), (0, 0, -10), "io")]}
+    return C
+
+
 def build(hero, R, L):
     """hero -> {clip: {"loop": bool, "keys": [...]}}; every hero also gets hit / land / equip"""
-    fam = {"raijin": raijin, "yuzu": yuzu, "kagemaru": kagemaru, "enra": enra, "haruto": haruto, "gorgoth": gorgoth}
+    fam = {"raijin": raijin, "yuzu": yuzu, "kagemaru": kagemaru, "enra": enra, "haruto": haruto, "gorgoth": gorgoth,
+           "hayate": hayate, "seiran": seiran}
     if hero in fam: C = fam[hero](R, L)
     elif hero in ("kaien", "mirei", "nocturne", "hex"): C = caster(R, L, hero)
     else: return {}

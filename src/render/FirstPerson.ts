@@ -20,13 +20,16 @@ type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists'
 // whose sleeve cuffs flare over the hands
 // drape: drop arm-weighted triangles further than this (x forearm length) from their bone - sleeve cloth and sashes that hang
 // off the arms and would fill the view
-interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; }
+// gunScale: the held guns' size in the viewmodel (the world model's props are concept-sized; up close they'd fill the view)
+interface Style { grip: Grip; R: V; L: V | null; recoil: number; push?: number; clip?: number; keep?: number; drape?: number; gunScale?: number; }
 
 /** each hero's viewmodel personality */
 export const FP_STYLE: Record<string, Style> = {
   raijin: { grip: 'katana', R: [0.22, -0.17, 0.46], L: [0.08, -0.19, 0.44], recoil: 0, clip: 0.14, keep: 0.97 },
-  yuzu: { grip: 'bow', R: [0.0, -0.13, 0.4], L: [-0.06, -0.13, 0.52], recoil: 0 },
-  kaien: { grip: 'caster', R: [0.19, -0.19, 0.46], L: [-0.19, -0.2, 0.44], recoil: 0.03, keep: 0.97 },
+  // the bow held left of the reticle and canted (an archer's first-person read), sized down for the viewmodel
+  yuzu: { grip: 'bow', R: [0.1, -0.16, 0.4], L: [-0.17, -0.15, 0.5], recoil: 0, clip: 0.12, gunScale: 0.8 },
+  // the wide kimono sleeves hang off his forearms: drape cuts them so the talisman hands stay in view
+  kaien: { grip: 'caster', R: [0.18, -0.14, 0.5], L: [-0.18, -0.15, 0.48], recoil: 0.03, keep: 0.97, drape: 0.3 },
   mirei: { grip: 'caster', R: [0.14, -0.14, 0.38], L: [-0.15, -0.15, 0.35], recoil: 0.02 },
   nocturne: { grip: 'caster', R: [0.14, -0.1, 0.4], L: [-0.14, -0.11, 0.38], recoil: 0.02 },
   hex: { grip: 'caster', R: [0.13, -0.14, 0.38], L: [-0.13, -0.14, 0.38], recoil: 0.025 },
@@ -35,10 +38,16 @@ export const FP_STYLE: Record<string, Style> = {
   haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
   tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
-  gantetsu: { grip: 'dual', R: [0.44, -0.3, 0.42], L: [-0.44, -0.3, 0.42], recoil: 0.03, push: 0.08 },
+  // hip-held twin chainguns in the bottom corners, angled in on the reticle, the rear of each gun out of view
+  gantetsu: { grip: 'dual', R: [0.36, -0.36, 0.56], L: [-0.36, -0.36, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.8 },
   hibiki: { grip: 'pistol', R: [0.25, -0.17, 0.52], L: [-0.24, -0.3, 0.4], recoil: 0.05 },
   // the scattergun one-handed on the right, the Crescent Fang held low in the left fist
   tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.23, -0.29, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
+  // koi-scale shuriken flicked from the chest (the scarf is cut out: it wraps the neck, not the arms)
+  hayate: { grip: 'kunai', R: [0.17, -0.09, 0.42], L: [-0.17, -0.11, 0.4], recoil: 0, keep: 0.9 },
+  // the Riverbow in the left hand, the draw hand on the right
+  // his robe sleeve is cut away (drape) and the quiver over his shoulder clipped, so the bow arm doesn't wall off the view
+  seiran: { grip: 'bow', R: [0.12, -0.17, 0.4], L: [-0.22, -0.2, 0.46], recoil: 0, keep: 0.9, drape: 0.35, clip: 0.14, gunScale: 0.75 },
 };
 const DEFAULT: Style = { grip: 'rifle', R: [0.16, -0.15, 0.34], L: [0.03, -0.14, 0.5], recoil: 0.04 };
 
@@ -240,6 +249,7 @@ export class FirstPersonArms {
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
     this.view.inner.scale.setScalar(1);
     this.view.updateGuns(dt, t);
+    if (this.style.gunScale) for (const g of this.view.guns) g.group.scale.setScalar(this.style.gunScale);
     if (this.view.backAxe) this.view.backAxe.visible = false;          // slung on her back: never in the viewmodel
     // ---- 1. authored clips (Overwatch-style: gameplay owns the clock - see assetgen/blender/fp_choreo.py)
     if (this.mixer) {
@@ -268,6 +278,9 @@ export class FirstPersonArms {
         this.mixer.update(dt);
         an.bones.head?.scale.setScalar(1e-3);
         if (an.prop) an.prop.visible = true;
+        // held weapons (Raijin's katana, the bows, Hayate's nodachi) follow the clip's hands; bows canted in
+        an.bowCant = this.style.grip === 'bow' ? 0.38 : 0;
+        an.placeGunsFromBones();
         this.source = `clip:${want}`;
         return;
       }

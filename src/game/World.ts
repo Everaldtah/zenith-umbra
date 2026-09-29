@@ -296,7 +296,7 @@ export class World {
     tgt.lastDamagedAt = t;
     tgt.anim.hitAt = t;
     if (src && src !== tgt) {
-      tgt.lastHitBy = src; tgt.lastHitAt = t;
+      tgt.lastHitBy = src; tgt.lastHitAt = t; tgt.sv.lastHitDmg = dealt;
       let m = this.attackers.get(tgt.id); if (!m) this.attackers.set(tgt.id, m = new Map());
       m.set(src.id, t);
       src.dmgDone += dealt;

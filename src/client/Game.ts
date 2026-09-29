@@ -279,6 +279,7 @@ export class Game {
     }
     this.bossCam = null;
     const w = this.match.world;
+    CharacterView.level = w.level;                  // ragdolls land on this map's floors and walls
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
     // bright daylight maps (pale plaster, white stone): only real highlights bloom, or sunlit walls glow white
     if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55; }
