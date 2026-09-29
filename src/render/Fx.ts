@@ -72,6 +72,32 @@ class Particles {
 interface Timed { obj: THREE.Object3D; born: number; dur: number; kind: string; r?: number; from?: V3; to?: V3; actor?: Actor; target?: Actor; }
 
 const ringGeo = new THREE.RingGeometry(0.92, 1, 64);
+
+/** Grand Dohyo: the packed clay of the ring */
+const dohyoClay = () => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  uniforms: { t: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+  fragmentShader: `uniform float t; varying vec2 vUv;
+    void main(){ vec2 p=vUv-0.5; float r=length(p)*2.0; if(r>1.0) discard;
+      float lines=smoothstep(0.02,0.0,abs(p.x))*step(abs(p.y),0.06)*0.0 + smoothstep(0.012,0.0,abs(abs(p.x)-0.07))*step(abs(p.y),0.03);
+      vec3 c=mix(vec3(0.62,0.48,0.32),vec3(0.8,0.66,0.45),r); gl_FragColor=vec4(c+vec3(1.0,0.85,0.55)*lines, 0.55*(1.0-smoothstep(0.96,1.0,r))+lines*0.4); }`,
+});
+/** Grand Dohyo: the sacred wall of light rising from the ring */
+const dohyoWall = () => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+  uniforms: { t: { value: 0 }, k: { value: 1 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+  fragmentShader: `uniform float t; uniform float k; varying vec2 vUv;
+    void main(){ float y=vUv.y, a=vUv.x*72.0;
+      float base=0.22*(1.0-y)*(1.0-y)+0.05;                               // brightest at the ring, fading upward
+      float rope=smoothstep(0.035,0.0,abs(y-0.93))*(0.6+0.4*sin(a*6.0+y*40.0));      // twisted rope band
+      float z1=abs(fract(a*0.5)-0.5)*2.0;                                             // zigzag paper streamers
+      float shide=step(0.72,y)*step(y,0.9)*smoothstep(0.1,0.0,abs(z1-(0.9-y)*5.0))*step(fract(a/6.0),0.5);
+      float shimmer=0.08*sin(a*0.5+t*3.0+y*9.0);
+      vec3 c=mix(vec3(1.0,0.88,0.6),vec3(0.2,0.82,0.74),0.35+0.35*sin(a*0.2+t));
+      gl_FragColor=vec4(c*(base+rope*0.9+shide*0.8+shimmer)*k, (base+rope+shide)*k); }`,
+});
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true); beamGeo.translate(0, 0.5, 0); beamGeo.rotateX(Math.PI / 2);
 const coneGeo = new THREE.ConeGeometry(1, 1, 24, 1, true); coneGeo.translate(0, -0.5, 0); coneGeo.rotateX(-Math.PI / 2);
 
@@ -107,6 +133,13 @@ export class Fx {
     this.parts = new Particles(cap);
     this.group.add(this.parts.points);
     if (FULL) { this.wfx = new WeaponFx(); this.group.add(this.wfx.group); this.dragons = new SpiritDragons(this.group); this.chains = new ChainCage(this.group); }
+    if (FULL) {
+      // the Grand Dohyo's ring is a zone, not an effect the match preloader can fire: a speck of each of its shaders
+      // is drawn from the first frame on (parked under the world), so the first ring of a match compiles nothing
+      const park = new THREE.Group(), wall = dohyoWall(); wall.uniforms.k.value = 0;
+      for (const mt of [dohyoClay(), wall]) { const me = new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), mt); me.frustumCulled = false; park.add(me); }
+      park.position.y = -500; this.group.add(park);
+    }
     this.flash = new THREE.PointLight('#ffffff', 0, 18, 2);
     this.group.add(this.flash);
     scene.add(this.group);
@@ -562,32 +595,11 @@ export class Fx {
     let m = m0;
     if (!m) {
       m = new THREE.Group();
-      const clay = new THREE.Mesh(new THREE.CircleGeometry(z.r, 64), new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, side: THREE.DoubleSide,
-        uniforms: { t: { value: 0 } },
-        vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
-        fragmentShader: `uniform float t; varying vec2 vUv;
-          void main(){ vec2 p=vUv-0.5; float r=length(p)*2.0; if(r>1.0) discard;
-            float lines=smoothstep(0.02,0.0,abs(p.x))*step(abs(p.y),0.06)*0.0 + smoothstep(0.012,0.0,abs(abs(p.x)-0.07))*step(abs(p.y),0.03);
-            vec3 c=mix(vec3(0.62,0.48,0.32),vec3(0.8,0.66,0.45),r); gl_FragColor=vec4(c+vec3(1.0,0.85,0.55)*lines, 0.55*(1.0-smoothstep(0.96,1.0,r))+lines*0.4); }`,
-      }));
+      const clay = new THREE.Mesh(new THREE.CircleGeometry(z.r, 64), dohyoClay());
       clay.rotation.x = -Math.PI / 2; clay.position.y = 0.06; m.add(clay);
       const tawara = new THREE.Mesh(new THREE.TorusGeometry(z.r, 0.16, 8, 72), new THREE.MeshStandardMaterial({ color: '#d8b26a', emissive: new THREE.Color('#6b4b1a'), emissiveIntensity: 0.4, roughness: 0.9 }));
       tawara.rotation.x = -Math.PI / 2; tawara.position.y = 0.14; m.add(tawara);
-      const wall = new THREE.Mesh(new THREE.CylinderGeometry(z.r, z.r, RING_H, 72, 1, true), new THREE.ShaderMaterial({
-        transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-        uniforms: { t: { value: 0 }, k: { value: 1 } },
-        vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
-        fragmentShader: `uniform float t; uniform float k; varying vec2 vUv;
-          void main(){ float y=vUv.y, a=vUv.x*72.0;
-            float base=0.22*(1.0-y)*(1.0-y)+0.05;                               // brightest at the ring, fading upward
-            float rope=smoothstep(0.035,0.0,abs(y-0.93))*(0.6+0.4*sin(a*6.0+y*40.0));      // twisted rope band
-            float z1=abs(fract(a*0.5)-0.5)*2.0;                                             // zigzag paper streamers
-            float shide=step(0.72,y)*step(y,0.9)*smoothstep(0.1,0.0,abs(z1-(0.9-y)*5.0))*step(fract(a/6.0),0.5);
-            float shimmer=0.08*sin(a*0.5+t*3.0+y*9.0);
-            vec3 c=mix(vec3(1.0,0.88,0.6),vec3(0.2,0.82,0.74),0.35+0.35*sin(a*0.2+t));
-            gl_FragColor=vec4(c*(base+rope*0.9+shide*0.8+shimmer)*k, (base+rope+shide)*k); }`,
-      }));
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(z.r, z.r, RING_H, 72, 1, true), dohyoWall());
       wall.position.y = RING_H / 2; wall.name = 'wall'; m.add(wall);
       // the four tassels: green (east), red (south), white (west), black (north)
       const tas = ['#2fd3b8', '#ff3b5c', '#f4f1e8', '#20202a'];

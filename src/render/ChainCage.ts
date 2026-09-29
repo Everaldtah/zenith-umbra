@@ -91,6 +91,9 @@ export class ChainCage {
     this.n = 0; this.put(new THREE.Vector3(0, -500, 0), new THREE.Vector3(0, 0, 1), 0, 0);
     this.mesh.count = 1;
     parent.add(this.mesh);
+    // ...and the stake's program (the same shader without instancing) the same way
+    const speck = new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), this.stakeMat);
+    speck.position.y = -500; speck.frustumCulled = false; parent.add(speck);
     void this.load();
   }
 
