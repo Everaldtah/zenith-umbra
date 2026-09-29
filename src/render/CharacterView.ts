@@ -3,10 +3,12 @@
 import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator, type AnimState } from './Animator';
-import { heroModel } from './Assets';
+import { hasModel, heroModel, loadManifest, modelInfo } from './Assets';
+import { Eyelids } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
+import { HELD, buildHeld, heldVisible } from './HeldProps';
 
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
@@ -258,15 +260,25 @@ export class CharacterView {
 
   setSkin(id: string) {
     const s = skinsFor(this.actor.def.id, this.actor.def.team).find(x => x.id === id);
-    if (s) { this.skin = s; applySkin(this.look, s); }
+    if (!s) return;
+    this.skin = s; applySkin(this.look, s);
+    if (this.modelIdFor(s) !== this.loadedModel) void this.loadReal();          // a model skin swaps the whole body
   }
 
+  /** the model this skin wears: its own (model skins, when published) or the hero's */
+  private modelIdFor(s: Skin) { return s.model && hasModel(s.model) ? s.model : this.actor.def.id; }
+  private loadedModel = '';
+  private loadSeq = 0;
+
+  lids: Eyelids | null = null;
   /** twin chainguns: model-space props the animator lays along the forearms each frame */
   skates: SkateProp[] = [];
+  /** the hero holds a HeldProps blade / bow (anim.guns) */
+  private heldHero = false;
   private attachGuns(anim: Animator, root: THREE.Object3D) {
     for (const g of this.guns) g.group.parent?.remove(g.group);
     for (const s of this.skates) s.group.parent?.remove(s.group);
-    this.guns = []; this.skates = []; anim.feet = null;
+    this.guns = []; this.skates = []; anim.feet = null; this.heldHero = false; anim.gunUpright = [false, false];
     if (this.actor.def.id === 'tomoe' && anim.ok) {
       // Tomoe: the Crownfire Scattergun on the right forearm, the Crescent Fang in the left fist
       const fang = buildFang(anim.height), gun = buildScattergun(anim.height);
@@ -286,6 +298,18 @@ export class CharacterView {
       anim.feet = [this.skates[0].group, this.skates[1].group];
       return;
     }
+    const held = HELD[this.actor.def.id];
+    if (held && anim.ok) {
+      // a blade or a bow in the fist (an empty mount on the other side), laid along the forearm by the animator
+      const mk = (it: typeof held.L) => it ? buildHeld(anim.height, it).group : new THREE.Group();
+      const gl = mk(held.L), gr = mk(held.R);
+      this.guns = [gl, gr].map(group => ({ group, spin: new THREE.Group(), flash: new THREE.Mesh(), core: new THREE.MeshStandardMaterial(), len: 0 }));
+      root.add(gl); root.add(gr);
+      anim.guns = [gl, gr];
+      anim.gunUpright = [held.L?.kind === 'bow', held.R?.kind === 'bow'];
+      this.heldHero = true;
+      return;
+    }
     if (!this.actor.def.dualGuns || !anim.ok) { anim.guns = null; return; }
     this.guns = [buildChaingun(anim.height, 'L'), buildChaingun(anim.height, 'R')];
     for (const g of this.guns) g.group.scale.setScalar(1.25);          // concept-sized: they're half as long as he is tall
@@ -297,6 +321,10 @@ export class CharacterView {
   updateGuns(dt: number, time: number) {
     if (!this.guns.length) return;
     const a = this.actor;
+    if (this.heldHero) {
+      this.anim.gunHide = [!heldVisible(a.def.id, 0, a, time), !heldVisible(a.def.id, 1, a, time)];
+      return;
+    }
     if (a.def.id === 'tomoe') {
       // the axe replaces both guns while it's out; the Fang leaves her hand when thrown; the crown muzzle flashes per blast
       const axe = this.axeOut(time), age = time - a.anim.attackAt;
@@ -358,8 +386,19 @@ export class CharacterView {
 
   private async loadReal() {
     const id = this.actor.def.id;
-    const m = await heroModel(id);
-    if (!m) return;
+    const seq = ++this.loadSeq;
+    await loadManifest();
+    const mid = this.modelIdFor(this.skin);
+    const m = await heroModel(mid);
+    if (!m || seq !== this.loadSeq) return;                  // a newer load (skin change) superseded this one
+    if (this.real) {
+      // swapping models (a model skin): drop the old body's props before the new one takes them over
+      this.hammer?.group.parent?.remove(this.hammer.group); this.hammer = null;
+      this.backAxe?.parent?.remove(this.backAxe); this.backAxe = null;
+      for (const j of this.jets) j.parent?.remove(j);
+      this.jets = [];
+    }
+    this.loadedModel = mid;
     // normalise: feet on the ground, height = hero height (the rig script already faces +Z)
     const box = new THREE.Box3().setFromObject(m);
     const h = box.max.y - box.min.y || 1;
@@ -416,6 +455,12 @@ export class CharacterView {
     }
     // materials: keep the concept colours, add rim + a hint of emission for readability in dark maps
     this.collectMats();
+    // physics: the body colliders the hair / cloth solver pushes against, measured from this mesh by the rigger;
+    // blinking: lids over the painted eyes the rigger found on the face
+    const info = modelInfo(mid);
+    if (info?.colliders) anim.colliders = info.colliders as Animator['colliders'];
+    this.lids?.dispose(); this.lids = null;
+    if (info?.eyes?.length === 2 && anim.bones.head) this.lids = new Eyelids(m, anim.bones.head, info.eyes, BRIGHT_SUITS.has(id) ? 0.04 : 0.16);
     // the costume's own hues, for skin palette remaps
     const map = (this.mats.find(mt => (mt as THREE.MeshStandardMaterial).map) as THREE.MeshStandardMaterial | undefined)?.map ?? null;
     const pal = analysePalette(map);
@@ -517,6 +562,7 @@ export class CharacterView {
       if (this.hammer) this.hammer.flame.visible = false;
       for (const j of this.jets) j.visible = false;
       this.anim.update({ ...this.animState(dt, time), vel: new THREE.Vector3(), dead: true, deathAge: age, grounded: true, flying: false });
+      this.lids?.update(time, a.anim.hitAt, true);
       return;
     }
     if (!a.alive) {
@@ -561,6 +607,7 @@ export class CharacterView {
     }
     // animation
     this.anim.update(this.animState(dt, time));
+    this.lids?.update(time, a.anim.hitAt, false);
     // performance layer: squash & stretch (about the feet) and the whole-body tilt (about the hips)
     const an2 = this.anim, piv = a.height * 0.55;
     this.inner.scale.set(a.scale * an2.sqXZ, a.scale * an2.sqY, a.scale * an2.sqXZ);

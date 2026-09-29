@@ -18,6 +18,7 @@ export interface BuildingSpec {
   stair?: Side;                                       // interior stair ramps rise toward this side (needed for storeys > 1 or a flat roof)
   mat?: Mat; roofMat?: Mat; trim?: Mat;
   awnings?: Side[];                                   // shop awnings over the ground floor
+  atrium?: [number, number];                          // a double-height void (w, d) through the upper floors: a gallery ring around a hall
 }
 const T = 0.6;           // wall thickness
 // doorways clear the frame mechs (3.3m) - every hero fits through every door, as in Overwatch
@@ -115,7 +116,17 @@ export function building(s: BuildingSpec): { boxes: Box[]; decor: Box[] } {
       boxes.push(bx);
     }
     const slabMat: Mat = f === N ? roofMat : trim;
-    for (const [x0, z0, x1, z1] of minus([ix0, iz0, ix1, iz1], hole)) boxes.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: 0.3, y: top - 0.3, mat: slabMat });
+    let rects = minus([ix0, iz0, ix1, iz1], hole);
+    // the atrium: upper floors are a gallery ring around a void (the roof stays whole)
+    if (s.atrium && f < flights + (roof === 'flat' ? 0 : 1) && !(roof === 'flat' && f === flights)) {
+      const [aw, ad] = s.atrium, at: [number, number, number, number] = [s.x - aw / 2, s.z - ad / 2, s.x + aw / 2, s.z + ad / 2];
+      rects = rects.flatMap(r => minus(r, [Math.max(r[0], at[0]), Math.max(r[1], at[1]), Math.min(r[2], at[2]), Math.min(r[3], at[3])]).length && (at[0] < r[2] && at[2] > r[0] && at[1] < r[3] && at[3] > r[1]) ? minus(r, [Math.max(r[0], at[0]), Math.max(r[1], at[1]), Math.min(r[2], at[2]), Math.min(r[3], at[3])]) : [r]);
+      // a waist-high rail around the drop (render + collision; hop it to drop into the hall)
+      const ry = top, rh = 0.9;
+      boxes.push({ x: s.x, z: at[1] - 0.15, w: aw + 0.3, d: 0.3, h: rh, y: ry, mat: trim }, { x: s.x, z: at[3] + 0.15, w: aw + 0.3, d: 0.3, h: rh, y: ry, mat: trim },
+        { x: at[0] - 0.15, z: s.z, w: 0.3, d: ad, h: rh, y: ry, mat: trim }, { x: at[2] + 0.15, z: s.z, w: 0.3, d: ad, h: rh, y: ry, mat: trim });
+    }
+    for (const [x0, z0, x1, z1] of rects) boxes.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h: 0.3, y: top - 0.3, mat: slabMat });
   }
   // ---- roof
   const top = base + N * H;

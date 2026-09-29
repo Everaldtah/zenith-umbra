@@ -394,6 +394,23 @@ export class Bot {
         if (ultReady && tg && d < 8 && a.health / a.maxHp > 0.45) this.castAt('ult');
         break;
       }
+      case 'hayate': {
+        const seiran = foes.find(x => x.def.id === 'seiran');
+        // COUNTER: turn his brother's arrows (and any volley) back
+        if (rdy('mirrorwater') && ((seiran && vis(seiran) && dist3(seiran.pos, a.pos) < 40 && t - seiran.anim.attackAt < 0.3) || w.projs.filter(p => p.team !== a.team && dist3(p.pos, a.pos) < 7).length >= 3)) { this.castAt('a2'); break; }
+        const land = tg ? { x: a.pos.x + (tg.pos.x - a.pos.x) / d * 15, z: a.pos.z + (tg.pos.z - a.pos.z) / d * 15 } : null;
+        const safe = land && w.level.groundAt(land.x, land.z, a.pos.y + 1) > a.pos.y - 3;
+        if (tg && safe && rdy('currentdash') && d > 4 && d < 15 && vis(tg) && (tg.health / tg.maxHp < 0.5 || Math.random() < 0.02)) { this.castAt('a1', tg.center); a.input.mz = 1; a.input.mx = 0; break; }
+        if (ultReady && tg && d < 14 && near(tg.pos, 10, foes).length >= 2) this.castAt('ult');
+        break;
+      }
+      case 'seiran': {
+        const hayate = foes.find(x => x.def.id === 'hayate');
+        if (hayate && rdy('echoarrow') && dist3(hayate.pos, a.pos) < 30 && !vis(hayate)) { this.castAt('a2', hayate.center); break; }
+        if (rdy('riverstep') && tg && d < 6) { this.castAt('a1'); break; }
+        if (ultReady && tg && near(tg.pos, 6, foes).length >= 2) { this.castAt('ult', tg.center); break; }
+        break;
+      }
       case 'yuzu': {
         const hex = foes.find(x => x.def.id === 'hex');
         const strung = allies.find(x => x.has('tethered', t) || x.has('antiheal', t));

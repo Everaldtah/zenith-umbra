@@ -49,7 +49,7 @@ await wait(5000); await shot('09_results');
 
 // flyover of every play map (spectate camera, no HUD) - buildings, packs, water
 await zu(() => window.__zu.game.stop());
-for (const id of ['amatsu', 'kurogane', 'hangar', 'cathedral', 'rift', 'hanabi', 'cloudstep', 'kagura']) {
+for (const id of ['hanabi', 'cloudstep', 'kagura', 'lantern', 'starfall', 'foundry']) {
   await zu(id => { const M = window.__zu.menu; M.queue = null; M.mode = 'spectate'; M.map = id; return M.launch(); }, id);
   for (let i = 0; i < 60 && !(await zu(id => window.__zu.game?.match?.world?.map.id === id && window.__zu.game.running, id)); i++) await wait(500);
   await zu(() => { const w = window.__zu.game.match.world; for (let i = 0; i < 60 * 14; i++) w.step(1 / 60); });

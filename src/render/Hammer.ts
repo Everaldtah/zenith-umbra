@@ -2,6 +2,8 @@
 // Local frame: the haft runs up +Y from the pommel (origin); the head sits across the top with its striking face on +X
 // (the swing direction) and the rocket nozzle on -X, which flares while a swing is in flight.
 import * as THREE from 'three';
+import { hasProp, loadManifest, propModel } from './Assets';
+import { fitProp } from './TomoeProps';
 
 export interface HammerProp { group: THREE.Group; len: number; flame: THREE.Mesh; core: THREE.MeshStandardMaterial }
 
@@ -45,7 +47,31 @@ export function buildHammer(modelHeight: number): HammerProp {
   flame.position.set(-hw / 2 - 0.065 * L, hy, 0); flame.rotation.z = Math.PI / 2;
   flame.visible = false;
   g.add(flame);
+  upgradeHammer(g, flame, len, L);
   return { group: g, len, flame, core };
+}
+
+/**
+ * Swap the procedural hammer for the generated Dawnbreaker (Tripo Studio; assetgen/blender/prop_orient.py stood it in
+ * this frame: pommel at the origin, haft up +Y, the octagonal striking face on +X, the rocket nozzle on -X) when the
+ * manifest has it. Scaled to the same haft length, so every swing path and grip stays as authored; the thruster flame
+ * moves to the real nozzle.
+ */
+function upgradeHammer(g: THREE.Group, flame: THREE.Mesh, len: number, L: number) {
+  void (async () => {
+    await loadManifest();
+    if (!hasProp('prop_tenkai_hammer')) return;
+    const m = await propModel('prop_tenkai_hammer');
+    if (!m) return;
+    const box = new THREE.Box3().setFromObject(m);
+    const s = len * 1.08 / Math.max(1e-6, box.max.y - box.min.y);     // a touch longer than the procedural haft: Reinhardt-sized
+    m.scale.setScalar(s); m.position.y = -box.min.y * s;
+    m.traverse(o => { const me = o as THREE.Mesh; if (me.isMesh) { me.castShadow = true; const mt = me.material as THREE.MeshStandardMaterial; if (mt?.isMeshStandardMaterial) { mt.metalnessMap = null; mt.metalness = 0.45; mt.roughness = 0.34; mt.needsUpdate = true; } } });
+    for (const c of [...g.children]) if (c !== flame) g.remove(c);
+    g.add(m);
+    // the nozzle: the -X end of the head
+    flame.position.set(box.min.x * s - 0.012 * L, (box.max.y - (box.max.y - box.min.y) * 0.12) * s - box.min.y * s, 0);
+  })();
 }
 
 /** Haruto's "Sunspark" sidearm: barrel along +Z from the grip (origin), sized in the rig's model units */
@@ -124,7 +150,67 @@ export function buildChaingun(modelHeight: number, side: 'L' | 'R'): ChaingunPro
   const flash = new THREE.Mesh(new THREE.ShapeGeometry(star), new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   flash.position.set(0, cy, bodyZ1 + 0.2 * L); flash.visible = false;
   g.add(flash);
-  return { group: g, spin, flash, core, len };
+  const prop: ChaingunProp = { group: g, spin, flash, core, len };
+  upgradeChaingun(prop, side === 'L' ? 'prop_gantetsu_hinoko' : 'prop_gantetsu_hanabi', L);
+  return prop;
+}
+
+/**
+ * Swap the procedural chaingun for the Tripo model (Hinoko left, Hanabi right) once it's loaded: fitted by PCA (muzzle
+ * forward on +Z, flat top up, pistol grip in the fist), then the front of the mesh - the six-barrel cluster - is cut
+ * into its own mesh and hung in the spin group on the cluster's own axis, so the barrels still spin up as he fires.
+ */
+function upgradeChaingun(prop: ChaingunProp, id: string, L: number) {
+  void (async () => {
+    await loadManifest();
+    if (!hasProp(id)) return;
+    const m = await propModel(id);
+    if (!m) return;
+    const size = 0.46 * L;
+    const fitted = fitProp(m, 'gun', size);
+    const g = prop.group;
+    // bake the fitted model into gun-frame geometry
+    const holder = new THREE.Group(); holder.add(fitted); holder.updateMatrixWorld(true);
+    const parts: { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] }[] = [];
+    fitted.traverse(o => {
+      const me = o as THREE.Mesh;
+      if (!me.isMesh) return;
+      const geo = (me.geometry.index ? me.geometry.toNonIndexed() : me.geometry.clone()).applyMatrix4(me.matrixWorld);
+      parts.push({ geo, mat: me.material });
+    });
+    if (!parts.length) return;
+    const box = new THREE.Box3();
+    for (const p of parts) { p.geo.computeBoundingBox(); box.union(p.geo.boundingBox!); }
+    // the grip: a quarter of the way along from the back, the receiver sitting just above the fist
+    const off = new THREE.Vector3(-(box.min.x + box.max.x) / 2, -(box.min.y + (box.max.y - box.min.y) * 0.3), -(box.min.z + (box.max.z - box.min.z) * 0.22));
+    const zCut = box.max.z + off.z - (box.max.z - box.min.z) * 0.38;
+    const keepMeshes: THREE.Mesh[] = [], barrelMeshes: THREE.Mesh[] = [];
+    const ax = new THREE.Vector2(), bb = new THREE.Box2();
+    bb.makeEmpty();
+    for (const p of parts) {
+      p.geo.translate(off.x, off.y, off.z);
+      const pos = p.geo.attributes.position, n = pos.count;
+      const front: number[] = [], back: number[] = [];
+      for (let t = 0; t + 2 < n; t += 3) {
+        const inFront = pos.getZ(t) > zCut && pos.getZ(t + 1) > zCut && pos.getZ(t + 2) > zCut;
+        (inFront ? front : back).push(t, t + 1, t + 2);
+        if (inFront) for (let k = 0; k < 3; k++) bb.expandByPoint(new THREE.Vector2(pos.getX(t + k), pos.getY(t + k)));
+      }
+      const sub = (idx: number[]) => { const q = p.geo.clone(); q.setIndex(idx); return q; };
+      if (back.length) keepMeshes.push(new THREE.Mesh(sub(back), p.mat));
+      if (front.length) barrelMeshes.push(new THREE.Mesh(sub(front), p.mat));
+    }
+    bb.getCenter(ax);
+    // replace the procedural parts (keep the spin group and the flash), then hang the barrels on their own axis
+    for (const c of [...g.children]) if (c !== prop.spin && c !== prop.flash) g.remove(c);
+    prop.spin.clear();
+    prop.spin.position.set(ax.x, ax.y, 0);
+    for (const b of barrelMeshes) { b.geometry.translate(-ax.x, -ax.y, 0); prop.spin.add(b); }
+    for (const k of keepMeshes) g.add(k);
+    for (const o of [...keepMeshes, ...barrelMeshes]) { o.castShadow = true; o.receiveShadow = true; }
+    prop.flash.position.set(ax.x, ax.y, box.max.z + off.z + 0.03 * L);
+    prop.len = box.max.z + off.z;
+  })();
 }
 
 

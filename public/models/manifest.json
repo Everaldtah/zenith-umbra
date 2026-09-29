@@ -2,191 +2,1024 @@
  "models": {
   "bot_dummy": {
    "height": 1.9,
-   "tris": 11999,
+   "tris": 18499,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.1847,
+    "spine": 0.18223,
+    "chest": 0.24933,
+    "neck": 0.10155,
+    "head": 0.14726,
+    "upperarm_L": 0.10461,
+    "upperarm_R": 0.10465,
+    "forearm_L": 0.08792,
+    "forearm_R": 0.08633,
+    "thigh_L": 0.12509,
+    "thigh_R": 0.12513,
+    "shin_L": 0.09586,
+    "shin_R": 0.09575
+   }
   },
   "bot_sentry": {
    "height": 1.7,
-   "tris": 12000,
+   "tris": 19999,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "bot_drone": {
    "height": 1.0,
-   "tris": 0,
-   "bones": []
+   "tris": 11999,
+   "bones": [],
+   "source": "tripo"
   },
   "tenkai": {
    "height": 3.3,
-   "tris": 69999,
+   "tris": 16480,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "gorgoth": {
    "height": 3.4,
    "tris": 70000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.37889,
+    "spine": 0.38171,
+    "chest": 0.1089,
+    "neck": 0.18465,
+    "head": 0.15388,
+    "upperarm_L": 0.28129,
+    "upperarm_R": 0.28031,
+    "forearm_L": 0.17481,
+    "forearm_R": 0.18092,
+    "thigh_L": 0.23302,
+    "thigh_R": 0.25329,
+    "shin_L": 0.19037,
+    "shin_R": 0.19102
+   }
   },
   "mirei": {
    "height": 1.7,
-   "tris": 50000,
+   "tris": 19054,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.12198,
+    "spine": 0.11374,
+    "chest": 0.1212,
+    "neck": 0.04879,
+    "head": 0.06019,
+    "upperarm_L": 0.05287,
+    "upperarm_R": 0.05435,
+    "forearm_L": 0.03667,
+    "forearm_R": 0.03625,
+    "thigh_L": 0.0872,
+    "thigh_R": 0.09166,
+    "shin_L": 0.04196,
+    "shin_R": 0.04493
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03953,
+      1.49297,
+      0.04933
+     ],
+     "n": [
+      -0.31622,
+      0.0,
+      0.94868
+     ],
+     "w": 0.0274,
+     "h": 0.00976,
+     "skin": [
+      0.841,
+      0.697,
+      0.623
+     ],
+     "lash": [
+      0.112,
+      0.082,
+      0.085
+     ]
+    },
+    {
+     "p": [
+      0.02245,
+      1.49222,
+      0.05197
+     ],
+     "n": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "w": 0.02795,
+     "h": 0.00978,
+     "skin": [
+      0.865,
+      0.719,
+      0.615
+     ],
+     "lash": [
+      0.101,
+      0.078,
+      0.05
+     ]
+    }
    ]
   },
   "nocturne": {
    "height": 1.75,
-   "tris": 50000,
+   "tris": 19298,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.11661,
+    "spine": 0.10594,
+    "chest": 0.14941,
+    "neck": 0.08423,
+    "head": 0.08909,
+    "upperarm_L": 0.05992,
+    "upperarm_R": 0.06625,
+    "forearm_L": 0.03576,
+    "forearm_R": 0.03661,
+    "thigh_L": 0.08569,
+    "thigh_R": 0.09824,
+    "shin_L": 0.42146,
+    "shin_R": 0.05025
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03044,
+      1.54969,
+      0.05464
+     ],
+     "n": [
+      1e-05,
+      0.70711,
+      0.70711
+     ],
+     "w": 0.02454,
+     "h": 0.00859,
+     "skin": [
+      0.661,
+      0.536,
+      0.548
+     ],
+     "lash": [
+      0.279,
+      0.047,
+      0.079
+     ]
+    },
+    {
+     "p": [
+      0.02708,
+      1.55185,
+      0.05561
+     ],
+     "n": [
+      0.29814,
+      -0.59628,
+      0.74536
+     ],
+     "w": 0.02503,
+     "h": 0.00876,
+     "skin": [
+      0.49,
+      0.369,
+      0.372
+     ],
+     "lash": [
+      0.163,
+      0.095,
+      0.098
+     ]
+    }
    ]
   },
   "kaien": {
    "height": 1.8,
-   "tris": 45000,
+   "tris": 17924,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.17569,
+    "spine": 0.1633,
+    "chest": 0.11364,
+    "neck": 0.06444,
+    "head": 0.08913,
+    "upperarm_L": 0.09968,
+    "upperarm_R": 0.09472,
+    "forearm_L": 0.11689,
+    "forearm_R": 0.11591,
+    "thigh_L": 0.17469,
+    "thigh_R": 0.15892,
+    "shin_L": 0.14937,
+    "shin_R": 0.15015
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.05786,
+      1.6071,
+      0.04383
+     ],
+     "n": [
+      -0.30151,
+      0.30151,
+      0.90453
+     ],
+     "w": 0.02537,
+     "h": 0.00973,
+     "skin": [
+      0.85,
+      0.646,
+      0.55
+     ],
+     "lash": [
+      0.248,
+      0.198,
+      0.127
+     ]
+    },
+    {
+     "p": [
+      0.00494,
+      1.60762,
+      0.05686
+     ],
+     "n": [
+      -0.40825,
+      -0.40825,
+      0.8165
+     ],
+     "w": 0.03162,
+     "h": 0.01107,
+     "skin": [
+      0.864,
+      0.652,
+      0.55
+     ],
+     "lash": [
+      0.183,
+      0.105,
+      0.06
+     ]
+    }
    ]
   },
   "raijin": {
    "height": 1.8,
-   "tris": 45000,
+   "tris": 18048,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.1323,
+    "spine": 0.13336,
+    "chest": 0.06703,
+    "neck": 0.07762,
+    "head": 0.09527,
+    "upperarm_L": 0.07465,
+    "upperarm_R": 0.0764,
+    "forearm_L": 0.07502,
+    "forearm_R": 0.07996,
+    "thigh_L": 0.12871,
+    "thigh_R": 0.12225,
+    "shin_L": 0.06045,
+    "shin_R": 0.06764
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03772,
+      1.51526,
+      0.06995
+     ],
+     "n": [
+      -0.56568,
+      -0.42426,
+      0.70711
+     ],
+     "w": 0.0293,
+     "h": 0.01063,
+     "skin": [
+      0.861,
+      0.637,
+      0.558
+     ],
+     "lash": [
+      0.244,
+      0.202,
+      0.209
+     ]
+    },
+    {
+     "p": [
+      0.02748,
+      1.51761,
+      0.07286
+     ],
+     "n": [
+      0.29139,
+      -0.38851,
+      0.87416
+     ],
+     "w": 0.02901,
+     "h": 0.01015,
+     "skin": [
+      0.845,
+      0.643,
+      0.539
+     ],
+     "lash": [
+      0.248,
+      0.144,
+      0.098
+     ]
+    }
    ]
   },
   "yuzu": {
    "height": 1.62,
-   "tris": 44999,
+   "tris": 18855,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.12118,
+    "spine": 0.10538,
+    "chest": 0.0504,
+    "neck": 0.04448,
+    "head": 0.0988,
+    "upperarm_L": 0.05821,
+    "upperarm_R": 0.05849,
+    "forearm_L": 0.04245,
+    "forearm_R": 0.04397,
+    "thigh_L": 0.08206,
+    "thigh_R": 0.08651,
+    "shin_L": 0.06323,
+    "shin_R": 0.06259
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03645,
+      1.42856,
+      0.06926
+     ],
+     "n": [
+      -0.0,
+      -0.44721,
+      0.89443
+     ],
+     "w": 0.03084,
+     "h": 0.01312,
+     "skin": [
+      0.953,
+      0.694,
+      0.556
+     ],
+     "lash": [
+      0.272,
+      0.224,
+      0.161
+     ]
+    },
+    {
+     "p": [
+      0.03778,
+      1.42919,
+      0.06833
+     ],
+     "n": [
+      -0.21822,
+      -0.43644,
+      0.87287
+     ],
+     "w": 0.03056,
+     "h": 0.01339,
+     "skin": [
+      0.968,
+      0.695,
+      0.547
+     ],
+     "lash": [
+      0.234,
+      0.131,
+      0.103
+     ]
+    }
    ]
   },
   "hex": {
    "height": 1.95,
-   "tris": 45000,
+   "tris": 18394,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.14669,
+    "spine": 0.15835,
+    "chest": 0.1009,
+    "neck": 0.10035,
+    "head": 0.12352,
+    "upperarm_L": 0.0579,
+    "upperarm_R": 0.06623,
+    "forearm_L": 0.04883,
+    "forearm_R": 0.04871,
+    "thigh_L": 0.11854,
+    "thigh_R": 0.11632,
+    "shin_L": 0.06535,
+    "shin_R": 0.06522
+   }
   },
   "kagemaru": {
    "height": 1.78,
-   "tris": 45000,
+   "tris": 18974,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.1826,
+    "spine": 0.15003,
+    "chest": 0.0843,
+    "neck": 0.08545,
+    "head": 0.09616,
+    "upperarm_L": 0.08662,
+    "upperarm_R": 0.09607,
+    "forearm_L": 0.05311,
+    "forearm_R": 0.06031,
+    "thigh_L": 0.14174,
+    "thigh_R": 0.15053,
+    "shin_L": 0.05714,
+    "shin_R": 0.06413
+   }
   },
   "enra": {
    "height": 2.05,
-   "tris": 45000,
+   "tris": 19050,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.16585,
+    "spine": 0.1112,
+    "neck": 0.06878,
+    "head": 0.12079,
+    "upperarm_L": 0.2405,
+    "upperarm_R": 0.2415,
+    "forearm_L": 0.15054,
+    "forearm_R": 0.17345,
+    "thigh_L": 0.20217,
+    "thigh_R": 0.14606,
+    "shin_L": 0.1009,
+    "shin_R": 0.08226
+   }
   },
   "haruto": {
    "height": 1.75,
-   "tris": 45000,
+   "tris": 19431,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.15053,
+    "spine": 0.13357,
+    "chest": 0.18541,
+    "neck": 0.05894,
+    "head": 0.08392,
+    "upperarm_L": 0.10531,
+    "upperarm_R": 0.10736,
+    "forearm_L": 0.05755,
+    "forearm_R": 0.05727,
+    "thigh_L": 0.09911,
+    "thigh_R": 0.10123,
+    "shin_L": 0.09042,
+    "shin_R": 0.08976
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03421,
+      1.61273,
+      0.07006
+     ],
+     "n": [
+      0.0,
+      -0.70711,
+      0.70711
+     ],
+     "w": 0.02812,
+     "h": 0.00984,
+     "skin": [
+      0.869,
+      0.654,
+      0.536
+     ],
+     "lash": [
+      0.331,
+      0.227,
+      0.188
+     ]
+    },
+    {
+     "p": [
+      0.02907,
+      1.61282,
+      0.07015
+     ],
+     "n": [
+      -0.0,
+      -0.70711,
+      0.7071
+     ],
+     "w": 0.02854,
+     "h": 0.00999,
+     "skin": [
+      0.885,
+      0.665,
+      0.534
+     ],
+     "lash": [
+      0.298,
+      0.161,
+      0.11
+     ]
+    }
    ]
   },
   "vorn": {
    "height": 1.85,
-   "tris": 22905,
+   "tris": 17990,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.14289,
+    "spine": 0.15954,
+    "chest": 0.1287,
+    "neck": 0.07835,
+    "head": 0.10132,
+    "upperarm_L": 0.08562,
+    "upperarm_R": 0.08681,
+    "forearm_L": 0.06713,
+    "forearm_R": 0.06832,
+    "thigh_L": 0.12863,
+    "thigh_R": 0.13888,
+    "shin_L": 0.07598,
+    "shin_R": 0.07506
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.04248,
+      1.70608,
+      0.0743
+     ],
+     "n": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "w": 0.03055,
+     "h": 0.01069,
+     "skin": [
+      0.795,
+      0.669,
+      0.564
+     ],
+     "lash": [
+      0.346,
+      0.289,
+      0.254
+     ]
+    },
+    {
+     "p": [
+      0.02616,
+      1.70849,
+      0.07467
+     ],
+     "n": [
+      0.40825,
+      -0.81649,
+      0.40825
+     ],
+     "w": 0.02891,
+     "h": 0.01012,
+     "skin": [
+      0.837,
+      0.713,
+      0.615
+     ],
+     "lash": [
+      0.225,
+      0.201,
+      0.198
+     ]
+    }
    ]
   },
   "qelvaris": {
    "height": 2.3,
-   "tris": 26000,
+   "tris": 19733,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.68796,
+    "head": 0.4041,
+    "upperarm_L": 0.25173,
+    "upperarm_R": 0.38283,
+    "forearm_L": 0.20959,
+    "forearm_R": 0.37585,
+    "thigh_L": 0.1772,
+    "thigh_R": 0.3664,
+    "shin_L": 0.29806,
+    "shin_R": 1.03938
+   }
   },
   "minion_lancer": {
    "height": 2.0,
-   "tris": 11999,
+   "tris": 19999,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "minion_sentinel": {
    "height": 2.2,
-   "tris": 12000,
+   "tris": 20000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "boss_ironmaw": {
    "height": 14,
    "tris": 40000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "boss_leviathan": {
    "height": 16,
    "tris": 40000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "boss_reaper": {
    "height": 16,
    "tris": 40000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "boss_genesis": {
    "height": 18,
    "tris": 40000,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo"
   },
   "minion_swarmer": {
    "height": 1.2,
-   "tris": 0,
-   "bones": []
+   "tris": 12000,
+   "bones": [],
+   "source": "tripo"
   },
   "minion_bomber": {
    "height": 1.4,
-   "tris": 0,
-   "bones": []
+   "tris": 12000,
+   "bones": [],
+   "source": "tripo"
   },
   "boss_phoenix": {
    "height": 15,
-   "tris": 0,
-   "bones": []
+   "tris": 30000,
+   "bones": [],
+   "source": "tripo"
   },
   "gantetsu": {
    "height": 2.4,
-   "tris": 50000,
+   "tris": 19958,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.32394,
+    "spine": 0.35187,
+    "chest": 0.21052,
+    "neck": 0.12429,
+    "head": 0.12285,
+    "upperarm_L": 0.20488,
+    "upperarm_R": 0.21782,
+    "forearm_L": 0.14856,
+    "forearm_R": 0.14944,
+    "thigh_L": 0.30194,
+    "thigh_R": 0.30661,
+    "shin_L": 0.20052,
+    "shin_R": 0.20318
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.05659,
+      2.09757,
+      0.13246
+     ],
+     "n": [
+      -0.40825,
+      -0.40824,
+      0.8165
+     ],
+     "w": 0.04276,
+     "h": 0.01497,
+     "skin": [
+      0.776,
+      0.371,
+      0.24
+     ],
+     "lash": [
+      0.071,
+      0.015,
+      0.025
+     ]
+    },
+    {
+     "p": [
+      0.04376,
+      2.0967,
+      0.1315
+     ],
+     "n": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "w": 0.04094,
+     "h": 0.01433,
+     "skin": [
+      0.775,
+      0.384,
+      0.255
+     ],
+     "lash": [
+      0.084,
+      0.028,
+      0.029
+     ]
+    }
    ]
   },
   "hibiki": {
    "height": 1.82,
-   "tris": 44999,
+   "tris": 18429,
    "bones": [
     "humanoid"
-   ]
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.10229,
+    "spine": 0.13967,
+    "chest": 0.06288,
+    "neck": 0.11843,
+    "head": 0.05905,
+    "upperarm_L": 0.07616,
+    "upperarm_R": 0.09037,
+    "forearm_L": 0.06836,
+    "forearm_R": 0.07016,
+    "thigh_L": 0.08706,
+    "thigh_R": 0.08809,
+    "shin_L": 0.05475,
+    "shin_R": 0.05471
+   }
   },
   "tomoe": {
    "height": 2.0,
-   "tris": 50000,
+   "tris": 19928,
    "bones": [
     "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.1233,
+    "spine": 0.10356,
+    "chest": 0.03801,
+    "neck": 0.06791,
+    "head": 0.0931,
+    "upperarm_L": 0.07944,
+    "upperarm_R": 0.08708,
+    "forearm_L": 0.04247,
+    "forearm_R": 0.04746,
+    "thigh_L": 0.10265,
+    "thigh_R": 0.11243,
+    "shin_L": 0.05759,
+    "shin_R": 0.10504
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.0357,
+      1.79613,
+      0.04429
+     ],
+     "n": [
+      -0.0,
+      -0.0,
+      1.0
+     ],
+     "w": 0.02422,
+     "h": 0.00917,
+     "skin": [
+      0.701,
+      0.414,
+      0.332
+     ],
+     "lash": [
+      0.289,
+      0.166,
+      0.135
+     ]
+    },
+    {
+     "p": [
+      0.02208,
+      1.79636,
+      0.04429
+     ],
+     "n": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "w": 0.0239,
+     "h": 0.00858,
+     "skin": [
+      0.692,
+      0.379,
+      0.336
+     ],
+     "lash": [
+      0.343,
+      0.186,
+      0.18
+     ]
+    }
    ]
+  },
+  "hayate": {
+   "height": 1.78,
+   "tris": 19275,
+   "bones": [
+    "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.12391,
+    "spine": 0.10601,
+    "chest": 0.13536,
+    "neck": 0.07803,
+    "head": 0.0952,
+    "upperarm_L": 0.0665,
+    "upperarm_R": 0.07484,
+    "forearm_L": 0.05737,
+    "forearm_R": 0.05475,
+    "thigh_L": 0.10165,
+    "thigh_R": 0.08455,
+    "shin_L": 0.058,
+    "shin_R": 0.06038
+   }
+  },
+  "seiran": {
+   "height": 1.84,
+   "tris": 18036,
+   "bones": [
+    "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.17661,
+    "spine": 0.18297,
+    "chest": 0.06615,
+    "neck": 0.23501,
+    "head": 0.09774,
+    "upperarm_L": 0.07392,
+    "upperarm_R": 0.10245,
+    "forearm_L": 0.06568,
+    "forearm_R": 0.11328,
+    "thigh_L": 0.13376,
+    "thigh_R": 0.13249,
+    "shin_L": 0.08344,
+    "shin_R": 0.08464
+   },
+   "eyes": [
+    {
+     "p": [
+      -0.03655,
+      1.65378,
+      0.08027
+     ],
+     "n": [
+      -0.31623,
+      0.0,
+      0.94868
+     ],
+     "w": 0.03036,
+     "h": 0.01063,
+     "skin": [
+      0.643,
+      0.481,
+      0.405
+     ],
+     "lash": [
+      0.066,
+      0.075,
+      0.058
+     ]
+    },
+    {
+     "p": [
+      0.02737,
+      1.6546,
+      0.08093
+     ],
+     "n": [
+      0.31623,
+      0.0,
+      0.94868
+     ],
+     "w": 0.03023,
+     "h": 0.01058,
+     "skin": [
+      0.67,
+      0.496,
+      0.423
+     ],
+     "lash": [
+      0.08,
+      0.093,
+      0.067
+     ]
+    }
+   ]
+  },
+  "hibiki_armor": {
+   "height": 1.82,
+   "tris": 18698,
+   "bones": [
+    "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.12402,
+    "spine": 0.17179,
+    "chest": 0.15025,
+    "neck": 0.08111,
+    "head": 0.08796,
+    "upperarm_L": 0.09747,
+    "upperarm_R": 0.10257,
+    "forearm_L": 0.06892,
+    "forearm_R": 0.06354,
+    "thigh_L": 0.09315,
+    "thigh_R": 0.09302,
+    "shin_L": 0.0594,
+    "shin_R": 0.05801
+   }
   }
  },
  "props": {
@@ -273,6 +1106,60 @@
   },
   "prop_tomoe_shotgun": {
    "height": 1
+  },
+  "prop_tenkai_hammer": {
+   "height": 1
+  },
+  "prop_lantern_post": {
+   "height": 1
+  },
+  "prop_lantern_koi": {
+   "height": 1
+  },
+  "prop_lantern_stall": {
+   "height": 1
+  },
+  "prop_lantern_gate": {
+   "height": 1
+  },
+  "prop_star_pine": {
+   "height": 1
+  },
+  "prop_star_orrery": {
+   "height": 1
+  },
+  "prop_star_dish": {
+   "height": 1
+  },
+  "prop_star_telescope": {
+   "height": 1
+  },
+  "prop_forge_crate": {
+   "height": 1
+  },
+  "prop_forge_press": {
+   "height": 1
+  },
+  "prop_forge_crucible": {
+   "height": 1
+  },
+  "prop_yuzu_bow": {
+   "height": 1
+  },
+  "prop_seiran_bow": {
+   "height": 1
+  },
+  "prop_raijin_katana": {
+   "height": 1
+  },
+  "prop_gantetsu_hinoko": {
+   "height": 1
+  },
+  "prop_gantetsu_hanabi": {
+   "height": 1
+  },
+  "prop_hayate_nodachi": {
+   "height": 1
   }
  },
  "textures": [
@@ -284,11 +1171,14 @@
   "env/sky_c5_citadel.webp",
   "env/sky_cathedral.webp",
   "env/sky_cloudstep.webp",
+  "env/sky_foundry.webp",
   "env/sky_hanabi.webp",
   "env/sky_hangar.webp",
   "env/sky_kagura.webp",
   "env/sky_kurogane.webp",
+  "env/sky_lantern.webp",
   "env/sky_rift.webp",
+  "env/sky_starfall.webp",
   "env/sky_training.webp",
   "env/tex_amatsu_ground.webp",
   "env/tex_amatsu_wall.webp",
@@ -307,6 +1197,9 @@
   "env/tex_cloudstep_ground.webp",
   "env/tex_cloudstep_roof.webp",
   "env/tex_cloudstep_wall.webp",
+  "env/tex_foundry_ground.webp",
+  "env/tex_foundry_roof.webp",
+  "env/tex_foundry_wall.webp",
   "env/tex_hanabi_ground.webp",
   "env/tex_hanabi_roof.webp",
   "env/tex_hanabi_wall.webp",
@@ -317,8 +1210,14 @@
   "env/tex_kagura_wall.webp",
   "env/tex_kurogane_ground.webp",
   "env/tex_kurogane_wall.webp",
+  "env/tex_lantern_ground.webp",
+  "env/tex_lantern_roof.webp",
+  "env/tex_lantern_wall.webp",
   "env/tex_rift_ground.webp",
   "env/tex_rift_wall.webp",
+  "env/tex_starfall_ground.webp",
+  "env/tex_starfall_roof.webp",
+  "env/tex_starfall_wall.webp",
   "env/tex_training_ground.webp",
   "env/tex_training_wall.webp"
  ]

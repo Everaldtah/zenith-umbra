@@ -1,4 +1,4 @@
-// Marketing site: animatic + heroes + rivalries + maps + campaign + download.
+// Marketing site: film teaser + heroes + rivalries + maps + campaign + download.
 import './site.css';
 import { HEROES, HERO, type HeroDef } from '../data/heroes';
 import { PLAY_MAPS } from '../data/maps';
@@ -10,20 +10,7 @@ const REPO = 'https://github.com/Everaldtah/zenith-umbra';
 const INSTALLER = `${REPO}/releases/latest/download/ZenithUmbra-Setup.exe`;
 const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && !matchMedia('(pointer:fine)').matches);
 
-type Beat = { img: string; text?: string; sub?: string; dur: number; kind?: 'pan' | 'zoom' | 'split' | 'title' | 'hero'; img2?: string; color?: string; color2?: string; sfx?: string };
 const zen = HEROES.filter(h => h.team === 'zenith'), umb = HEROES.filter(h => h.team === 'umbra');
-const BEATS: Beat[] = [
-  { img: 'img/map_amatsu.webp', text: 'Above the clouds, the Amatsu Star Choir sang the sky into balance.', dur: 4.5, kind: 'pan', sfx: 'constellation' },
-  { img: 'env/sky_rift.webp', text: 'Then the sun went black.', sub: 'The Eclipse cracked the world open - and the Umbra Syndicate crawled out.', dur: 4.5, kind: 'zoom', sfx: 'singularity' },
-  { img: 'img/map_kurogane.webp', text: 'Cities burned. Shrines fell. Machines were stolen.', dur: 3.5, kind: 'pan', sfx: 'boom' },
-  { img: 'img/map_training.webp', text: 'So the Vanguard swore an oath at dawn.', dur: 3.2, kind: 'pan', sfx: 'announce' },
-  ...zen.map(h => ({ img: `img/key_${h.id}.webp`, text: h.name, sub: h.title, dur: 1.9, kind: 'hero' as const, color: h.color, sfx: h.primary.sfx })),
-  { img: 'img/map_cathedral.webp', text: 'Every oath has its breaker.', dur: 3, kind: 'zoom', sfx: 'requiem' },
-  ...umb.map(h => ({ img: `img/key_${h.id}.webp`, text: h.name, sub: h.title, dur: 1.9, kind: 'hero' as const, color: h.color, sfx: h.primary.sfx })),
-  ...zen.map(h => ({ img: `img/key_${h.id}.webp`, img2: `img/key_${h.rival}.webp`, text: `${h.name}  vs  ${HERO[h.rival].name}`, sub: h.ability1.counter ?? h.ability2.counter ?? '', dur: 2.6, kind: 'split' as const, color: h.color, color2: HERO[h.rival].color, sfx: 'counter' })),
-  { img: 'img/cine_02.webp', text: 'And far above, the Star-Forger is building something enormous.', sub: 'Campaign - Operation Starfall', dur: 4, kind: 'zoom', sfx: 'mechstep' },
-  { img: 'img/map_hangar.webp', text: 'ZENITH//UMBRA', sub: 'Ten heroes. Two oaths. One eclipse.', dur: 5, kind: 'title', sfx: 'victory' },
-];
 
 function heroCard(h: HeroDef) {
   return `<button class="hcard ${h.team}" data-h="${h.id}" style="--c:${h.color}"><img loading="lazy" src="${B}img/key_${h.id}.webp" alt="${h.name}"><span><b>${h.name}</b><small>${h.title} · ${h.role}</small></span></button>`;
@@ -32,9 +19,9 @@ function heroCard(h: HeroDef) {
 document.getElementById('site')!.innerHTML = `
 <header class="nav"><a class="brand" href="#top"><b>ZENITH</b><i>//</i><em>UMBRA</em></a>
   <nav><a href="#film">Watch</a><a href="#heroes">Heroes</a><a href="#rivals">Rivals</a><a href="#maps">Maps</a><a href="#campaign">Campaign</a><a href="#download" class="cta">Download</a></nav></header>
-<section id="top" class="animatic">
-  <div class="stage"><div class="layer a"></div><div class="layer b"></div><div class="caption"><h2></h2><p></p></div><div class="bars"></div></div>
-  <div class="controls"><button class="play">▶ PLAY THE ANIMATIC</button><span class="prog"><i></i></span></div>
+<section id="top" class="teaser">
+  <video class="tv" autoplay muted loop playsinline preload="auto" poster="${B}film/eclipse_poster.webp"><source src="${B}film/eclipse_teaser.mp4" type="video/mp4"></video>
+  <div class="tcap"><small>A ZENITH//UMBRA ANIME FILM</small><h2>THE SUN THAT REFUSED TO SET</h2><p>Ten heroes and villains. One black sun. A robot the size of a city.</p><a class="btn primary" href="#film">&#9654; WATCH THE FILM</a></div>
 </section>
 <section class="pitch">
   <h1><b>ZENITH</b><i>//</i><em>UMBRA</em></h1>
@@ -42,17 +29,12 @@ document.getElementById('site')!.innerHTML = `
   <div class="btnrow">${mobile ? '<p class="warn">ZENITH//UMBRA is a PC game - visit on a computer with a keyboard and mouse to play.</p>' : `<a class="btn primary" href="#download">DOWNLOAD FOR WINDOWS</a><a class="btn" href="${B}play.html">PLAY IN BROWSER (PC)</a>`}</div>
   <ul class="feat"><li><b>10</b>original heroes</li><li><b>5</b>story maps + training grounds</li><li><b>1</b>giant mecha tank per side, piloted</li><li><b>2</b>flying healers</li><li><b>5v5</b>vs AI, AI test lab, spectator</li><li><b>Co-op</b>online third-person campaign (up to 4)</li><li><b>50</b>skins in the 3D Hero Viewer</li><li><b>120 Hz</b>physics in the Windows app</li></ul>
 </section>
-<section id="film" class="film"><h2>THE OATH AT DAWN</h2>
-  <p class="lead">A five-minute anime short: how the Eclipse broke the world, how every hero and villain got their scars, and the night five strangers became the Zenith Vanguard.</p>
-  <div class="player"><video controls preload="metadata" playsinline poster="${B}film/oath_poster.webp">
-    <source src="${B}film/oath_at_dawn.mp4" type="video/mp4">
-    <track kind="subtitles" srclang="en" label="English" src="${B}film/oath_at_dawn.vtt" default></video></div>
+<section id="film" class="film"><h2>THE SUN THAT REFUSED TO SET</h2>
+  <p class="lead">A ten-minute anime film in the spirit of late-90s mecha cinema and hot-blooded super-robot shows: the Eclipse that broke the world, how every hero and villain got their scars, and the dawn that Tenkai-Oh drags back into the sky. Painted keyframes, action cuts animated with Seedance 2.5.</p>
+  <div class="player"><video controls preload="metadata" playsinline poster="${B}film/eclipse_poster.webp">
+    <source src="${B}film/eclipse.mp4" type="video/mp4">
+    <track kind="subtitles" srclang="en" label="English" src="${B}film/eclipse.vtt" default></video></div>
   <div class="chapters">${FILM_CHAPTERS.map(([t, n]) => `<button data-t="${t}"><b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</b>${n}</button>`).join('')}</div>
-  <a class="engine" href="${B}film.html">
-    <img loading="lazy" src="${B}film2d/poster.webp" alt="The Oath at Dawn - 2D anime cut">
-    <div><small>NEW - 2D ANIME CUT</small><h3>THE OATH AT DAWN - 2D ANIME CUT</h3>
-      <p>The same story redrawn as 90s cel animation in the spirit of Evangelion and Gurren Lagann: every hero and villain painted from the game models, key-art close-ups with lip-flap, painted multiplane backgrounds, physics particles, impact frames and Eva-style title cards - composited live in your browser.</p>
-      <span class="btn primary">WATCH THE 2D CUT</span> <span class="btn" onclick="event.preventDefault();location.href='${B}engine.html'">ENGINE CUT</span></div></a>
 </section>
 <section id="heroes"><h2>THE ROSTER</h2>
   <h3 class="zenith">ZENITH VANGUARD <small>heroes</small></h3><div class="hgrid">${zen.map(heroCard).join('')}</div>
@@ -91,56 +73,7 @@ document.querySelectorAll<HTMLElement>('.hcard').forEach(c => c.onclick = () => 
 });
 modal.onclick = e => { if (e.target === modal) modal.hidden = true; };
 
-// ---------------- animatic player
-const stage = document.querySelector('.stage') as HTMLElement;
-const layers = [stage.querySelector('.layer.a') as HTMLElement, stage.querySelector('.layer.b') as HTMLElement];
-const cap = stage.querySelector('.caption') as HTMLElement;
-const prog = document.querySelector('.prog i') as HTMLElement;
-const total = BEATS.reduce((s, b) => s + b.dur, 0);
-let front = 0, playing = false, timer = 0;
-for (const b of BEATS) { new Image().src = B + b.img; if (b.img2) new Image().src = B + b.img2; }
-function showBeat(i: number, withSound: boolean) {
-  const b = BEATS[i];
-  front ^= 1;
-  const L = layers[front], O = layers[front ^ 1];
-  L.className = `layer ${front ? 'b' : 'a'} ${b.kind ?? 'pan'}`;
-  L.style.setProperty('--d', `${b.dur + 1}s`);
-  L.innerHTML = b.kind === 'split'
-    ? `<div class="half l" style="background-image:url(${B}${b.img});--c:${b.color}"></div><div class="half r" style="background-image:url(${B}${b.img2});--c:${b.color2}"></div><div class="slash"></div>`
-    : `<div class="img" style="background-image:url(${B}${b.img})"></div>`;
-  void L.offsetWidth;
-  L.classList.add('on'); O.classList.remove('on');
-  cap.className = `caption ${b.kind ?? ''}`;
-  cap.style.setProperty('--c', b.color ?? '#fff');
-  cap.innerHTML = `<h2>${b.text ?? ''}</h2><p>${b.sub ?? ''}</p>`;
-  void cap.offsetWidth; cap.classList.add('on');
-  if (withSound && b.sfx) sfx.play(b.sfx, undefined, 0.8);
-}
-function play(withSound: boolean) {
-  if (playing) return;
-  playing = true;
-  let i = 0, elapsed = 0;
-  const step = () => {
-    if (i >= BEATS.length) { i = 0; elapsed = 0; if (withSound) { sfx.music(null); sfx.music('menu'); } }
-    showBeat(i, withSound);
-    const d = BEATS[i].dur;
-    prog.style.transition = 'none'; prog.style.width = `${elapsed / total * 100}%`;
-    void prog.offsetWidth;
-    prog.style.transition = `width ${d}s linear`; prog.style.width = `${(elapsed + d) / total * 100}%`;
-    elapsed += d; i++;
-    timer = window.setTimeout(step, d * 1000);
-  };
-  step();
-}
-const btn = document.querySelector('.controls .play') as HTMLButtonElement;
-btn.onclick = () => {
-  sfx.unlock(); sfx.setVolume(0.6); sfx.music('menu');
-  clearTimeout(timer); playing = false; btn.textContent = '♪ SOUND ON'; btn.disabled = true;
-  play(true);
-};
-play(false);   // silent autoplay; the button restarts it with the score
-
-// ---- the film: chapter buttons seek; playing it silences the animatic's score
+// ---- the film: chapter buttons seek; playing it silences the site's music
 const film = document.querySelector('#film video') as HTMLVideoElement;
 document.querySelectorAll<HTMLButtonElement>('#film .chapters button').forEach(b => b.onclick = () => { film.currentTime = +b.dataset.t!; film.play(); });
 film.addEventListener('play', () => { sfx.music(null); });
@@ -150,9 +83,9 @@ film.addEventListener('timeupdate', () => {
   document.querySelectorAll('#film .chapters button').forEach((b, i) => b.classList.toggle('on', i === cur && !film.paused));
 });
 
-// the AI-animated cut premieres once its render is uploaded; until then the player shows a notice
-fetch(`${B}film/oath_at_dawn.mp4`, { method: 'HEAD' }).then(r => { if (!r.ok || !(r.headers.get('content-type') ?? '').includes('video')) throw 0; }).catch(() => {
+// the film premieres once its render is uploaded; until then the player shows a notice
+fetch(`${B}film/eclipse.mp4`, { method: 'HEAD' }).then(r => { if (!r.ok || !(r.headers.get('content-type') ?? '').includes('video')) throw 0; }).catch(() => {
   const pl = document.querySelector('#film .player') as HTMLElement, ch = document.querySelector('#film .chapters') as HTMLElement;
-  pl.innerHTML = `<img src="${B}film/oath_poster.webp" alt=""><div class="soon"><b>AI-ANIMATED CUT</b><span>Rendering now - premieres here shortly. Watch the Engine Cut below.</span></div>`;
+  pl.innerHTML = `<img src="${B}film/eclipse_poster.webp" alt=""><div class="soon"><b>THE SUN THAT REFUSED TO SET</b><span>Rendering now - premieres here shortly.</span></div>`;
   ch.style.display = 'none';
 });

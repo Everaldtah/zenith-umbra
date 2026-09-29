@@ -390,6 +390,7 @@ export class World {
     if (killer) {
       killer.kills++; killer.streak++; killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       if (killer.has('judgment', this.time)) killer.cd.flashstep = 0;
+      if (killer.def.id === 'hayate') killer.cd.currentdash = 0;     // Current Dash resets on an elimination
       // the healer keeping the killer alive gets the assist (Overwatch's healing assists)
       const healer = this.time - (killer.sv.healedAt ?? -99) < 4 ? this.actors.find(x => x.id === killer.sv.healedBy) : undefined;
       if (healer && healer !== killer) healer.stats.healAssists = (healer.stats.healAssists ?? 0) + 1;
@@ -785,7 +786,7 @@ export class World {
       if (this.pressed(a, 'jump') && !rooted && !rush && !swooping) {
         if (a.grounded || t - a.lastGroundedAt < 0.1) {
           a.vel.y = d.frame === 'mech' ? 8 : 8.6; a.grounded = false; a.anim.jumpAt = t; a.lastGroundedAt = -9;
-          a.airJumps = d.id === 'raijin' ? 1 : 0;
+          a.airJumps = d.id === 'raijin' || d.id === 'hayate' ? 1 : 0;
           this.sfx(d.frame === 'mech' ? 'mechjump' : 'jump', a.pos, a);
         } else if (a.airJumps > 0) {
           a.airJumps--; a.vel.y = 8.2; a.anim.jumpAt = t; this.sfx('doublejump', a.pos, a); this.fx('doublejump', a.pos, { color: d.glow });

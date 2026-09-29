@@ -4,7 +4,10 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-export interface Manifest { models: Record<string, { height: number; tris: number; bones: string[] }>; props: Record<string, { height: number }>; textures: string[]; }
+/** a painted eye found on the model (assetgen/blender/eyes.py), model space: centre, facing, width / height, lid + lash sRGB */
+export interface EyeInfo { p: number[]; n: number[]; w: number; h: number; skin: number[]; lash: number[] }
+export interface ModelInfo { height: number; tris: number; bones: string[]; source?: string; colliders?: Record<string, number>; eyes?: EyeInfo[] }
+export interface Manifest { models: Record<string, ModelInfo>; props: Record<string, { height: number }>; textures: string[]; }
 
 const draco = new DRACOLoader();
 draco.setDecoderPath(`${(import.meta as any).env?.BASE_URL ?? '/'}draco/`);
@@ -29,6 +32,7 @@ export async function loadManifest(): Promise<Manifest> {
 }
 
 export function hasModel(id: string) { return !!manifest?.models[id]; }
+export function modelInfo(id: string): ModelInfo | undefined { return manifest?.models[id]; }
 export function hasProp(id: string) { return !!manifest?.props[id]; }
 
 function load(url: string): Promise<GLTF | null> {

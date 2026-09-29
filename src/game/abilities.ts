@@ -259,6 +259,77 @@ const I: Record<string, Impl> = {
     w.fx('ultflash', a.center, { color: '#8ad8ff', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('thunderclap', a.center, a);
     return true;
   },
+  // ================================================================ Hayate
+  currentdash(w, a) {
+    if (sealed(w, a) || a.has('root', w.time)) return false;
+    const d = moveDir(a);
+    a.sv.dashHits = 0;
+    (a as any)._dashHit = new Set<number>();
+    dash(a, d, 15, 0.22, 'flashstep', w.time);
+    w.fx('flash', a.center, { color: '#4fe3c1', actor: a, dur: 0.25 }); w.sfx('flashstep', a.center, a);
+    return true;
+  },
+  mirrorwater(w, a) {
+    a.set('parry', w.time, 2);
+    w.fx('parrystance', a.center, { color: '#4fe3c1', actor: a, dur: 2 }); w.sfx('parrystance', a.center, a);
+    return true;
+  },
+  dragongate(w, a) {
+    const tgs = w.enemies(a).filter(x => dist3(x.pos, a.pos) < 18 && w.level.lineOfSight(a.eye, x.center)).sort((p, q) => dist3(p.pos, a.pos) - dist3(q.pos, a.pos)).slice(0, 6);
+    if (!tgs.length) return false;
+    a.set('phased', w.time, tgs.length * 0.18 + 0.1);
+    w.fx('ultflash', a.center, { color: '#4fe3c1', actor: a }); w.sfx('ultcall', a.center, a);
+    tgs.forEach((x, i) => w.after(0.12 + i * 0.18, () => {
+      if (!a.alive) return;
+      const from = { ...a.center };
+      if (x.alive) {
+        const b = x.forward();
+        const p = { x: x.pos.x - b.x * 1.4, y: x.pos.y, z: x.pos.z - b.z * 1.4 };
+        const g = w.level.groundAt(p.x, p.z, x.pos.y + 1);
+        a.pos = { x: p.x, y: g > -Infinity ? g : x.pos.y, z: p.z };
+        a.yaw = a.input.yaw = Math.atan2(x.pos.x - a.pos.x, x.pos.z - a.pos.z);
+        a.clear('phased'); w.damage(a, x, 140, { kind: 'ability' }); a.set('phased', w.time, (tgs.length - i) * 0.18);
+        a.anim.attackAt = w.time; a.anim.attackKind = 'secondary';
+      }
+      w.fx('cut', from, { to: a.center, color: '#4fe3c1' }); w.sfx('cut', a.center, a);
+    }));
+    return true;
+  },
+  // ================================================================ Seiran
+  riverstep(w, a) {
+    if (sealed(w, a) || a.has('root', w.time)) return false;
+    dash(a, moveDir(a), 7, 0.18, 'lunge', w.time, 2.5);
+    a.anim.jumpAt = w.time;
+    w.fx('doublejump', a.pos, { color: '#8ec5ff' }); w.sfx('doublejump', a.pos, a);
+    return true;
+  },
+  echoarrow(w, a) {
+    const muz = w.muzzle(a), aim = w.aimPoint(a, 60);
+    w.spawnProj(a, muz, norm({ x: aim.x - muz.x, y: aim.y - muz.y, z: aim.z - muz.z }), 90, { dmg: 20, fx: 'reveal', special: 'reveal', life: 60 / 90, r: 0.15 });
+    w.sfx('bow', muz, a);
+    return true;
+  },
+  twinkoi(w, a) {
+    // two spirit koi spiral out along the aim (flat), through walls: each step bites everything within 4.5m of either koi
+    const f = a.forward(), dir = norm({ x: f.x, y: 0, z: f.z }), side = { x: -dir.z, y: 0, z: dir.x };
+    const o = { x: a.pos.x + dir.x * 1.5, y: a.pos.y + 1.2, z: a.pos.z + dir.z * 1.5 };
+    const hitAt = new Map<number, number>();
+    w.fx('ultflash', a.center, { color: '#8ec5ff', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('arrowrain', o, a);
+    for (let k = 0; k <= 18; k++) w.after(0.25 + k * 0.1, () => {
+      const along = k * 2.5, sw = Math.sin(k * 0.9) * 1.6;
+      for (const sg of [1, -1]) {
+        const p = { x: o.x + dir.x * along + side.x * sw * sg, y: o.y, z: o.z + dir.z * along + side.z * sw * sg };
+        w.fx('flash', p, { color: sg > 0 ? '#8ec5ff' : '#3f7fff', dur: 0.35 });
+        for (const x of w.enemies(a)) {
+          if (!x.alive || Math.hypot(x.pos.x - p.x, x.pos.z - p.z) > 4.5 || Math.abs(x.pos.y + 1 - p.y) > 4) continue;
+          if (w.time - (hitAt.get(x.id) ?? -9) < 0.19) continue;
+          hitAt.set(x.id, w.time);
+          w.damage(a, x, 42, { kind: 'ability' });
+        }
+      }
+    });
+    return true;
+  },
   // ================================================================ Yuzu
   sunhop(w, a) {
     a.vel.y = 13; a.grounded = false; a.set('glide', w.time, 1.8); a.anim.jumpAt = w.time;

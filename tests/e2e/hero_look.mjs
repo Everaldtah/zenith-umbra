@@ -1,5 +1,5 @@
 // Large Hero Viewer shots of one hero at chosen moments of an animation state (real GPU):
-//   node tests/e2e/hero_look.mjs tomoe e 0.1,0.3,0.45,0.6 [yawDeg]
+//   node tests/e2e/hero_look.mjs tomoe e 0.1,0.3,0.45,0.6 [yawDeg]      (SKIN=<skin id> to wear a skin)
 // Writes tests/e2e/shots/look/<hero>_<mode>.png (the shots side by side, cropped to the stage).
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
@@ -11,6 +11,8 @@ await p.goto('http://localhost:5199/play.html', { waitUntil: 'domcontentloaded',
 await p.waitForFunction(() => !!window.__zu?.menu, { timeout: 60000 });
 await p.evaluate(() => window.__zu.menu.viewer());
 await p.waitForFunction(() => !!window.__zu?.viewer, { timeout: 30000 });
+// SKIN=<id>: equip it first (the viewer builds the hero in the equipped skin, like a match does)
+if (process.env.SKIN) await p.evaluate((h, sk) => localStorage.setItem('zu-skins-v1', JSON.stringify({ [h]: sk })), hero, process.env.SKIN);
 await p.evaluate(h => window.__zu.viewer.select(h), hero);
 await new Promise(r => setTimeout(r, 6000));                 // model + clip library stream in
 await p.evaluate((m, y) => { const v = window.__zu.viewer; v.auto = false; v.yaw = y * Math.PI / 180; document.querySelector(`.vanims button[data-a="${m}"]`)?.click(); }, mode, +yaw);

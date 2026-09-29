@@ -29,7 +29,7 @@ HEROES = {
     'qelvaris': (2.3, []), 'minion_lancer': (2.0, ['--tris', '12000']), 'minion_sentinel': (2.2, ['--mech', '--tris', '12000']),
     'boss_ironmaw': (14, ['--mech', '--tris', '40000']), 'boss_leviathan': (16, ['--mech', '--tris', '40000']), 'boss_reaper': (16, ['--mech', '--tris', '40000']), 'boss_genesis': (18, ['--mech', '--tris', '40000']),
 }
-HERO_IDS = {'tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto', 'gantetsu', 'hibiki', 'tomoe'}
+HERO_IDS = {'tenkai', 'gorgoth', 'mirei', 'nocturne', 'kaien', 'raijin', 'yuzu', 'hex', 'kagemaru', 'enra', 'haruto', 'gantetsu', 'hibiki', 'tomoe', 'hayate', 'seiran', 'hibiki_armor'}
 STATIC = {'bot_drone': 1.0, 'minion_swarmer': 1.2, 'minion_bomber': 1.4, 'boss_phoenix': 15}
 
 

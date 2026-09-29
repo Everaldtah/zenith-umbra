@@ -615,16 +615,23 @@ for k, cnt in enumerate(counts):
     # except leg / hip armour (shells beside a mech's fists, holstered scabbards): pieces that follow the legs or
     # hips and never rise above the pelvis stay on the body, or the idle arm pose rips them off ("double legs")
     lower_body = names[int(np.argmax(avg))].split("_")[0] in ("thigh", "shin", "foot", "hips")
-    armour = lower_body and float(co[m, 2].max()) < bones["hips"][0].z + H * 0.05
+    def _near(bn, P):
+        A, B = np.array(bones[bn][0]), np.array(bones[bn][1]); AB = B - A
+        t = np.clip(((P - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
+        return float(np.min(np.linalg.norm(P - (A + t[:, None] * AB), axis=1)))
+    P = co[m]
+    d_hand = min([_near(f"hand_{s}", P) for s in ("L", "R") if f"hand_{s}" in gi] or [1e9])
+    d_leg = min([_near(f"{b}_{s}", P) for b in ("thigh", "shin") for s in ("L", "R") if f"{b}_{s}" in gi] or [1e9])
+    # leg / hip armour stays on the body - unless the piece is nearer a hand than a leg (a mech's claw tips hanging
+    # beside its hips in the A-pose are fingers, not thigh plates)
+    armour = lower_body and float(co[m, 2].max()) < bones["hips"][0].z + H * 0.05 and d_leg <= d_hand
+    reach = H * (0.12 if a.mech else 0.07)                  # claws and blades run well past a mech's wrist joint
     held = None
     for s in ("L", "R") if not armour else ():
         hn = f"hand_{s}"
         if hn not in gi: continue
-        A, B = np.array(bones[hn][0]), np.array(bones[hn][1])
-        AB = B - A; P = co[m]
-        t = np.clip(((P - A) @ AB) / max(1e-9, AB @ AB), 0, 1)
-        dmin = float(np.min(np.linalg.norm(P - (A + t[:, None] * AB), axis=1)))
-        if dmin < H * 0.07 and (held is None or dmin < held[1]): held = (gi[hn], dmin)
+        dmin = _near(hn, P)
+        if dmin < reach and (held is None or dmin < held[1]): held = (gi[hn], dmin)
     if held is not None:
         w2 = np.zeros(Wt.shape[1], dtype=Wt.dtype); w2[held[0]] = 1
         Wt[m] = w2; rigid += 1; continue

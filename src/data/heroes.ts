@@ -247,6 +247,33 @@ export const HEROES: HeroDef[] = [
     inspiration: 'Onna-musha of the war chronicles, harbour warlords, and the battle-queens of shonen arcs who lead from the front and heal from the fight itself.',
     voice: [120, 0.7], full: true,
   },
+  // ============================================================ the Koryu brothers (desktop edition)
+  {
+    id: 'hayate', name: 'Hayate', title: 'The Rebuilt Blade', team: 'zenith', role: 'dps', frame: 'human', rival: 'seiran', full: true,
+    hp: 200, armor: 0, speed: 6.4, height: 1.78, radius: 0.42, color: '#4fe3c1', glow: '#7ff5d8',
+    primary: { kind: 'projectile', name: 'Koi-Scale Shuriken', damage: 27, rate: 1.05, range: 45, speed: 62, burst: 3, burstGap: 0.08, ammo: 24, reload: 1.4, sfx: 'shuriken', fx: 'tide' },
+    secondary: { kind: 'projectile', name: 'Fan of Scales', damage: 27, rate: 1.4, range: 38, speed: 62, pellets: 3, spread: 0.11, sfx: 'shuriken', fx: 'tide' },
+    ability1: { id: 'currentdash', name: 'Current Dash', key: 'SHIFT', cooldown: 7, desc: 'Dash 15m through enemies, cutting each for 50. Resets when you get an elimination.' },
+    ability2: { id: 'mirrorwater', name: 'Mirror Water', key: 'E', cooldown: 8, desc: '2s: your blade turns like still water - projectiles aimed at you are reflected back at their shooter, melee attackers are staggered.', counter: "Turns Seiran's Scatter Current back on him." },
+    ult: { id: 'dragongate', name: 'Dragon Gate Blade', key: 'Q', cooldown: 0, charge: 1800, desc: 'Draw the nodachi and loose the koi-dragon within it: strike through up to 6 enemies within 18m, 140 damage each.' },
+    passive: { name: 'Sun-Alloy Frame', desc: 'Double jump; the rebuilt frame shrugs off the first 20% of every fall.' },
+    lore: "The younger son of the Koryu, the waterfront clan that bowed to the Syndicate. Hayate laughed at the clan, at the debt, at the Syndicate - until his brother was ordered to silence him on the Dragon Gate falls. The river gave him back to Hangar Zero, where Haruto's father rebuilt him in sun-alloy around what was left. Now he fights beside the Vanguard, and carries the koi-dragon his brother still thinks he killed.",
+    inspiration: 'The cyber-ninja brother of a feuding assassin clan: rebuilt body, dash-and-deflect duelling, a spirit dragon in the blade.',
+    voice: [300, 0.55],
+  },
+  {
+    id: 'seiran', name: 'Seiran', title: 'The Silent Current', team: 'umbra', role: 'dps', frame: 'human', rival: 'hayate', full: true,
+    hp: 225, armor: 0, speed: 5.6, height: 1.84, radius: 0.43, color: '#3f7fff', glow: '#8ec5ff',
+    primary: { kind: 'charge', name: 'Riverbow', damage: 125, rate: 1.05, range: 120, speed: 115, ammo: 1, sfx: 'bow', fx: 'tide' },
+    secondary: { kind: 'projectile', name: 'Scatter Current', damage: 32, rate: 0.55, range: 60, speed: 105, pellets: 5, spread: 0.1, sfx: 'bow', fx: 'tide' },
+    ability1: { id: 'riverstep', name: 'Riverstep', key: 'SHIFT', cooldown: 5, desc: 'Kick off the air in the direction you are moving - a 7m lunge, even mid-air.' },
+    ability2: { id: 'echoarrow', name: 'Echo Arrow', key: 'E', cooldown: 11, desc: 'An arrow that sings where it lands: reveals every enemy within 10m through walls for 5s.', counter: 'Hayate can hide from the eye, never from the ear - Echo Arrow exposes him mid-dash.' },
+    ult: { id: 'twinkoi', name: 'Twin Koi Torrent', key: 'Q', cooldown: 0, charge: 1900, desc: 'Loose the twin spirit koi of the clan: they swim 45m through walls in a spiral, tearing through everything in their path.' },
+    passive: { name: 'Heir of the Falls', desc: 'Climb walls by moving into them while airborne.' },
+    lore: "Heir of the Koryu and his father's debt, Seiran did what the Syndicate asked of the clan: he cut his brother down on the Dragon Gate falls. The clan was absorbed anyway. Now he is Warlord Vorn's marksman, a man who belongs to no one, and every year on the anniversary he floats a koi lantern down the river - for a brother who is fighting on the other side, and whom he has not yet recognised.",
+    inspiration: 'The elder archer brother of a feuding assassin clan: discipline, regret and a pair of spirit dragons.',
+    voice: [150, 0.5],
+  },
 ];
 
 export const HERO: Record<string, HeroDef> = Object.fromEntries(HEROES.map(h => [h.id, h]));

@@ -5,6 +5,11 @@ import type { Box, MapDef, Mat } from '../data/maps';
 import { Level } from '../engine/Physics';
 import { propModel, texture, hasTexture } from './Assets';
 
+/** the texture set a map paints with: its own when the manifest has it, else the closest sibling's (a map whose textures
+ * haven't been generated yet would otherwise load black walls and sky) */
+const ENV_FALLBACK: Record<string, string> = { lantern: 'hanabi', starfall: 'cloudstep', foundry: 'kurogane' };
+function envSet(id: string) { return hasTexture(`env/tex_${id}_wall.webp`) ? id : ENV_FALLBACK[id] ?? 'amatsu'; }
+
 export interface Quality { shadows: number; pixelRatio: number; particles: number; bloom: boolean; tex: 'hi' | 'lo'; }
 
 const TILE = 6;
@@ -109,8 +114,9 @@ export class MapScene {
     tint.position.set(m.point[0], m.point[1] + 5, m.point[2]);
     this.group.add(tint);
     // ---------------- materials
-    const tex = (k: 'ground' | 'wall' | 'roof') => texture(`env/tex_${m.id}_${k}.webp`);
-    const roofTex = hasTexture(`env/tex_${m.id}_roof.webp`) ? tex('roof') : null;
+    const env = envSet(m.id);
+    const tex = (k: 'ground' | 'wall' | 'roof') => texture(`env/tex_${env}_${k}.webp`);
+    const roofTex = hasTexture(`env/tex_${env}_roof.webp`) ? tex('roof') : null;
     const mats: Record<Mat, THREE.Material> = {
       // tiled roofs in the map's own tile texture, or a painted tint of the walls
       roof: new THREE.MeshStandardMaterial({ map: roofTex ?? tex('wall'), color: new THREE.Color(roofTex ? '#ffffff' : '#7d6a5a'), roughness: 0.55, metalness: 0.1 }),
@@ -152,7 +158,7 @@ export class MapScene {
       this.group.add(mesh);
     }
     // ---------------- sky: panorama wrapped twice around a cylinder
-    const skyTex = texture(`env/sky_${m.id}.webp`, true);
+    const skyTex = texture(`env/sky_${hasTexture(`env/sky_${m.id}.webp`) ? m.id : envSet(m.id)}.webp`, true);
     skyTex.wrapS = THREE.MirroredRepeatWrapping; skyTex.repeat.set(2, 1);
     const R = 420, circ = 2 * Math.PI * R, H = circ / 2 / 2.4;
     const skyGeo = new THREE.CylinderGeometry(R, R, H, 64, 1, true);

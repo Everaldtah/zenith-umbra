@@ -9,6 +9,8 @@ export interface Skin {
   neutral: string;           // multiplies whites / greys / blacks (cloth, plates): '#ffffff' = unchanged
   metal: number;             // extra metallic sheen on the accent colour (gold / chrome trims)
   glow: number; pattern: number; patternColor: string;
+  /** a model skin: a whole different rigged model (public/models/<model>.glb) worn in its own painted colours */
+  model?: string;
 }
 
 const base: Omit<Skin, 'id' | 'name' | 'rarity'> = { primary: null, accent: null, neutral: '#ffffff', metal: 0, glow: 0, pattern: 0, patternColor: '#ffffff' };
@@ -31,7 +33,18 @@ const NAMES: Record<string, [string, string, string, string]> = {
   tomoe: ['Salt Gate Night', 'Sakura Empress', 'Neon Warlord', 'Sun Crown Empress'],
 };
 
+/** model skins: a new outfit built as its own model (desktop edition), listed after the palette skins */
+const MODEL_SKINS: Record<string, Skin[]> = {
+  // Hibiki's stage armour: a sky-blue armoured DJ suit over his streetwear - speaker-cone chest plate, equalizer
+  // gauntlets, amp backpack - same face, locks, gold headphones and sneakers
+  hibiki: [S('armor', 'Bassline Armor', 'Legendary', { model: 'hibiki_armor' })],
+};
+
 export function skinsFor(heroId: string, team: 'zenith' | 'umbra'): Skin[] {
+  return [...paletteSkins(heroId, team), ...(MODEL_SKINS[heroId] ?? [])];
+}
+
+function paletteSkins(heroId: string, team: 'zenith' | 'umbra'): Skin[] {
   const n = NAMES[heroId] ?? ['Eclipse', 'Sakura', 'Neon', 'Legend'];
   const zen = team === 'zenith';
   return [

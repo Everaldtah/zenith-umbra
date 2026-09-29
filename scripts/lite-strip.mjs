@@ -3,17 +3,18 @@
 // itself and keeps everything.
 //   - anim/            the clip library and first-person clips (the web edition animates procedurally)
 //   - sfx/             the recorded sound bank and voice lines (the web edition synthesises its sounds)
-//   - Gantetsu, Hibiki (desktop roster)
-//   - the new maps     props, skies, textures, key art for Hanabi Harbor, Cloudstep Terraces, Kagura Avenue
+//   - Gantetsu, Hibiki, Tomoe, Hayate, Seiran (desktop roster)
+//   - the new maps     props, skies, textures, key art for Hanabi Harbor, Cloudstep Terraces, Kagura Avenue,
+//                      Sakura Lantern District, Starfall Observatory, Dawnforge Foundry
 import fs from 'node:fs';
 import path from 'node:path';
 
 const DIST = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'dist');
-const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura'];
-const FULL_HEROES = ['gantetsu', 'hibiki', 'tomoe'];
+const FULL_MAPS = ['hanabi', 'cloudstep', 'kagura', 'lantern', 'starfall', 'foundry'];
+const FULL_HEROES = ['gantetsu', 'hibiki', 'tomoe', 'hayate', 'seiran'];
 // generated weapon props of desktop-only heroes
-const HERO_PROPS = ['prop_tomoe_'];
-const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_' };
+const HERO_PROPS = ['prop_tomoe_', 'prop_hayate_', 'prop_seiran_', 'prop_gantetsu_'];
+const PROP_PREFIX = { hanabi: 'prop_hanabi_', cloudstep: 'prop_cloud_', kagura: 'prop_kagura_', lantern: 'prop_lantern_', starfall: 'prop_star_', foundry: 'prop_forge_' };
 
 let bytes = 0, files = 0;
 const rm = p => {
@@ -34,7 +35,7 @@ each('img', f => FULL_MAPS.some(m => f === `map_${m}.webp`) || FULL_HEROES.some(
 const man = path.join(DIST, 'models', 'manifest.json');
 if (fs.existsSync(man)) {
   const j = JSON.parse(fs.readFileSync(man, 'utf8'));
-  const gone = k => FULL_HEROES.includes(k) || [...Object.values(PROP_PREFIX), ...HERO_PROPS].some(p => k.startsWith(p));
+  const gone = k => FULL_HEROES.some(h => k === h || k.startsWith(h + '_')) || [...Object.values(PROP_PREFIX), ...HERO_PROPS].some(p => k.startsWith(p));
   for (const sect of Object.values(j)) if (sect && typeof sect === 'object' && !Array.isArray(sect)) for (const k of Object.keys(sect)) if (gone(k)) delete sect[k];
   if (Array.isArray(j.textures)) j.textures = j.textures.filter(t => !FULL_MAPS.some(m => t.includes(`_${m}`)));
   fs.writeFileSync(man, JSON.stringify(j, null, 2));

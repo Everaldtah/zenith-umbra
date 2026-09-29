@@ -9,19 +9,44 @@
 // a knockback tumble, and Mirei's angelic flight as a state machine (swoop, flare, superjump, descent, hover).
 import * as THREE from 'three';
 
-import { BONES, RT_INDEX, type BoneName, type RtBone } from './Rig';
+import { BONES, CHAIN_PREFIXES, RT_INDEX, type BoneName, type ChainPrefix, type RtBone } from './Rig';
 import { ClipLayer, poseDir, type LayerOut } from './ClipLayer';
 import type { ClipLibrary } from './ClipLibrary';
 import { FULL } from '../edition';
 export { BONES };
-/** spring chains: [segment1, segment2, tip marker, parent, stiffness, damping, max angle (rad)] */
-const CHAINS: [BoneName, BoneName, BoneName, BoneName, number, number, number][] = [
-  ['hair_B_1', 'hair_B_2', 'hair_B_3', 'head', 0.14, 0.84, 0.8], ['hair_L_1', 'hair_L_2', 'hair_L_3', 'head', 0.14, 0.84, 0.8], ['hair_R_1', 'hair_R_2', 'hair_R_3', 'head', 0.14, 0.84, 0.8],
-  ['skirt_B_1', 'skirt_B_2', 'skirt_B_3', 'hips', 0.26, 0.8, 0.45], ['skirt_F_1', 'skirt_F_2', 'skirt_F_3', 'hips', 0.32, 0.78, 0.35],
-];
+/**
+ * Hair and cloth: bone chains solved as XPBD particles in WORLD space (the method of VRM SpringBone / Kawaii Physics /
+ * Dynamic Bone - what hero shooters use for capes, coats, hair and scarves): Verlet integration with drag (air
+ * resistance - so a running hero's hair and coat stream behind and swing through when they stop), gravity, a stiffness
+ * pull toward the animated pose, hard segment-length constraints, capsule / sphere colliders on the body measured from
+ * each mesh (skirts can't pass through the legs, hair and capes can't pass through the torso or head), a ground plane,
+ * ring constraints between neighbouring skirt panels (they don't split apart), angular limits, fixed 120 Hz sub-steps
+ * with the anchors and colliders swept through the frame (fast dashes don't tunnel), and a light gusting wind.
+ *   stiff / drag: fraction per 1/60 s toward the animated pose / of velocity lost; grav: g multiplier; maxA: radians
+ */
+type DynKind = 'hair' | 'tuft' | 'skirt' | 'cape' | 'sleeve';
+const DYN: Record<DynKind, { stiff: number; drag: number; grav: number; maxA: number; wind: number; cols: BoneName[] }> = {
+  hair: { stiff: 0.09, drag: 0.06, grav: 0.55, maxA: 1.0, wind: 1, cols: ['head', 'neck', 'chest', 'spine', 'upperarm_L', 'upperarm_R'] },
+  // hair standing up off the head (topknot, buns, dreadlocks): springy, holds its shape against gravity, bounces with the head
+  tuft: { stiff: 0.32, drag: 0.1, grav: 0.12, maxA: 0.4, wind: 0.35, cols: ['head'] },
+  // wide sleeves: hang and swing off the forearm, can't pass through the torso, the thighs or the arm itself
+  sleeve: { stiff: 0.11, drag: 0.06, grav: 0.95, maxA: 1.1, wind: 0.8, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'forearm_L', 'forearm_R'] },
+  skirt: { stiff: 0.16, drag: 0.06, grav: 0.9, maxA: 0.7, wind: 0.5, cols: ['hips', 'spine', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R'] },
+  cape: { stiff: 0.1, drag: 0.05, grav: 1, maxA: 0.9, wind: 1, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'upperarm_L', 'upperarm_R'] },
+};
+const kindOf = (p: ChainPrefix): DynKind => p === 'hair_T' ? 'tuft' : p.startsWith('hair') ? 'hair' : p.startsWith('cape') ? 'cape' : p.startsWith('sleeve') ? 'sleeve' : 'skirt';
+/** capsule colliders: bone head -> `to` bone head; radius as a fraction of the model height when the rig has no measurement */
+const COLL: Partial<Record<BoneName, { to: BoneName; r: number }>> = {
+  hips: { to: 'spine', r: 0.09 }, spine: { to: 'chest', r: 0.085 }, chest: { to: 'neck', r: 0.09 }, neck: { to: 'head', r: 0.035 },
+  head: { to: 'head', r: 0.062 }, upperarm_L: { to: 'forearm_L', r: 0.035 }, upperarm_R: { to: 'forearm_R', r: 0.035 },
+  forearm_L: { to: 'hand_L', r: 0.03 }, forearm_R: { to: 'hand_R', r: 0.03 },
+  thigh_L: { to: 'shin_L', r: 0.052 }, thigh_R: { to: 'shin_R', r: 0.052 }, shin_L: { to: 'foot_L', r: 0.04 }, shin_R: { to: 'foot_R', r: 0.04 },
+};
+const SKIRT_RING: [ChainPrefix, ChainPrefix][] = [['skirt_F', 'skirt_L'], ['skirt_L', 'skirt_B'], ['skirt_B', 'skirt_R'], ['skirt_R', 'skirt_F']];
+const chainChild: Partial<Record<BoneName, BoneName>> = {};
+for (const pf of CHAIN_PREFIXES) for (let i = 1; i < 4; i++) chainChild[`${pf}_${i}` as BoneName] = `${pf}_${i + 1}` as BoneName;
 const CHILD: Partial<Record<BoneName, BoneName>> = {
-  hair_B_1: 'hair_B_2', hair_B_2: 'hair_B_3', hair_L_1: 'hair_L_2', hair_L_2: 'hair_L_3', hair_R_1: 'hair_R_2', hair_R_2: 'hair_R_3',
-  skirt_B_1: 'skirt_B_2', skirt_B_2: 'skirt_B_3', skirt_F_1: 'skirt_F_2', skirt_F_2: 'skirt_F_3',
+  ...chainChild,
   hips: 'spine', spine: 'chest', chest: 'neck', neck: 'head', shoulder_L: 'upperarm_L', upperarm_L: 'forearm_L', forearm_L: 'hand_L',
   shoulder_R: 'upperarm_R', upperarm_R: 'forearm_R', forearm_R: 'hand_R', thigh_L: 'shin_L', shin_L: 'foot_L', thigh_R: 'shin_R', shin_R: 'foot_R',
 };
@@ -236,6 +261,8 @@ export class Animator {
   guns: [THREE.Object3D, THREE.Object3D] | null = null;
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
   gunHide: [boolean, boolean] = [false, false];
+  /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
+  gunUpright: [boolean, boolean] = [false, false];
   /** skating (Hibiki): how much of the skate stroke is blended in, and each stroke's lateral weight shift */
   private skW = 0;
   /** props clamped under the feet (Hibiki's mag-skates) */
@@ -256,8 +283,14 @@ export class Animator {
   private wLift = { x: 0, v: 0 }; private wSweep = { x: 0.5, v: 0 }; private wFidget = 0; private stepFlutter = 0;
   private prevVel = new THREE.Vector3(); private acc = new THREE.Vector3(); private isAngel = false;
   private gripG = new THREE.Vector3(); private gripH = new THREE.Vector3(0, 1, 0); private gripT = new THREE.Vector3(1, 0, 0);
-  // spring chain state: world-space tip + previous tip per chain segment
-  private spring = new Map<string, { tip: THREE.Vector3; prev: THREE.Vector3 }>();
+  // hair / cloth chains (see DYN): discovered from the rig at bind time
+  private chains: { pf: ChainPrefix; kind: DynKind; segs: BoneName[]; tip: BoneName; par: BoneName; len: number[];
+    x: THREE.Vector3[]; prev: THREE.Vector3[]; anchor: THREE.Vector3 | null }[] = [];
+  private ring: { a: number; b: number; d: number[] }[] = [];
+  /** collider radii (model units) measured from the mesh by the rigger (tripo_rig.py); missing = fractions of the height */
+  colliders: Partial<Record<BoneName, number>> = {};
+  private colPrev = new Map<BoneName, [THREE.Vector3, THREE.Vector3]>();
+  private dynT = 0;
   private posCache = new Map<string, THREE.Vector3>();
   private hipsOffNow = new THREE.Vector3();
 
@@ -329,7 +362,13 @@ export class Animator {
       if (!this.bones[fa] || !R[fa]) { g.visible = false; return; }
       const fq = this.modelQ.get(this.bones[fa]!) ?? R[fa].q;
       const at = this.modelPos(this.bones[hn] && R[hn] ? hn : fa);
-      const Zv = aim ? aim.clone().sub(at).normalize() : R[fa].dir.clone().applyQuaternion(fq.clone().multiply(R[fa].q.clone().invert())).normalize();
+      let Zv = aim ? aim.clone().sub(at).normalize() : R[fa].dir.clone().applyQuaternion(fq.clone().multiply(R[fa].q.clone().invert())).normalize();
+      if (this.gunUpright[i]) {
+        // the bow faces where the forearm points across the ground (straight ahead when the arm hangs), limbs up
+        Zv = new THREE.Vector3(Zv.x, 0, Zv.z);
+        if (Zv.lengthSq() < 0.09) Zv.set(0, 0, 1);
+        Zv.normalize();
+      }
       const Yv = new THREE.Vector3(0, 1, 0).addScaledVector(Zv, -Zv.y);
       if (Yv.lengthSq() < 1e-4) Yv.set(0, 0, 1);
       Yv.normalize();
@@ -360,57 +399,153 @@ export class Animator {
     return p;
   }
 
-  private springs(s: AnimState, dt: number) {
-    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
-    const toW = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * s.scale, s.pos.y + m.y * s.scale, s.pos.z + (-m.x * sy + m.z * cy) * s.scale);
+  /** find the hair / cloth chains on this rig: prefix_1..prefix_n, the highest index is the tip marker */
+  private bindChains() {
+    this.chains = [];
+    for (const pf of CHAIN_PREFIXES) {
+      const idx: BoneName[] = [];
+      for (let i = 1; i <= 4; i++) { const n = `${pf}_${i}` as BoneName; if (this.bones[n] && this.rest[n]) idx.push(n); else break; }
+      if (idx.length < 2) continue;
+      const tip = idx[idx.length - 1], segs = idx.slice(0, -1);
+      const parObj = this.bones[segs[0]]!.parent;
+      const par = (Object.keys(this.bones) as BoneName[]).find(k => this.bones[k] === parObj)
+        ?? (pf.startsWith('hair') ? 'head' : pf === 'sleeve_L' ? 'forearm_L' : pf === 'sleeve_R' ? 'forearm_R' : 'hips');
+      if (!this.rest[par]) continue;
+      const len = segs.map((n, k) => this.rest[n]!.p.distanceTo(this.rest[idx[k + 1]]!.p));
+      this.chains.push({ pf, kind: kindOf(pf), segs, tip, par, len, x: [], prev: [], anchor: null });
+    }
+    // neighbouring skirt panels keep their rest spacing (within +-25%) level by level
+    this.ring = [];
+    for (const [pa, pb] of SKIRT_RING) {
+      const A = this.chains.findIndex(c => c.pf === pa), B = this.chains.findIndex(c => c.pf === pb);
+      if (A < 0 || B < 0 || this.chains[A].segs.length !== this.chains[B].segs.length) continue;
+      const pts = (c: { segs: BoneName[]; tip: BoneName }) => [...c.segs.slice(1), c.tip].map(n => this.rest[n]!.p);
+      const pa2 = pts(this.chains[A]), pb2 = pts(this.chains[B]);
+      this.ring.push({ a: A, b: B, d: pa2.map((p, k) => p.distanceTo(pb2[k])) });
+    }
+  }
+
+  /** the hair / cloth solver (DYN): world space, fixed sub-steps, body colliders, then the bones are aimed down the chains */
+  private dynamics(s: AnimState, dt: number) {
+    if (!this.chains.length || dt <= 0) return;
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw), sc = s.scale;
+    const toW = (m: THREE.Vector3) => new THREE.Vector3(s.pos.x + (m.x * cy + m.z * sy) * sc, s.pos.y + m.y * sc, s.pos.z + (-m.x * sy + m.z * cy) * sc);
+    const dirW = (m: THREE.Vector3) => new THREE.Vector3(m.x * cy + m.z * sy, m.y, -m.x * sy + m.z * cy);
     const dirToM = (w: THREE.Vector3) => new THREE.Vector3(w.x * cy - w.z * sy, w.y, w.x * sy + w.z * cy).normalize();
-    const f = dt * 60;
-    for (const [b1, b2, b3, par, stiff, damp, maxA] of CHAINS) {
-      if (!this.bones[b1] || !this.rest[b1] || !this.rest[b2]) continue;
-      for (const [seg, next] of [[b1, b2], [b2, b3]] as [BoneName, BoneName][]) {
-        const R = this.rest[seg]!, Rn = this.rest[next];
-        if (!Rn) continue;
-        const len = R.p.distanceTo(Rn.p) * s.scale;
-        const parObj = this.bones[seg]!.parent!;
-        const parName = (Object.keys(this.bones) as BoneName[]).find(k => this.bones[k] === parObj) ?? (seg === b1 ? par : b1);
-        if (!this.rest[parName]) continue;
-        const pq = this.modelQ.get(parObj) ?? this.rest[parName]!.q;
-        const base = pq.clone().multiply(this.rest[parName]!.q.clone().invert());
-        const headW = toW(this.modelPos(seg));
-        const rigidDirM = R.dir.clone().applyQuaternion(base);
-        const rigidDirW = new THREE.Vector3(rigidDirM.x * cy + rigidDirM.z * sy, rigidDirM.y, -rigidDirM.x * sy + rigidDirM.z * cy);
-        const target = headW.clone().addScaledVector(rigidDirW, len);
-        let st = this.spring.get(seg);
-        if (!st || st.tip.distanceTo(target) > len * 3) { st = { tip: target.clone(), prev: target.clone() }; this.spring.set(seg, st); }
-        if (dt > 0) {
-          const vel = st.tip.clone().sub(st.prev).multiplyScalar(Math.pow(damp, f));
-          st.prev.copy(st.tip);
-          st.tip.add(vel);
-          st.tip.y -= 9.8 * 0.35 * dt * dt * 60;                             // gravity (scaled for readable sway)
-          st.tip.x -= s.vel.x * dt * 0.2; st.tip.z -= s.vel.z * dt * 0.2;      // air drag while moving / flying
-          st.tip.lerp(target, 1 - Math.pow(1 - stiff, f));
-          // cloth collides with the legs (thigh-to-ankle capsules) instead of passing through them
-          if (seg.startsWith('skirt') && this.bones.thigh_L && this.bones.foot_L) {
-            const r = this.legLen * 0.17 * s.scale;
-            for (const L of ['L', 'R'] as const) {
-              const A = toW(this.modelPos(`thigh_${L}` as BoneName)), B = toW(this.modelPos(`foot_${L}` as BoneName));
-              const AB = B.clone().sub(A), t = Math.max(0, Math.min(1, st.tip.clone().sub(A).dot(AB) / Math.max(1e-6, AB.lengthSq())));
-              const C = A.addScaledVector(AB, t), d = st.tip.clone().sub(C), dl = d.length();
-              if (dl < r) st.tip.copy(C).addScaledVector(dl > 1e-5 ? d.divideScalar(dl) : rigidDirW, r);
-            }
+    const H = this.height * sc;
+    // colliders this frame (world), swept from last frame's through the sub-steps
+    const cols: Partial<Record<BoneName, { a0: THREE.Vector3; b0: THREE.Vector3; a1: THREE.Vector3; b1: THREE.Vector3; r: number }>> = {};
+    for (const n of Object.keys(COLL) as BoneName[]) {
+      const c = COLL[n]!;
+      if (!this.bones[n] || !this.rest[n] || !this.rest[c.to]) continue;
+      let A = toW(this.modelPos(n)), B = toW(this.modelPos(c.to));
+      const def = c.r * this.height, meas = this.colliders[n];
+      const r = (meas ? Math.min(Math.max(meas, def * 0.5), def * 1.45) : def) * sc;
+      if (n === 'head') {       // the skull: a sphere above the head joint
+        const hq = (this.modelQ.get(this.bones.head!) ?? this.rest.head!.q).clone().multiply(this.rest.head!.q.clone().invert());
+        const up = dirW(new THREE.Vector3(0, 1, 0).applyQuaternion(hq));
+        A = A.clone().addScaledVector(up, r * 0.85); B = A.clone();
+      }
+      const pv = this.colPrev.get(n), tele = !pv || pv[0].distanceTo(A) > H * 1.5;
+      cols[n] = { a0: tele ? A : pv![0], b0: tele ? B : pv![1], a1: A, b1: B, r };
+      this.colPrev.set(n, [A.clone(), B.clone()]);
+    }
+    const h = 1 / 120, steps = Math.min(5, Math.max(1, Math.ceil(dt / h))), hs = dt / steps, f = hs * 60;
+    this.dynT += dt;
+    const t = this.dynT, g = 9.8;
+    // a light gusting breeze; the wind of the hero's own motion comes from the drag acting in world space
+    const gust = 0.6 + 0.4 * Math.sin(t * 0.63) * Math.sin(t * 0.21 + 1.3);
+    const wind = new THREE.Vector3(Math.sin(t * 0.37) * 1.4, 0, Math.cos(t * 0.29) * 1.1).multiplyScalar(gust * 0.9);
+    const cp = new THREE.Vector3(), ab = new THREE.Vector3(), tmp = new THREE.Vector3(), CA = new THREE.Vector3(), CB = new THREE.Vector3();
+    const pushOut = (x: THREE.Vector3, A: THREE.Vector3, B: THREE.Vector3, r: number) => {
+      ab.subVectors(B, A); const l2 = ab.lengthSq();
+      const u = l2 > 1e-9 ? Math.max(0, Math.min(1, tmp.subVectors(x, A).dot(ab) / l2)) : 0;
+      cp.copy(A).addScaledVector(ab, u);
+      tmp.subVectors(x, cp); const d = tmp.length();
+      if (d < r) { if (d > 1e-6) x.copy(cp).addScaledVector(tmp, r / d); else x.y = cp.y + r; }
+    };
+    // per chain: anchor + rigid (animated) directions in model space for this frame
+    const frames = this.chains.map(c => {
+      const parObj = this.bones[c.segs[0]]!.parent!;
+      const pq = this.modelQ.get(parObj) ?? this.rest[c.par]!.q;
+      const base = pq.clone().multiply(this.rest[c.par]!.q.clone().invert());
+      const anchor = toW(this.modelPos(c.segs[0]));
+      const rigid = c.segs.map(n => this.rest[n]!.dir.clone().applyQuaternion(base));
+      return { anchor, rigid };
+    });
+    this.chains.forEach((c, ci) => {
+      const F = frames[ci];
+      if (!c.anchor || c.anchor.distanceTo(F.anchor) > H * 1.5 || c.x.length !== c.segs.length) {
+        // first frame / respawn / teleport: start at the animated pose
+        c.x = []; c.prev = [];
+        let p = F.anchor.clone();
+        c.segs.forEach((_, k) => { p = p.clone().addScaledVector(dirW(F.rigid[k]), c.len[k] * sc); c.x.push(p.clone()); c.prev.push(p.clone()); });
+        c.anchor = F.anchor.clone();
+      }
+    });
+    for (let st = 1; st <= steps; st++) {
+      const u = st / steps;
+      this.chains.forEach((c, ci) => {
+        const P = DYN[c.kind], F = frames[ci];
+        const keep = Math.pow(1 - P.drag, f), pull = 1 - Math.pow(1 - P.stiff, f);
+        let prevP = c.anchor!.clone().lerp(F.anchor, u), rot = new THREE.Quaternion();
+        for (let k = 0; k < c.segs.length; k++) {
+          const x = c.x[k], pv = c.prev[k], L = c.len[k] * sc;
+          // the animated direction of this segment, carried by the simulated rotation of the segments above it
+          const rigidW = dirW(F.rigid[k].clone().applyQuaternion(rot)).normalize();
+          const target = prevP.clone().addScaledVector(rigidW, L);
+          // Verlet with drag (air resistance in world space), gravity and wind
+          tmp.subVectors(x, pv).multiplyScalar(keep);
+          pv.copy(x);
+          x.add(tmp);
+          x.y -= g * P.grav * hs * hs;
+          x.addScaledVector(wind, P.wind * hs * hs);
+          // stiffness: back toward the animated pose
+          x.lerp(target, pull);
+          // body colliders (capsules swept through the frame) and the ground
+          for (const n of P.cols) {
+            const C = cols[n]; if (!C) continue;
+            pushOut(x, CA.copy(C.a0).lerp(C.a1, u), CB.copy(C.b0).lerp(C.b1, u), C.r + 0.008 * H);
           }
-          // keep segment length, and never swing further than maxA from the rigid pose
-          const d = st.tip.clone().sub(headW);
-          let dir = d.lengthSq() > 1e-8 ? d.normalize() : rigidDirW.clone();
-          const ang = dir.angleTo(rigidDirW);
-          if (ang > maxA) dir = rigidDirW.clone().lerp(dir, maxA / ang).normalize();
-          st.tip.copy(headW).addScaledVector(dir, len);
+          if (s.grounded && x.y < s.pos.y + 0.01 * H) x.y = s.pos.y + 0.01 * H;
+          // hard segment length, and an angular limit off the animated pose
+          tmp.subVectors(x, prevP);
+          let dir = tmp.lengthSq() > 1e-10 ? tmp.clone().normalize() : rigidW.clone();
+          const ang = dir.angleTo(rigidW);
+          if (ang > P.maxA) dir = rigidW.clone().lerp(dir, P.maxA / ang).normalize();
+          x.copy(prevP).addScaledVector(dir, L);
+          rot = new THREE.Quaternion().setFromUnitVectors(dirToM(rigidW), dirToM(dir)).multiply(rot);
+          prevP = x;
         }
-        this.aimBone(seg, dirToM(st.tip.clone().sub(headW)), base);
-        // only this chain's downstream bones moved: invalidate just those cache entries
-        this.posCache.delete(next); if (seg === b1) this.posCache.delete(b3);
+      });
+      // skirt panels hold together (a PBD distance band between matching levels of neighbouring panels)
+      for (const R of this.ring) {
+        const A = this.chains[R.a], B = this.chains[R.b];
+        for (let k = 0; k < A.x.length; k++) {
+          const d0 = R.d[k] * sc; tmp.subVectors(B.x[k], A.x[k]); const d = tmp.length();
+          if (d < 1e-6) continue;
+          const want = Math.min(Math.max(d, d0 * 0.75), d0 * 1.25);
+          if (want === d) continue;
+          tmp.multiplyScalar((d - want) / d * 0.5);
+          A.x[k].add(tmp); B.x[k].sub(tmp);
+        }
       }
     }
+    // aim the bones down the solved chains
+    this.chains.forEach((c, ci) => {
+      c.anchor = frames[ci].anchor.clone();
+      let head = frames[ci].anchor;
+      for (let k = 0; k < c.segs.length; k++) {
+        const seg = c.segs[k];
+        const parObj = this.bones[seg]!.parent!;
+        const parName = k === 0 ? c.par : c.segs[k - 1];
+        const pq = this.modelQ.get(parObj) ?? this.rest[parName]!.q;
+        const base = pq.clone().multiply(this.rest[parName]!.q.clone().invert());
+        this.aimBone(seg, dirToM(c.x[k].clone().sub(head)), base);
+        this.posCache.delete(k + 1 < c.segs.length ? c.segs[k + 1] : c.tip);
+        head = c.x[k];
+      }
+    });
   }
 
   constructor(public model: THREE.Object3D) {
@@ -464,6 +599,7 @@ export class Animator {
     this.hipsRestLocal.copy(this.bones.hips!.position);
     this.foot[0].set(R.foot_L.p.x, this.footY, R.foot_L.p.z);
     this.foot[1].set(R.foot_R.p.x, this.footY, R.foot_R.p.z);
+    this.bindChains();
   }
 
   /** model-space rotation currently applied to a bone's parent */
@@ -1117,7 +1253,7 @@ export class Animator {
     }
     // ---------------- secondary motion: hair / coat tails / skirts
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
-    this.springs(s, dt);
+    this.dynamics(s, dt);
     this.placeGuns();
     this.placeFeet();
     this.placeBack();
