@@ -1,8 +1,8 @@
 // node tests/e2e/dragon_ult.mjs [port] [hero] - the Koryu spirit dragons in a real match (desktop edition):
 //   seiran: Twin Koi Torrent cast at a training-ground wall - the sigil, the twin dragons pouring out in a double helix
 //           and swimming straight through the wall (camera swung to the side after the cast to see the spiral)
-//   hayate: Dragon Gate Blade with three targets pulled in range - the violet dragon coiling up around him, then the
-//           dragon streaking through each cut
+//   hayate: Dragon Gate Blade (a 15 s Dragonblade state) with targets in slash range - the violet dragon coiling up
+//           around him on the draw, then the dragon streaking through each slash
 // -> tests/e2e/shots/dragon_<hero>_<n>.png
 import puppeteer from 'puppeteer-core';
 const [port = '5199', hero = 'seiran'] = process.argv.slice(2);
@@ -28,14 +28,16 @@ const setup = await p.evaluate(h => {
   const aim = h === 'hayate' ? 0 : best;
   g.input.yaw = aim; g.input.pitch = 0.05; me.yaw = aim; window.__aim = aim;
   const foes = w.actors.filter(a => a.team !== me.team);
-  if (h === 'hayate') foes.slice(0, 3).forEach((f, i) => { f.pos = { x: -34 + i * 3, y: 0, z: 19 + (i % 2) * 2 }; f.hp = f.maxHp = 1e5; });
+  if (h === 'hayate') foes.slice(0, 3).forEach((f, i) => { f.pos = { x: -32 + i * 1.5, y: 0, z: 16 + i }; f.hp = f.maxHp = 1e5; });   // in slash range
   return { foes: foes.length, loaded: !!g.fx?.dragons, aim: +aim.toFixed(2), clear: bestD };
 }, hero);
 await wait(2500);   // let the dragon GLB finish loading
 await p.evaluate(() => { const g = window.__zu.game, me = g.match.player; me.ult = me.def.ult.charge; g.input.keys.add('KeyQ'); });
 await wait(120);
 await p.evaluate(() => { window.__zu.game.input.keys.delete('KeyQ'); });
-const times = hero === 'hayate' ? [150, 250, 300, 350] : [350, 250, 300, 400];
+const times = hero === 'hayate' ? [250, 450, 250, 300] : [350, 250, 300, 400];
+// Hayate: Dragon Gate Blade is a 15 s Genji-style blade state - the dragon coils up on the draw, then every slash streaks it
+if (hero === 'hayate') setTimeout(() => p.evaluate(() => { window.__zu.game.input.mouse.l = true; }).catch(() => {}), 700);
 let n = 0;
 for (const ms of times) {
   await wait(ms);
