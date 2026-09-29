@@ -1308,6 +1308,15 @@
   },
   "prop_kaien_talisman": {
    "height": 1
+  },
+  "prop_gantetsu_hinoko_v2": {
+   "height": 1
+  },
+  "prop_gantetsu_hanabi_v2": {
+   "height": 1
+  },
+  "prop_chain_link": {
+   "height": 1
   }
  },
  "textures": [
