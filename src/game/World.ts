@@ -972,14 +972,19 @@ export class World {
       a.vel.y = Math.max(a.vel.y, 7.5); a.sv.climbT = Math.max(0, a.sv.climbT - 1.2); a.anim.jumpAt = t;
       this.sfx('jump', a.pos, a);
     }
-    const climbing = look > 0.05 && a.sv.climbT < climbMax;
-    let up = climbing ? look * Math.min(1, (climbMax - a.sv.climbT) / 0.35) : 0;
+    // (tapping climbs too, wherever he looks: the rhythm takes him up the wall)
+    const tapped = t - (a.sv.tapAt ?? -9) < 0.4;
+    const climbing = (look > 0.05 || tapped) && a.sv.climbT < climbMax;
+    let up = climbing ? Math.max(look, tapped ? 0.7 : 0) * Math.min(1, (climbMax - a.sv.climbT) / 0.35) : 0;
     // the arena's boundary walls: he can ride them, but the climb stops short of their top (no leaving the map)
     const [BX, BZ] = L.size;
     const border = Math.abs(a.pos.x) > BX - 2.5 || Math.abs(a.pos.z) > BZ - 2.5;
     const capped = border && !probe(-nx, -nz, a.pos.y + a.height + 1.2);
     if (capped) up = 0;
-    const sp = spd * 1.3 * (headOn ? 0.15 : 1 - 0.55 * Math.max(0, up)), cur = a.vel.x * tx + a.vel.z * tz;
+    // on a wall the Groove lifts him (the climb below); along the wall it counts for a little over double at most - at
+    // full groove speed he shot along the face and off its end before he ever reached the top
+    const gr = Math.max(1, a.sv.rhythm ?? 1), spdW = spd / gr * Math.min(gr, 2.2);
+    const sp = spdW * 1.3 * (headOn ? 0.15 : 1 - 0.55 * Math.max(0, up)), cur = a.vel.x * tx + a.vel.z * tz;
     const v = cur + (sp - cur) * Math.min(1, dt * 6);
     // a light pull toward the wall keeps the skates on it
     const gap = (probe(-nx, -nz)?.t ?? reach) - a.radius;

@@ -193,6 +193,64 @@ describe('Hibiki', () => {
     expect(events).toContain('Tempo Rush breaks out of the Grand Dohyo');
   });
 
+  describe('Mag-Grind with the Groove (tapping jump on the wall)', () => {
+    // evera-14's QA: tapping jump ~4x a second while grinding sent him ALONG the wall at groove speed (across Sunset
+    // Mile in 16 s) instead of up it and onto the roof. On a wall the Groove lifts him; it doesn't fling him along it.
+    const walls: [string, string, number, number, number, number][] = [
+      // map, route, start x, face z, top (signed: the wall on the +z / -z side), look pitch
+      ['mile', 'butte ledge (5 m), looking up', -31, 20.5, 5, 0.7],
+      ['mile', 'south shelf (8 m), looking up', -28, -23.5, -8, 0.7],
+      ['mile', 'butte ledge (5 m), looking level', -31, 20.5, 5, 0],
+      ['gulch', 'a boxcar roof (4.2 m), looking level', -45, 11.4, 4.2, 0],
+    ];
+    for (const [map, name, x, face, signedTop, pitch] of walls) {
+      it(`${map}: taps at 4 a second take him up the ${name}`, () => {
+        const top = Math.abs(signedTop), side = Math.sign(signedTop);
+        const w = new World(map, 'practice');
+        const h: Actor = w.addHero('hibiki', 'zenith'); h.clear('spawnprot');
+        h.pos = { x, y: 0.9, z: face - side * (h.radius + 0.3) }; h.vel = { x: 6, y: 1, z: 0 }; h.grounded = false; h.lastGroundedAt = -9;
+        h.yaw = h.input.yaw = Math.PI / 2; h.pitch = h.input.pitch = pitch; h.input.grind = true; h.input.mz = 1;
+        let mantled = false, f = 0, far = 0;
+        run(w, 4, () => {
+          if ((h.stats.mantles ?? 0) > 0 && !mantled) { mantled = true; h.input.mz = 0; h.input.grind = false; }
+          h.input.jump = !mantled && f++ % 15 === 0;
+          if (!mantled) far = Math.max(far, Math.abs(h.pos.x - x));
+        });
+        expect(mantled).toBe(true);
+        expect(h.pos.y).toBeGreaterThan(top - 0.3);
+        expect(far).toBeLessThan(14);                     // up the wall, not along it
+      });
+    }
+  });
+
+  describe('Mag-Grind from the foot of a face with the Groove (skating at it, tapping jump)', () => {
+    // the faces of evera-14's climb QA (tests/e2e/map_climb.mjs): x, z, yaw (0 = +z), standing height, top
+    const faces: [string, string, number, number, number, number, number][] = [
+      ['mile', 'butte ledge', -28, 19.3, 0, 0, 5], ['mile', 'south shelf', -18, -22.3, Math.PI, 0, 8], ['mile', 'sign tower', 0, 9.3, 0, 0, 6],
+      ['gulch', 'boxcar', -40, 10.2, 0, 0, 4.2], ['gulch', 'south ledge', -14, -20.3, Math.PI, 0, 6], ['gulch', 'east rock', -20, 21.8, 0, 0, 8],
+    ];
+    for (const [map, name, x, z, yaw, y0, top] of faces) for (const hz of [0, 4, 8]) {
+      it(`${map}: up the ${name} (${top} m) with ${hz} taps a second`, () => {
+        const w = new World(map, 'practice');
+        const h: Actor = w.addHero('hibiki', 'zenith'); h.clear('spawnprot');
+        h.pos = { x, y: w.level.groundAt(x, z, y0 + 1), z }; h.vel = { x: 0, y: 0, z: 0 };
+        h.yaw = h.input.yaw = yaw; h.pitch = h.input.pitch = 0.9; h.input.grind = true; h.input.mz = 1;
+        let mantled = false, stood = false, f = 0, far = 0;
+        const every = hz ? Math.round(60 / hz) : 0;
+        run(w, 5, () => {
+          if ((h.stats.mantles ?? 0) > 0 && !mantled) { mantled = true; h.input.mz = 0; h.input.grind = false; }
+          h.input.jump = hz > 0 && !mantled && f++ % every === 0;
+          if (!mantled) far = Math.max(far, Math.hypot(h.pos.x - x, h.pos.z - z));
+          // (he stood on the top: with the controls let go his skates may then roll him off a small roof)
+          if (h.grounded && h.pos.y > top - 0.3) stood = true;
+        });
+        expect(mantled).toBe(true);
+        expect(stood).toBe(true);
+        expect(far).toBeLessThan(14);                     // up the face, not along it
+      });
+    }
+  });
+
   describe('Groove (jump rhythm)', () => {
     /** tap jump `hz` times a second for `secs`, holding forward along the clear lane */
     const rhythm = (w: World, h: Actor, hz: number, secs: number) => {
