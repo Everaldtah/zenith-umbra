@@ -14,8 +14,10 @@ import { FULL } from '../edition';
 export const TITAN_SCALE = 2.2;
 
 export const G = 24;
-/** Hibiki's Groove: the top of his jump-rhythm speed multiplier (tapping jump ~8x a second holds it) */
+/** Hibiki's Groove: the top of his jump-rhythm speed multiplier (tapping jump ~8.5x a second holds it) */
 export const GROOVE_MAX = 20;
+/** the tap rates (taps a second) the Groove spans: none below GROOVE_TAPS[0], the full GROOVE_MAX at GROOVE_TAPS[1] */
+export const GROOVE_TAPS: [number, number] = [1.5, 8.5];
 /** the Koryu brothers' wall climb: seconds of climbing per touch of the ground (jump taps add a little back) */
 export const CLIMB_SECS = 2.2;
 /** Grand Dohyo: height of the rope wall above the ring floor (m) */
@@ -984,10 +986,11 @@ export class World {
   }
 
   /**
-   * Hibiki - Groove: the faster he taps jump, the faster he skates. The tap rate (a smoothed taps-per-second, counted on
-   * the ground, in the air and on walls) sets a target multiplier on his speed - nothing below ~1.8 taps/s, the full
-   * GROOVE_MAX at ~7.8 - and his speed ramps toward it over a couple of seconds of rhythm and bleeds off when the beat
-   * stops. Movement sub-steps every 0.3m, so even at the top of the groove he can't skate through a wall.
+   * Hibiki - Groove: his speed follows how fast jump is being tapped. The tap rate (taps a second, counted on the ground,
+   * in the air and on walls) maps straight onto a multiplier on his (half-speed) skate: x1 below GROOVE_TAPS[0], rising in
+   * step with the rate to GROOVE_MAX at GROOVE_TAPS[1] - every extra tap a second is the same step up. The rate is live:
+   * it can never read faster than the time since the last tap allows, so the moment the tapping slows the speed follows
+   * it down. Movement sub-steps every 0.3m, so even at the top of the groove he can't skate through a wall.
    */
   private grooveStep(a: Actor, dt: number): number {
     const t = this.time;
@@ -995,14 +998,16 @@ export class World {
       const gap = t - (a.sv.tapAt ?? -9);
       a.sv.tapAt = t;
       const inst = gap > 0.04 ? Math.min(12, 1 / gap) : 12;
-      a.sv.tapRate = (a.sv.tapRate ?? 0) * 0.45 + inst * 0.55;
+      a.sv.tapRate = (a.sv.tapRate ?? 0) * 0.4 + inst * 0.6;
     }
-    if (t - (a.sv.tapAt ?? -9) > 0.45) a.sv.tapRate = Math.max(0, (a.sv.tapRate ?? 0) - dt * 6);
-    const x = Math.max(0, Math.min(1, ((a.sv.tapRate ?? 0) - 1.8) / 6));
-    const target = 1 + (GROOVE_MAX - 1) * x * x * (3 - 2 * x);
+    // a slower beat shows at once: the rate is capped by the gap since the last tap (none for over a second = stopped)
+    const since = t - (a.sv.tapAt ?? -9);
+    a.sv.tapRate = since > 1.2 ? 0 : Math.min(a.sv.tapRate ?? 0, 1 / Math.max(1e-3, since) * 1.15);
+    const x = Math.max(0, Math.min(1, ((a.sv.tapRate ?? 0) - GROOVE_TAPS[0]) / (GROOVE_TAPS[1] - GROOVE_TAPS[0])));
+    const target = 1 + (GROOVE_MAX - 1) * x;
     // (sv.rhythm / status 'rhythm': 'groove' is the Healing Groove aura's status, which writes sv.groove every tick)
     const g0 = a.sv.rhythm ?? 1;
-    a.sv.rhythm = g0 + (target - g0) * Math.min(1, dt * (target > g0 ? 0.9 + 0.12 * g0 : 1.4));
+    a.sv.rhythm = g0 + (target - g0) * Math.min(1, dt * (target > g0 ? 2.2 : 3.5));
     if (a.sv.rhythm > 1.5) a.set('rhythm', t, 0.25);
     // deep in the groove his skates leave a light trail
     if (a.sv.rhythm > 4 && t >= (a.sv.rhythmFx ?? 0)) { a.sv.rhythmFx = t + 0.3; this.fx('chargetrail', a.pos, { actor: a, dur: 0.4, color: a.def.glow }); }

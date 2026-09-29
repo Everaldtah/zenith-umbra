@@ -88,7 +88,7 @@ describe('Hibiki', () => {
     run(w, 1.5);
     expect(h.has('grinding', w.time)).toBe(true);
     expect(h.pos.y).toBeGreaterThan(1.6);
-    expect(h.pos.x - x0).toBeGreaterThan(8);
+    expect(h.pos.x - x0).toBeGreaterThan(HERO.hibiki.speed * 1.8);   // riding the wall, not stalled on it
     expect(Math.hypot(h.vel.x, h.vel.z)).toBeGreaterThan(HERO.hibiki.speed * 1.15);
     // let go of SPACE: up and away from the wall
     h.input.jumpHeld = false; run(w, DT);
@@ -154,7 +154,8 @@ describe('Hibiki', () => {
     for (const a of [h, r]) { a.input.mz = 0; }
     const z0h = h.pos.z, z0r = r.pos.z;
     run(w, 0.6);
-    expect(h.pos.z - z0h).toBeGreaterThan(1.5);                  // still rolling
+    expect(h.pos.z - z0h).toBeGreaterThan(HERO.hibiki.speed * 0.3);   // still rolling (0.3 s of his skate speed)
+    expect(h.pos.z - z0h).toBeGreaterThan(r.pos.z - z0r + 0.3);
     expect(r.pos.z - z0r).toBeLessThan(0.8);                     // a runner stops
   });
 
@@ -222,6 +223,19 @@ describe('Hibiki', () => {
       rhythm(w, h, 1, 3);
       expect(h.sv.rhythm ?? 1).toBeLessThan(1.3);
       expect(flatSpeed(h)).toBeLessThan(HERO.hibiki.speed * 1.4);
+    });
+
+    it('his speed follows the tap rate: faster taps, faster skate; half his old base speed', () => {
+      expect(HERO.hibiki.speed).toBeCloseTo(3.05, 2);
+      const at = (hz: number) => { const w = arena(); const h = place(w, 'hibiki', 'zenith', 0, 0, 0); rhythm(w, h, hz, 3); return h.sv.rhythm ?? 1; };
+      const r3 = at(3), r5 = at(5), r8 = at(8);
+      expect(r3).toBeGreaterThan(1.5);
+      expect(r5).toBeGreaterThan(r3 * 1.4);
+      expect(r8).toBeGreaterThan(r5 * 1.3);
+      // slowing from 8 to 3 taps a second brings him most of the way down within a second
+      const w = arena(); const h = place(w, 'hibiki', 'zenith', 0, 0, 0);
+      rhythm(w, h, 8, 3); rhythm(w, h, 3, 1);
+      expect(h.sv.rhythm).toBeLessThan(r3 * 1.6);
     });
 
     it('the groove bleeds off once the beat stops', () => {

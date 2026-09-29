@@ -223,7 +223,7 @@ export const HEROES: HeroDef[] = [
   },
   {
     id: 'hibiki', name: 'Hibiki', title: 'The Street Frequency', team: 'zenith', role: 'support', frame: 'human', rival: 'gantetsu',
-    hp: 225, armor: 0, speed: 6.1, height: 1.82, radius: 0.42, color: '#39d6ff', glow: '#7dffcf',
+    hp: 225, armor: 0, speed: 3.05, height: 1.82, radius: 0.42, color: '#39d6ff', glow: '#7dffcf',
     primary: { kind: 'projectile', name: 'Subwoofer Blaster', damage: 20, rate: 1.15, burst: 4, burstGap: 0.065, range: 40, speed: 52, ammo: 20, reload: 1.5, sfx: 'sonic', fx: 'sonic' },
     secondary: { id: 'scratch', name: 'Scratch Wave', key: 'RMB', cooldown: 4, desc: 'Scratch a shockwave off the deck: enemies in an 8m cone in front of you take 35 damage and are knocked back hard. After 5s of Mag-Grinding the next Scratch Wave is empowered (+50% damage, +25% knockback).' },
     ability1: { id: 'crossmix', name: 'Crossmix', key: 'SHIFT', cooldown: 0.4, desc: 'Swap tracks. Healing Groove: allies within 12m you can see heal 16 HP/s (you 11 HP/s). Tempo Rush: they move 25% faster.', counter: 'Max Volume on Tempo Rush lets allies break out of the Grand Dohyo.' },
