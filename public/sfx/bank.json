@@ -584,6 +584,32 @@
    "loop": true,
    "ext": "flac"
   },
+  "shuriken": {
+   "n": 3,
+   "cat": "ability"
+  },
+  "bodyfall": {
+   "n": 1,
+   "cat": "ability"
+  },
+  "amb_lantern": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true,
+   "ext": "flac"
+  },
+  "amb_starfall": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true,
+   "ext": "flac"
+  },
+  "amb_foundry": {
+   "n": 1,
+   "cat": "amb",
+   "loop": true,
+   "ext": "flac"
+  },
   "sonic": {
    "n": 3,
    "cat": "weapon"
@@ -870,6 +896,54 @@
   "gantetsu": {
    "a1": 2,
    "a2": 1,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "hayate": {
+   "a1": 2,
+   "a2": 2,
+   "attack_point": 1,
+   "burn": 1,
+   "contest": 1,
+   "death": 3,
+   "defend_point": 1,
+   "jump": 2,
+   "kill": 3,
+   "kill_rival": 1,
+   "land": 1,
+   "low_hp": 2,
+   "pain": 4,
+   "pain_big": 2,
+   "push": 1,
+   "reload": 1,
+   "respawn": 2,
+   "select": 2,
+   "thanks": 2,
+   "ult": 1,
+   "ult_ally": 1,
+   "ult_ready": 1
+  },
+  "seiran": {
+   "a1": 2,
+   "a2": 2,
    "attack_point": 1,
    "burn": 1,
    "contest": 1,
@@ -1970,6 +2044,172 @@
    ],
    "ult_ready": [
     "The grand dohyo is ready! Who wants a show?"
+   ]
+  },
+  "hayate": {
+   "a1": [
+    "Riding the current!",
+    "Coming through!"
+   ],
+   "a2": [
+    "Still water.",
+    "Go ahead. Shoot me."
+   ],
+   "attack_point": [
+    "Take that point, fast and clean!"
+   ],
+   "burn": [
+    "Hot! My plating's melting!"
+   ],
+   "contest": [
+    "They're on our point! Let's wash them off!"
+   ],
+   "death": [
+    "Aaagh...!",
+    "The river... again...",
+    "Hhh... not yet..."
+   ],
+   "defend_point": [
+    "Back to the point! Don't let them settle!"
+   ],
+   "jump": [
+    "Hup!",
+    "Hah!"
+   ],
+   "kill": [
+    "Too slow.",
+    "Swept away!",
+    "Next ripple."
+   ],
+   "kill_rival": [
+    "Surprised, brother? The falls didn't take me."
+   ],
+   "land": [
+    "Oof!"
+   ],
+   "low_hp": [
+    "Frame's cracking! I need repairs!",
+    "Healer! I'm throwing sparks here!"
+   ],
+   "pain": [
+    "Ugh!",
+    "Agh!",
+    "Tch!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Gaaah!"
+   ],
+   "push": [
+    "Keep that float moving!"
+   ],
+   "reload": [
+    "More scales."
+   ],
+   "respawn": [
+    "Frame rebooted. Where were we?",
+    "You can't drown what the river already spat back out."
+   ],
+   "select": [
+    "The river gave me back. Its mistake.",
+    "Rebuilt, reloaded, and still the better-looking brother."
+   ],
+   "thanks": [
+    "Thanks, that runs smoother.",
+    "Appreciate it!"
+   ],
+   "ult": [
+    "Dragon Gate, open! Swim, koi!"
+   ],
+   "ult_ally": [
+    "Clear a lane, the dragon's coming through!"
+   ],
+   "ult_ready": [
+    "The koi is restless. Dragon Gate is ready."
+   ]
+  },
+  "seiran": {
+   "a1": [
+    "Step.",
+    "Too slow to follow."
+   ],
+   "a2": [
+    "The arrow listens.",
+    "I hear you."
+   ],
+   "attack_point": [
+    "Advance on the objective. Together."
+   ],
+   "burn": [
+    "Fire... tch!"
+   ],
+   "contest": [
+    "They stand on our ground. Remove them."
+   ],
+   "death": [
+    "Father... forgive me...",
+    "Aaagh...",
+    "Hhh... the river..."
+   ],
+   "defend_point": [
+    "Return to the objective. Hold it."
+   ],
+   "jump": [
+    "Hup!",
+    "Hmph!"
+   ],
+   "kill": [
+    "Clean.",
+    "One arrow.",
+    "Carried downstream."
+   ],
+   "kill_rival": [
+    "You wear the Koryu colours. Stay down."
+   ],
+   "land": [
+    "Hff!"
+   ],
+   "low_hp": [
+    "I am wounded. Tend to me.",
+    "Healer. Quickly."
+   ],
+   "pain": [
+    "Ugh!",
+    "Hngh!",
+    "Tch!",
+    "Nngh!"
+   ],
+   "pain_big": [
+    "Aaagh!",
+    "Graaah!"
+   ],
+   "push": [
+    "Move the float. Do not stop."
+   ],
+   "reload": [
+    "Nocking."
+   ],
+   "respawn": [
+    "Again, then.",
+    "I do not fail twice."
+   ],
+   "select": [
+    "Discipline. One breath. One arrow.",
+    "The current does not forgive. Neither do I."
+   ],
+   "thanks": [
+    "My thanks.",
+    "That will do."
+   ],
+   "ult": [
+    "Rise, twin koi! Let the river take them!"
+   ],
+   "ult_ally": [
+    "Stand clear of the current!"
+   ],
+   "ult_ready": [
+    "The koi are stirring. My torrent is ready."
    ]
   },
   "tomoe": {
