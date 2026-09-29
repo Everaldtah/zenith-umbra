@@ -51,7 +51,12 @@ if (process.argv.includes('--installer')) {
   console.log('installer:', files.filter(f => f.endsWith('.exe')).join(', '));
 }
 
-if (!process.argv.includes('--no-install')) {
+// never close a game someone is playing: with the app running the install is skipped (the installer is still built);
+// --force-install closes it and installs anyway
+let playing = false;
+try { playing = /ZenithUmbra\.exe/i.test(execSync('tasklist /FI "IMAGENAME eq ZenithUmbra.exe" /NH', { encoding: 'utf8' })); } catch { /* no tasklist */ }
+if (playing && !process.argv.includes('--force-install')) console.log('install skipped: ZENITH UMBRA is running (close it and run the build again, or pass --force-install)');
+else if (!process.argv.includes('--no-install')) {
   const dest = path.join(process.env.LOCALAPPDATA, 'Programs', 'ZenithUmbra');
   try { execSync('taskkill /IM ZenithUmbra.exe /F', { stdio: 'ignore' }); } catch { /* not running */ }
   // the killed app (and the antivirus scanning it) can hold files for a moment: retry the removal
