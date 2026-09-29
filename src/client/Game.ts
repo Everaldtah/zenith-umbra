@@ -447,6 +447,12 @@ export class Game {
       await nextFrame();
     }
     this.camera.quaternion.copy(q0);
+    // hidden parts the warm-up camera never saw (a sheathed blade behind the viewmodel's frame): compiled while still
+    // shown, into the same targets they're drawn to (compile ignores the camera's view)
+    r.setRenderTarget(into);
+    await compileFor(r, this.scene, this.camera, this.scene);
+    r.setRenderTarget(rt0);
+    if (this.fp) await compileFor(r, this.fp.scene, this.fp.camera, this.fp.scene);
     for (const o of revealed) o.visible = false;
     // the sample effects played out and gone, the far-off copies removed
     if (this.fx) for (let k = 1; k <= 8; k++) this.fx.update(0.5, w, w.time + k * 2);
@@ -456,7 +462,9 @@ export class Game {
     const aniso = Math.min(r.capabilities.getMaxAnisotropy(), this.settings.video.texFilter);
     CharacterView.warm = async (o: THREE.Object3D) => {
       o.traverse(ob => { const m = (ob as THREE.Mesh).material; for (const mt of Array.isArray(m) ? m : m ? [m] : []) { const t = (mt as THREE.MeshStandardMaterial).map; if (t && t.anisotropy !== aniso) { t.anisotropy = aniso; t.needsUpdate = true; } } });
-      await warmObject(r, o, this.camera, this.scene);
+      const target = this.composer ? (this.composer as unknown as { readBuffer: THREE.WebGLRenderTarget }).readBuffer : null, prev = r.getRenderTarget();
+      r.setRenderTarget(target);                     // compiled for where the scene is drawn (the composer's buffer)
+      try { await warmObject(r, o, this.camera, this.scene); } finally { r.setRenderTarget(prev); }
     };
     this.preloadStats = { ms: Math.round(performance.now() - t0), textures: nTex, programs: r.info.programs?.length ?? 0, phases };
     console.info('[preload]', JSON.stringify(this.preloadStats));
