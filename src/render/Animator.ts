@@ -1468,8 +1468,9 @@ export class Animator {
       const fid = this.wFidget > 0 ? Math.sin((1.1 - this.wFidget) / 1.1 * Math.PI) : 0;
       const jumpFlare = !s.grounded && s.jumpAge < 0.5 ? Math.sin(Math.min(1, s.jumpAge / 0.5) * Math.PI) * (1 - W.hover) : 0;
       // lift: + raises / opens; sweep: + back along the body
-      const liftT = ground * (-0.08 + 0.3 * fid) + W.hover * 0.1 + sw * 0.16 + W.glide * 0.32 + W.sup * 0.42 + W.flare * 0.38 + jumpFlare * 0.3;
-      const sweepT = ground * (0.34 - 0.3 * fid - 0.06 * this.moveBlend) + W.hover * (0.05 + 0.3 * fastK) + sw * 0.55 - W.glide * 0.06 + W.sup * 0.5 - W.flare * 0.3 - jumpFlare * 0.25;
+      // (folded well back on the ground: the wing roots arc up beside the head, and a shallower fold pushed them into her hair)
+      const liftT = ground * (-0.13 + 0.26 * fid) + W.hover * 0.1 + sw * 0.16 + W.glide * 0.32 + W.sup * 0.42 + W.flare * 0.38 + jumpFlare * 0.3;
+      const sweepT = ground * (0.46 - 0.3 * fid + 0.04 * this.moveBlend) + W.hover * (0.05 + 0.3 * fastK) + sw * 0.55 - W.glide * 0.06 + W.sup * 0.5 - W.flare * 0.3 - jumpFlare * 0.25;
       const lift = spring(this.wLift, liftT, 85, 8, dt), sweep = spring(this.wSweep, sweepT, 85, 8, dt);
       // strokes: slow and deep hovering, a fast shiver in a swoop, a slow sway in the descent, a flutter per footstep
       this.flap += dt * (0.9 * W.hover + 6 * sw + 0.55 * W.glide + 1.6 * fastK * W.hover + 0.3 * ground);
