@@ -10,7 +10,9 @@ describe('campaign levels are beatable by an AI squad', () => {
       const w = m.world, d = m.director;
       const log: string[] = [];
       let lastState = '';
-      for (let i = 0; i < 60 * 600 && !w.winner; i++) {
+      // 15 minutes of game time: the claim is "beatable", and the squad's wins run from 145 to 598 s (median 409 s) - a
+      // 10-minute cap cut off the slow tail (18% of c4_helios runs were still fighting the Phoenix, never a loss)
+      for (let i = 0; i < 60 * 900 && !w.winner; i++) {
         w.step(1 / 60); w.events.length = 0;
         if (i % 3600 === 0) appendFileSync('tests/campaign-progress.log', `${L.id} t=${w.time.toFixed(0)} state=${d.state}${d.enc ?? ''} boss=${d.boss ? Math.round(d.boss.health) : '-'} alive=${w.actors.filter(a => a.alive).length} wall=${(performance.now() / 1000).toFixed(0)}
 `);
