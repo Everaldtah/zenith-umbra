@@ -37,6 +37,7 @@ export interface MapDef {
   full?: boolean;              // desktop edition only
   retired?: boolean;           // kept for the engine cut / lite parity, off the desktop playlist (not Overwatch-shaped)
   water?: number;              // a water surface at this height (harbours): render only, killY sits below it
+  bloom?: [number, number];    // bloom [threshold, strength] override (pale stone maps glare at the night default)
 }
 
 function mirror(list: Box[]): Box[] {
@@ -493,8 +494,9 @@ export const MAPS: MapDef[] = [
     pads: [],
     packs: mirrorPacks([{ x: -33, z: 16, y: 0, big: true }, { x: -30, z: -17 }, { x: -14.5, z: -8, y: 5 }, { x: -8, z: -9 }]),
     spawns: { zenith: [-54, 0], umbra: [54, 0] }, point: [0, 0, 0],
-    sun: { color: '#fff3e0', intensity: 1.45, dir: [-0.35, 0.8, 0.35] }, ambient: ['#a9c4e8', '#8a94a4', 0.62],
-    fog: ['#e6eef8', 70, 220], tint: '#6fb8ff', particles: 'motes', killY: -20,
+    // late afternoon above the snowline: a low warm sun for long shadows across the pale stone, cool shade, blue haze
+    sun: { color: '#ffd6a8', intensity: 1.35, dir: [-0.6, 0.45, 0.32] }, ambient: ['#8fa9d6', '#56607a', 0.55],
+    fog: ['#b8c8e2', 85, 250], tint: '#6fb8ff', particles: 'motes', killY: -20, bloom: [0.97, 0.3],
   },
   {
     id: 'foundry', name: 'Dawnforge Foundry', heroes: ['tenkai', 'gorgoth', 'hayate'], full: true, objective: 'push',

@@ -215,7 +215,8 @@ export class Game {
     if (Q.fxaa) c.addPass(new FXAAPass());
     if (sharp) { const p = new ShaderPass(SHARPEN); p.uniforms.amount.value = v.sharpen / 100 * 0.6; c.addPass(p); }
     this.composer = c;
-    if (this.bloom && this.match) { const day = FULL && this.match.world.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55; }
+    if (this.bloom && this.match) { const day = FULL && this.match.world.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
+      if (FULL && this.match.world.map.bloom) [this.bloom.threshold, this.bloom.strength] = this.match.world.map.bloom; }
   }
 
   /** detail options that live in the scene: reflections, fog distance, texture filtering, effects density, waypoint */
@@ -282,7 +283,8 @@ export class Game {
     CharacterView.level = w.level;                  // ragdolls land on this map's floors and walls
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
     // bright daylight maps (pale plaster, white stone): only real highlights bloom, or sunlit walls glow white
-    if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55; }
+    if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
+      if (FULL && w.map.bloom) [this.bloom.threshold, this.bloom.strength] = w.map.bloom; }
     // image-based lighting so metallic / dark generated materials still catch light
     this.envTex ??= new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = this.envTex;
