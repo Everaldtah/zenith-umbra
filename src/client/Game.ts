@@ -422,17 +422,32 @@ export class Game {
     // keeps every program it has used, so switching back costs nothing and the variants stay compiled.
     const stealthMats = [...views().flatMap(v => v.mats), ...(this.fp ? this.fp.view.mats : [])];
     const stealth = (on: boolean) => { for (const m of stealthMats) { m.transparent = on; m.depthWrite = !on; m.needsUpdate = true; } };
-    for (let i = 0; i < N; i++) {
+    // the effects' clock runs through the warm-up, so delayed ones (the spirit dragons swim out 0.25 s after the cast,
+    // their rigs cloned asynchronously) appear and draw here too - more frames until they have (up to ~1.5 s)
+    const swims = () => (this.fx?.dragons as unknown as { swims?: unknown[] } | null)?.swims?.length ?? 0;
+    const wantDragons = FULL && !!this.fx?.dragons && w.actors.some(a => a.def.id in DRAGON_MODEL);
+    let seenDragons = false;
+    const HOLD = 8;                     // frames facing the sample effects (7 m ahead) before turning the full circle
+    // the parts of each hero that only show sometimes (hammer flames, muzzle flashes, shield bubbles, a sheathed or
+    // thrown weapon) are shown for the warm-up, so their shaders are built in exactly the state they're drawn in
+    const revealed: THREE.Object3D[] = [];
+    // (and the map's: the objective's effects that only switch on when the point unlocks or the float moves)
+    for (const root of [...views().map(v => v.group), ...(this.fp ? [this.fp.scene] : []), ...(this.mapScene ? [this.mapScene.group] : [])]) root.traverse(o => { if (!o.visible && o !== root) { o.visible = true; revealed.push(o); } });
+    for (let i = 0; i < N + HOLD || (wantDragons && !seenDragons && i < N + HOLD + 60); i++) {
       if (i === 2) stealth(true);
       if (i === 4) stealth(false);
-      this.camera.quaternion.setFromEuler(new THREE.Euler(e0.x, e0.y + i / N * Math.PI * 2, 0, 'YXZ'));
+      this.fx?.update(1 / 60, w, w.time + i * 0.1);
+      if (swims() > 0) seenDragons = true;
+      const turn = i < HOLD || (wantDragons && !seenDragons) ? 0 : ((i - HOLD) % N) / N * Math.PI * 2;
+      this.camera.quaternion.setFromEuler(new THREE.Euler(e0.x, e0.y + turn, 0, 'YXZ'));
       this.camera.updateMatrixWorld();
       if (this.composer) this.composer.render(); else r.render(this.scene, this.camera);
       if (this.fp) { r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false; }
-      warm((i + 1) / N);
+      warm(Math.min(1, (i + 1) / (N + HOLD)));
       await nextFrame();
     }
     this.camera.quaternion.copy(q0);
+    for (const o of revealed) o.visible = false;
     // the sample effects played out and gone, the far-off copies removed
     if (this.fx) for (let k = 1; k <= 8; k++) this.fx.update(0.5, w, w.time + k * 2);
     this.scene.remove(warmGroup);

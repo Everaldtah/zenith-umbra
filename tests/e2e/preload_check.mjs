@@ -46,8 +46,10 @@ const res = await p.evaluate(async (n, showKeys) => {
   // a new program: which fields of its cache key differ from the closest one compiled during the preload
   const fresh = () => { const n = []; for (const q of g.renderer.info.programs ?? []) if (!seen.has(q.cacheKey)) {
     seen.add(q.cacheKey); const a = q.cacheKey.split(',');
+    // who uses it: the scene objects whose material currently runs this program
+    const users = []; for (const sc of [g.scene, g.fp?.scene].filter(Boolean)) sc.traverse(o => { const ms = o.material; for (const m of Array.isArray(ms) ? ms : ms ? [ms] : []) { const pr = g.renderer.properties.get(m); if (pr?.currentProgram === q || (pr?.programs && [...pr.programs.values()].includes(q))) { let path = [], x = o; while (x && path.length < 9) { path.push((x.name || x.type) + (x.isInstancedMesh ? '[inst]' : '') + (x.userData?.body ? '[held]' : '')); x = x.parent; } users.push(m.type + ` '${m.name}' map=${!!m.map} vc=${m.vertexColors} verts=${o.geometry?.attributes?.position?.count} @ ` + path.join(' < ')); } } });
     let best = null, bd = 1e9; for (const k of keys) { const b = k.split(','); if (b.length !== a.length) continue; const d = a.filter((x, i) => x !== b[i]).length; if (d < bd) { bd = d; best = b; } }
-    n.push(q.name + ' diff: ' + (best ? a.map((x, i) => x !== best[i] ? `#${i} ${best[i]}->${x}` : null).filter(Boolean).join(' ') : 'no same-shape key, len ' + a.length) + (showKeys ? ' || NEW ' + q.cacheKey.slice(0, 700) + ' || WARM ' + (best ?? []).join(',').slice(0, 700) : ''));
+    n.push('users: ' + (users.slice(0, 3).join(' | ') || 'none in scene') + ' ; ' + q.name + ' diff: ' + (best ? a.map((x, i) => x !== best[i] ? `#${i} ${best[i]}->${x}` : null).filter(Boolean).join(' ') : 'no same-shape key, len ' + a.length) + (showKeys ? ' || NEW ' + q.cacheKey.slice(0, 700) + ' || WARM ' + (best ?? []).join(',').slice(0, 700) : ''));
   } return n; };
   for (let s = 0; s < n; s++) {
     if (g.paused) g.setPaused(false);
