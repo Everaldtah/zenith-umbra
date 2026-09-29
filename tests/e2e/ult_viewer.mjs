@@ -1,5 +1,6 @@
 // Ult Viewer check: Hero Viewer > ULT VIEWER for each hero, screenshots through the cast, reports whether the ult fired.
 //   node tests/e2e/ult_viewer.mjs [url] [ids]      (shots in tests/e2e/shots/ult/<id>_<n>.png)
+//   SPAN=16: eight shots spread over 16 s (long ults: Hex's puppet army)
 //   STRIP=1: after the first hero, switch with the Ult Viewer's portrait strip instead of going back to the Hero Viewer
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
@@ -36,7 +37,9 @@ for (const [k, id] of ids.entries()) {
   // wait for the cast, then shoot the ult as it plays
   await p.waitForFunction(() => window.__zu.menu.game.match.world.actors[0].controller.phase === 'show', { timeout: 20000 }).catch(() => {});
   const seq = [];
-  for (const [n, ms] of [[1, 250], [2, 900], [3, 1300], [4, 1600]]) {
+  // SPAN=<seconds>: 8 shots spread over a long ult instead of the first 4 s
+  const SPAN = +(process.env.SPAN ?? 0);
+  for (const [n, ms] of SPAN ? Array.from({ length: 8 }, (_, i) => [i + 1, i ? SPAN * 1000 / 8 : 300]) : [[1, 250], [2, 900], [3, 1300], [4, 1600]]) {
     await sleep(ms);
     seq.push(await st());
     await p.screenshot({ path: `tests/e2e/shots/ult/${id}_${n}.png` });
