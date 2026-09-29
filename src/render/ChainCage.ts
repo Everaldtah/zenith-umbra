@@ -189,6 +189,9 @@ export class ChainCage {
       for (const id of (z.data?.trapped as number[] | undefined) ?? []) {
         const x = w.actors.find(o => o.id === id);
         if (!x || !x.alive || !x.has('chained', now)) continue;
+        // summons (Hex's puppet army) are bound like anyone, but drawn without a chain: fifty of them would use up
+        // the chain before the heroes had theirs
+        if ((x as { isSummon?: boolean }).isSummon) continue;
         const c = x.center, end = new THREE.Vector3(c.x, c.y, c.z), reach = head.distanceTo(end);
         // slack: the chain is as long as the ring is wide, so it sags while its hero stands close and is taut at the rope
         const sag = Math.max(0.08, Math.min(1.3, (z.r + 0.6 - reach) * 0.22));
