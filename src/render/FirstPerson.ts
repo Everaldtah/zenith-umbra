@@ -41,7 +41,9 @@ export const FP_STYLE: Record<string, Style> = {
   // his spiked pauldrons and gauntlet spikes crowd the lens: clipped close, only hand-weighted triangles kept
   enra: { grip: 'fists', R: [0.2, -0.14, 0.44], L: [-0.2, -0.14, 0.44], recoil: 0, push: 0.05, clip: 0.22, keep: 0.95, drape: 0.35 },
   haruto: { grip: 'pistol', R: [0.13, -0.12, 0.4], L: [0.06, -0.15, 0.36], recoil: 0.05 },
-  tenkai: { grip: 'hammer', R: [0.24, -0.26, 0.38], L: [0.14, -0.3, 0.46], recoil: 0 },
+  // Reinhardt's viewmodel: both gauntlets on the haft low right, the haft out to the right, the head resting right of
+  // centre (the rest pose of HAMMER_REST - hammerProc drives the whole swing)
+  tenkai: { grip: 'hammer', R: [0.17, -0.23, 0.44], L: [0.301, -0.206, 0.589], recoil: 0 },
   gorgoth: { grip: 'shotgun', R: [0.2, -0.19, 0.34], L: [0.05, -0.19, 0.62], recoil: 0.09 },
   // hip-held twin chainguns in the bottom corners, angled in on the reticle, the rear of each gun out of view
   gantetsu: { grip: 'dual', R: [0.36, -0.36, 0.56], L: [-0.36, -0.36, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.8 },
@@ -64,6 +66,61 @@ const smooth = (u: number) => { u = Math.min(1, Math.max(0, u)); return u * u * 
 const bump = (u: number) => (u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI));
 const lerp = (a: V, b: V, k: number): V => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const add = (a: V, b: V, k = 1): V => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+
+// ---------------- Tenkai-Oh's rocket hammer in first person, after Reinhardt's viewmodel (studied frame by frame from
+// Overwatch 2 footage): at rest the gauntlets hold the haft low right and the head rests right of centre; a swing drops
+// the head back past the bottom-right corner (~0.13 s), whips it flat across the upper middle - over the reticle for a
+// couple of frames, the thruster roaring - and follows through off the left edge (the hit lands 0.24 s in, 0.96 s a
+// swing). Swings alternate: the next one comes back across from the left; with no follow-up the hammer rises back from
+// the bottom left into the rest. A key: [time s, grip x, y, z (the lower, right hand; view metres), haft yaw (+ = right),
+// haft pitch, lead (left) hand distance up the haft (m)] - the lead hand slides up the haft on the wind-up.
+type HKey = [number, number, number, number, number, number, number];
+const HAMMER_REST: HKey = [0, 0.17, -0.23, 0.44, 0.72, 0.12, 0.2];
+const HOLD_L: [number, number, number, number, number, number] = [-0.44, -0.44, 0.3, -1.9, -0.12, 0.2];
+const rest = (t: number): HKey => [t, ...HAMMER_REST.slice(1)] as HKey;
+/** swing 1, right to left (counter-clockwise, as Reinhardt's first swing) */
+const SWING_RL: HKey[] = [
+  HAMMER_REST,
+  [0.13, 0.3, -0.36, 0.32, 1.75, -0.28, 0.24],       // wind-up: dropped back past the bottom-right corner
+  [0.2, 0.2, -0.27, 0.4, 0.85, 0.24, 0.2],
+  [0.245, 0.02, -0.26, 0.43, 0, 0.33, 0.18],          // the hit: the head flat across the upper middle
+  [0.29, -0.2, -0.29, 0.39, -1.0, 0.24, 0.18],
+  [0.4, -0.42, -0.42, 0.3, -1.85, -0.08, 0.2],        // follow-through off the left edge
+  [0.96, ...HOLD_L],                                   // held there for the next swing
+];
+/** swing 2, left to right (clockwise), from the left hold back across into the rest */
+const SWING_LR: HKey[] = [
+  [0, ...HOLD_L],
+  [0.13, -0.45, -0.42, 0.28, -2.05, -0.22, 0.24],
+  [0.2, -0.22, -0.28, 0.38, -0.85, 0.24, 0.2],
+  [0.245, 0, -0.26, 0.43, 0, 0.33, 0.18],
+  [0.29, 0.22, -0.27, 0.4, 1.0, 0.24, 0.18],
+  [0.42, 0.32, -0.33, 0.34, 1.55, 0.02, 0.2],         // follow-through right
+  rest(0.75),
+];
+/** no follow-up swing: back up from the bottom left, head low across the bottom, into the rest (times from the swing) */
+const RECOVER: HKey[] = [[0.96, ...HOLD_L], [1.12, -0.12, -0.46, 0.36, -0.5, -0.55, 0.2], rest(1.34)];
+/** Solar Shatter (E): heaved overhead, slammed into the ground ahead (the quake at 0.55 s), lifted back */
+const SHATTER: HKey[] = [HAMMER_REST, [0.3, 0.12, -0.02, 0.3, 0.25, 1.35, 0.26], [0.45, 0.08, 0.06, 0.28, 0.1, 1.5, 0.28],
+  [0.55, 0.03, -0.3, 0.46, 0, -0.75, 0.16], [0.78, 0.04, -0.32, 0.44, 0.02, -0.7, 0.16], rest(1.1)];
+/** quick melee: a short thrust of the head */
+const JAB: HKey[] = [HAMMER_REST, [0.06, 0.08, -0.18, 0.56, 0.3, 0.2, 0.2], [0.14, 0.07, -0.18, 0.58, 0.28, 0.2, 0.2], rest(0.45)];
+/** Dawn Colossus (Q): the hammer raised high while the frame grows */
+const RAISE: HKey[] = [HAMMER_REST, [0.25, 0.12, -0.12, 0.4, 0.3, 1.2, 0.24], [0.9, 0.12, -0.12, 0.4, 0.3, 1.2, 0.24], rest(1.3)];
+/** the pose at t: Catmull-Rom through the keys, so a sweep keeps its speed through them instead of stopping at each */
+function hammerAt(K: HKey[], t: number): HKey {
+  const n = K.length - 1;
+  if (t <= K[0][0]) return K[0];
+  if (t >= K[n][0]) return K[n];
+  let i = 0; while (i < n - 1 && t > K[i + 1][0]) i++;
+  const p0 = K[Math.max(0, i - 1)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(n, i + 2)];
+  const u = (t - p1[0]) / (p2[0] - p1[0]), u2 = u * u, u3 = u2 * u;
+  return p1.map((_, j) => j === 0 ? t : 0.5 * (2 * p1[j] + (p2[j] - p0[j]) * u + (2 * p0[j] - 5 * p1[j] + 4 * p2[j] - p3[j]) * u2 + (3 * p1[j] - p0[j] - 3 * p2[j] + p3[j]) * u3)) as HKey;
+}
+/** a closed gauntlet's grip centre past the wrist bone, in forearm lengths */
+const FIST = 0.32;
+const haftDir = (k: HKey): V => [Math.sin(k[4]) * Math.cos(k[5]), Math.sin(k[5]), Math.cos(k[4]) * Math.cos(k[5])];
+export const FP_HAMMER = { REST: HAMMER_REST, SWING_RL, SWING_LR, RECOVER, SHATTER, JAB, RAISE, at: hammerAt, dir: haftDir };
 
 /**
  * Where the arms rig sits relative to the camera: auto-rigged arms vary a lot in length, so instead of bending the grip
@@ -182,7 +239,7 @@ export class FirstPersonArms {
   source = '';
 
   constructor(public actor: Actor, skinId = 'classic') {
-    this.view = new CharacterView(actor, actor.team, skinId);
+    this.view = new CharacterView(actor, actor.team, skinId, { hd: true });      // the high-detail hands (desktop)
     this.view.noSmear = true;
     this.style = FP_STYLE[actor.def.id] ?? DEFAULT;
     this.view.anim.useClips(null);                 // body clips don't apply to a viewmodel
@@ -310,6 +367,7 @@ export class FirstPersonArms {
 
   private proc(t: number, _newAttack: boolean) {
     const a = this.actor, S = this.style, an = this.view.anim;
+    if (S.grip === 'hammer' && an.prop) return this.hammerProc(t);
     let R: V = S.R, L: V | null = S.L;
     const atk = t - a.anim.attackAt, kind = a.anim.attackKind, cast = t - a.anim.castAt;
     let src = 'idle';
@@ -414,6 +472,71 @@ export class FirstPersonArms {
     const gunAim = an.guns ? toM([0, 0, 14]) : undefined;
     an.updateFirstPerson({ hands, wrist: [wristL, wristR], prop, gunAim });
     this.source = `proc:${src}`;
+  }
+
+  // the hammer's current swing: when it started, which way (+1 right to left, -1 left to right)
+  private hSwing = { at: -99, dir: 1 };
+
+  /** Tenkai-Oh's rocket hammer (see HAMMER_REST): both gauntlets on the haft through keyed haft poses, the swings
+   *  alternating, the thruster lit through the strike */
+  private hammerProc(t: number) {
+    const a = this.actor, an = this.view.anim;
+    const kind = a.anim.attackKind, atk = t - a.anim.attackAt, cast = t - a.anim.castAt;
+    // a new swing goes right to left - unless the last went right to left and is still held off the left edge: back across
+    if (kind === 'primary' && a.anim.attackAt !== this.hSwing.at && atk < 0.5) {
+      const held = this.hSwing.dir === 1 && a.anim.attackAt - this.hSwing.at < RECOVER[1][0];
+      this.hSwing = { at: a.anim.attackAt, dir: held ? -1 : 1 };
+    }
+    const sa = t - this.hSwing.at;
+    let k = HAMMER_REST, src = 'idle', dir = 1, flame = 0;
+    if (sa < 1.4) {
+      dir = this.hSwing.dir;
+      k = dir === 1 ? hammerAt(sa < 0.96 ? SWING_RL : RECOVER, sa) : hammerAt(SWING_LR, sa);
+      src = sa < 0.45 ? 'swing' : 'recover';
+      // the thruster fires on the strike, not the wind-up (as on the third-person hammer)
+      if (sa > 0.12 && sa < 0.42) flame = Math.sin(((sa - 0.12) / 0.3) * Math.PI);
+    }
+    if (a.anim.castId === 'shatter' && cast < 1.1) { k = hammerAt(SHATTER, cast); src = 'shatter'; flame = cast > 0.42 && cast < 0.6 ? 1 : 0; }
+    else if (a.anim.castId === a.def.ult.id && cast < 1.3) { k = hammerAt(RAISE, cast); src = 'ult'; }
+    if (kind === 'punch' && atk < 0.45) { k = hammerAt(JAB, atk); src = 'melee'; flame = 0; }
+    // breathing, and a flinch when hit
+    const hit = t - a.anim.hitAt, fl = hit < 0.25 ? bump(hit / 0.25) * 0.02 : 0;
+    const g: V = [k[1], k[2] + Math.sin(t * 1.7) * 0.004 + fl, k[3] - fl], H = haftDir(k);
+    // model space (+X = the character's left); the head's striking faces lead the motion (the swing's tangent), so the
+    // thruster (trailing the head's -X) streams out behind it
+    const s = 1 / Math.max(1e-6, this.view.scaleFit);
+    const toM = (v: V) => new THREE.Vector3(-v[0] * s, v[1] * s, v[2] * s).add(this.eye);
+    const side: V = src === 'shatter' ? [Math.sin(k[4]) * Math.sin(k[5]), -Math.cos(k[5]), Math.cos(k[4]) * Math.sin(k[5])] : [-Math.cos(k[4]) * dir, 0, Math.sin(k[4]) * dir];
+    const Hm = new THREE.Vector3(-H[0], H[1], H[2]), Tm = new THREE.Vector3(-side[0], side[1], side[2]);
+    an.updateFirstPerson({ hands: [toM(add(g, H, k[6])), toM(g)], wrist: [null, null], prop: { pos: toM(g), dir: Hm, side: Tm } });
+    this.haftThroughFists(Hm, Tm);
+    const hm = this.view.hammer;
+    if (hm) {
+      hm.flame.visible = flame > 0.02;
+      if (flame > 0.02) hm.flame.scale.set(1, 0.5 + 0.9 * flame + Math.random() * 0.15, 1);
+      hm.core.emissiveIntensity = 2.4 + 3 * flame;
+    }
+    this.source = `proc:${src}`;
+  }
+
+  /** the haft through both closed gauntlets as the arms actually solved (the IK falls a little short at the extremes):
+   *  fist centres FIST forearm-lengths past the wrists, the pommel under the right fist, the haft on through the left */
+  private haftThroughFists(want: THREE.Vector3, side: THREE.Vector3) {
+    const an = this.view.anim, prop = an.prop, R = an.rest, B = an.bones;
+    if (!prop?.parent || !B.hand_R || !B.hand_L || !B.forearm_R || !B.forearm_L || !R.forearm_R || !R.hand_R) return;
+    this.view.group.updateMatrixWorld(true);
+    const lf = R.forearm_R.p.distanceTo(R.hand_R.p);
+    const fist = (h: THREE.Object3D, f: THREE.Object3D) => {
+      const ph = prop.parent!.worldToLocal(h.getWorldPosition(new THREE.Vector3())), pf = prop.parent!.worldToLocal(f.getWorldPosition(new THREE.Vector3()));
+      return ph.addScaledVector(ph.clone().sub(pf).normalize(), lf * FIST);
+    };
+    const cR = fist(B.hand_R, B.forearm_R), cL = fist(B.hand_L, B.forearm_L);
+    const H = cL.clone().sub(cR);
+    // a short lead-hand gap swings the haft a lot per centimetre of IK error: lean on the authored direction
+    H.normalize().multiplyScalar(0.65).addScaledVector(want, 0.35).normalize();
+    const T = side.clone().addScaledVector(H, -side.dot(H)).normalize();
+    prop.position.copy(cR).addScaledVector(H, -0.1 * an.hammerLen);
+    prop.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, H, new THREE.Vector3().crossVectors(T, H)));
   }
 
   dispose() { this.view.anim.restoreHead(); this.view.dispose(); }

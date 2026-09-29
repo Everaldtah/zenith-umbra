@@ -5,7 +5,7 @@
 Inputs  out/tripo/<id>_rig.glb (Tripo "Export" GLB, skeleton on, Mixamo preset), out/tripo/<id>_hd.glb (optional, HD source:
         the original generation, unskinned - mechs use it for both editions, humanoid heroes for the desktop edition)
         out/tripo/prop_<name>.glb (props: no rig)
-Outputs ../public/models/<id>.glb, out/models_hq/<id>.glb, ../public/models/manifest.json
+Outputs ../public/models/<id>.glb, out/models_hq/<id>.glb, out/models_hd/<id>.glb (desktop close-ups), ../public/models/manifest.json
 """
 import json, subprocess, sys
 from pathlib import Path
@@ -23,9 +23,12 @@ WHITE = ['--hair-rgb', '0.9,0.9,0.9']
 NO_BLINK = {'hex', 'kagemaru', 'hibiki', 'hibiki_armor'}
 # ...and the masks' sockets glow instead (the detected eyes are stored as glowEyes; CharacterView's EyeGlow)
 GLOW_EYES = {'hex', 'kagemaru'}
-# desktop heroes: the original high-detail generation (real fingers, folds, 4K maps with normals) decimated to this budget,
-# skinned with the retopo rig's weights - the web edition keeps the light retopo mesh
+# desktop close-ups (the first-person viewmodel, the Hero Viewer): the original high-detail generation (real fingers, folds,
+# 4K maps with normals) decimated to this budget, skinned with the retopo rig's weights. Ten of them in a match halved the
+# frame rate (55 -> 27 fps), so heroes in the match stay on the retopo mesh - the way Overwatch ships a separate
+# first-person model
 HD_TRIS = 90000
+HD_OUT = HERE / 'out' / 'models_hd'
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
@@ -85,16 +88,18 @@ def main():
         report[aid] = info
         hero = aid in HERO_IDS
         src = RIGGED / f'{aid}.glb'
-        # desktop: the high-detail generation, when there is one (same skeleton, eyes and colliders as the retopo rig)
-        hq_src = src
+        # desktop close-ups: the high-detail generation, when there is one (same skeleton, eyes and colliders as the retopo)
+        hd = False
         if hero and '--mech' not in TRIPO[aid][1] and (SRC / f'{aid}_hd.glb').exists() and '--no-hq' not in sys.argv:
-            if (skip and (RIGGED / f'{aid}_hq.glb').exists()) or rig(aid, hq=True): hq_src = RIGGED / f'{aid}_hq.glb'
-        ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(hq_src, HQ / f'{aid}.glb', 4096 if hero else 2048)
+            if (skip and (RIGGED / f'{aid}_hq.glb').exists()) or rig(aid, hq=True):
+                HD_OUT.mkdir(parents=True, exist_ok=True)
+                hd = gltf(RIGGED / f'{aid}_hq.glb', HD_OUT / f'{aid}.glb', 4096)
+        ok = gltf(src, PUB / f'{aid}.glb', 2048 if hero or aid.startswith('boss_') else 1024) and gltf(src, HQ / f'{aid}.glb', 4096 if hero else 2048)
         if ok:
             eyes = info.get('eyes') or info.get('glowEyes')
             key = 'glowEyes' if aid in GLOW_EYES else 'eyes'
             manifest['models'][aid] = {'height': TRIPO[aid][0], 'tris': info.get('tris', 0), 'bones': ['humanoid'], 'source': 'tripo',
-                                       'colliders': info.get('colliders', {}), **({key: eyes} if eyes else {})}
+                                       'colliders': info.get('colliders', {}), **({key: eyes} if eyes else {}), **({'hd': True} if hd else {})}
             print(f"published {aid}: {(PUB / f'{aid}.glb').stat().st_size / 1e6:.2f} MB web, {(HQ / f'{aid}.glb').stat().st_size / 1e6:.2f} MB desktop")
     report_p.write_text(json.dumps(report, indent=1))
     manifest_p.write_text(json.dumps(manifest, indent=1))

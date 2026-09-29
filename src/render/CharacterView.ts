@@ -224,7 +224,11 @@ export class CharacterView {
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
 
-  constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic') {
+  /** close-up views (the first-person viewmodel, the Hero Viewer) load the high-detail model */
+  readonly hd: boolean;
+
+  constructor(public actor: Actor, public viewerTeam: string, skinId = 'classic', opts: { hd?: boolean } = {}) {
+    this.hd = !!opts.hd;
     this.defId = actor.def.id;
     this.rimColor = new THREE.Color(actor.team === viewerTeam ? UI_COLORS.ally : UI_COLORS.enemy);
     this.look = lookUniforms(this.rimColor);
@@ -437,7 +441,7 @@ export class CharacterView {
     const seq = ++this.loadSeq;
     await loadManifest();
     const mid = this.modelIdFor(this.skin);
-    const m = await heroModel(mid);
+    const m = await heroModel(mid, this.hd);
     if (!m || seq !== this.loadSeq) return;                  // a newer load (skin change) superseded this one
     if (this.real) {
       // swapping models (a model skin): drop the old body's props before the new one takes them over
@@ -461,7 +465,7 @@ export class CharacterView {
     this.inner.add(wrap);
     this.model = wrap;
     this.anim = anim;
-    this.fingers = Fingers.build(m);
+    this.fingers = FULL ? Fingers.build(m) : null;          // (the web demo keeps its plain hands)
     this.scaleFit = s;
     this.real = true;
     // mid-match arrivals (a hero swap, a pilot ejecting, a new wave): textures uploaded and shaders compiled before the

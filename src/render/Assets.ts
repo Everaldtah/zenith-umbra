@@ -1,5 +1,6 @@
 // Asset loading: rigged hero GLBs (Draco + WebP), prop GLBs, textures. Quality tier picks the texture set.
 import * as THREE from 'three';
+import { FULL } from '../edition';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -44,14 +45,22 @@ function load(url: string): Promise<GLTF | null> {
   return p;
 }
 
-/** dev only: ?hq loads the desktop edition's hero models (assetgen/out/models_hq) - checks before a desktop build */
-const HQ_DEV = !!(import.meta as any).env?.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('hq');
+const DEV = !!(import.meta as any).env?.DEV;
+/** dev only: ?hd puts every hero in high detail (captures, benchmarks) */
+const HD_ALL = DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('hd');
+/** the desktop edition's high-detail heroes (manifest `hd`): the Windows app ships them in models/hd, the dev server reads
+ * them where the publisher writes them */
+const hdUrl = (id: string) => DEV ? `${BASE}assetgen/out/models_hd/${id}.glb` : `${BASE}models/hd/${id}.glb`;
 
-/** a fresh, independently animatable copy of a hero model (skinned meshes rebound), or null */
-export async function heroModel(id: string): Promise<THREE.Object3D | null> {
+/**
+ * A fresh, independently animatable copy of a hero model (skinned meshes rebound), or null. `hd`: the high-detail mesh
+ * for close-ups - the first-person viewmodel, the Hero Viewer (desktop edition; falls back to the match model)
+ */
+export async function heroModel(id: string, hd = false): Promise<THREE.Object3D | null> {
   await loadManifest();
   if (!hasModel(id)) return null;
-  const g = await load(HQ_DEV ? `${BASE}assetgen/out/models_hq/${id}.glb` : `${BASE}models/${id}.glb`);
+  const wantHd = FULL && (hd || HD_ALL) && !!(manifest?.models[id] as { hd?: boolean } | undefined)?.hd;
+  const g = (wantHd ? await load(hdUrl(id)) : null) ?? await load(`${BASE}models/${id}.glb`);
   if (!g) return null;
   const c = SkeletonUtils.clone(g.scene);
   c.traverse(o => {
