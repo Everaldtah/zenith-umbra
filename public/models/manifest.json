@@ -1275,6 +1275,24 @@
   },
   "prop_hayate_nodachi": {
    "height": 1
+  },
+  "prop_mile_payload": {
+   "height": 1
+  },
+  "prop_mile_car": {
+   "height": 1
+  },
+  "prop_mile_sign": {
+   "height": 1
+  },
+  "prop_mile_gaspump": {
+   "height": 1
+  },
+  "prop_gulch_loco": {
+   "height": 1
+  },
+  "prop_kaien_talisman": {
+   "height": 1
   }
  },
  "textures": [
