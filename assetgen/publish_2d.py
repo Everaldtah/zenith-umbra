@@ -35,6 +35,23 @@ def save(im, rel, q=84, size=None):
     out = os.path.join(PUB, rel); os.makedirs(os.path.dirname(out), exist_ok=True)
     w.save(out, 'WEBP', quality=q, method=6)
 
+# Hayate + Seiran (the Koryu brothers): Tripo Studio / Nano Banana art made from renders of their own models -
+# the key visual (dragon ult pose) and a head-and-shoulders portrait. `python publish_2d.py koryu` runs only this.
+KORYU, KORYU_PICK = os.path.join(HERE, 'out', 'koryu_art'), {'hayate': (1, 1), 'seiran': (1, 1)}   # (key pick, portrait pick)
+KORYU_FACE = {'hayate': (170, 90, 640), 'seiran': (70, 190, 640)}   # portrait head crop in the 1024px source: x0, y0, size
+def koryu():
+    k = 0
+    for hid, (kk, pk) in KORYU_PICK.items():
+        kp, pp = os.path.join(KORYU, f'key_{hid}_{kk}.png'), os.path.join(KORYU, f'portrait_{hid}_{pk}.png')
+        if os.path.exists(kp):
+            im = Image.open(kp).convert('RGB'); W, H = im.size; w = min(W, int(H * 438 / 640))   # the roster's key-art aspect
+            save(im.crop(((W - w) // 2, 0, (W - w) // 2 + w, H)), f'img/key_{hid}.webp', 82); k += 1
+        if os.path.exists(pp):
+            x, y, c = KORYU_FACE[hid]
+            save(Image.open(pp).convert('RGB').crop((x, y, x + c, y + c)), f'img/portrait_{hid}.webp', 85, (512, 512)); k += 1
+    return k
+if sys.argv[1:2] == ['koryu']: print('published', koryu()); sys.exit(0)
+
 n = 0
 for hid, k in KEY_PICK.items():
     p = find(f'key_{hid}_{k}') or find(f'key_{hid}_0')
@@ -107,3 +124,5 @@ if os.path.exists(TM):
     im = Image.open(TM).convert('RGB'); W, H = im.size
     s = int(W * 0.34); cx = W // 2; y0 = 10
     save(im.crop((cx - s // 2, y0, cx + s // 2, y0 + s)), 'img/portrait_tomoe.webp', 85, (512, 512)); n += 1
+n += koryu()
+print('published', n)
