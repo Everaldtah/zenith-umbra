@@ -298,7 +298,9 @@ export class MapScene {
         const box = new THREE.Box3().setFromObject(mm), h = box.max.y - box.min.y || 1, s = 3.4 / h;
         mm.scale.setScalar(s); mm.position.set(-(box.min.x + box.max.x) / 2 * s, -box.min.y * s, -(box.min.z + box.max.z) / 2 * s);
         for (const c of [...this.float.children]) if (c !== light) this.float.remove(c);
-        this.float.add(mm);
+        // the float turns to face its travel (+z); a payload modelled facing another way is turned inside it
+        const turn = new THREE.Group(); turn.rotation.y = m.payload ? m.payloadYaw ?? 0 : 0; turn.add(mm);
+        this.float.add(turn);
       });
     }
     // ---------------- props (GLB when available, stand-in otherwise)

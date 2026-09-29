@@ -39,6 +39,7 @@ export interface MapDef {
   water?: number;              // a water surface at this height (harbours): render only, killY sits below it
   bloom?: [number, number];    // bloom [threshold, strength] override (pale stone maps glare at the night default)
   payload?: string;            // push: the escorted model (a prop id; default the Mikoshi float)
+  payloadYaw?: number;         // push: turn the payload model so its front (+z) faces the way it travels
 }
 
 function mirror(list: Box[]): Box[] {
@@ -376,12 +377,14 @@ const GULCH = (() => {
     // south cliffs: a 6m ledge up a ramp past the depot, a 12m crag behind it (climb-only)
     { x: -14, z: -26.75, w: 18, d: 10.5, h: 6, mat: 'rock' }, { x: -27.5, z: -27.75, w: 9, d: 8.5, h: 6, mat: 'rock', ramp: 'x+' },
     { x: -11, z: -29.75, w: 10, d: 4.5, h: 12, mat: 'rock' },
+    // the locomotive's body on its spur: a collision block that sits inside the model (players can't walk through it)
+    { x: -50, z: -12, w: 9.5, d: 2.0, h: 2.6, mat: 'trim' },
     // cover: crates, ties and a switch cabinet along the line
     { x: -16, z: -2, w: 3, d: 1.5, h: 1.4, mat: 'wood' }, { x: -44, z: -9, w: 2, d: 2, h: 1.6, mat: 'wood' },
     { x: -8, z: 5, w: 1.5, d: 3, h: 1.3, mat: 'trim' }, { x: -52, z: 4, w: 3, d: 1, h: 1.2, mat: 'trim' },
   ], [
     ...track(-60, -36, -3), ...track(-24, -12, -8), ...track(-4, 0, 0),
-    ...track(-60, -14, 7), ...track(-60, -14, 13),
+    ...track(-60, -14, 7), ...track(-60, -14, 13), ...track(-58, -42, -12),
     // trestle bracing
     { x: -32, z: 25.3, w: 5, d: 0.2, h: 0.3, y: 4, mat: 'wood' }, { x: -32, z: 27.7, w: 5, d: 0.2, h: 0.3, y: 4, mat: 'wood' },
     // the old mine's timber portal in the east mass
@@ -618,7 +621,7 @@ export const MAPS: MapDef[] = [
     fog: ['#3a2a24', 45, 170], tint: '#ff8a2a', particles: 'sparks', killY: -20,
   },
   {
-    id: 'mile', name: 'Sunset Mile', heroes: ['hibiki', 'hayate'], full: true, objective: 'push', payload: 'prop_mile_payload',
+    id: 'mile', name: 'Sunset Mile', heroes: ['hibiki', 'hayate'], full: true, objective: 'push', payload: 'prop_mile_payload', payloadYaw: Math.PI / 2,
     story: 'A highway town under the red mesas, where the old road runs past the pumps, the diner and the motel. The Mikoshi rides a road hauler through town - push it home, and take the rock the long way up.',
     size: [72, 34],
     floors: [{ x: 0, z: 0, w: 144, d: 68, h: 0.01, mat: 'ground' }],
@@ -641,13 +644,13 @@ export const MAPS: MapDef[] = [
     fog: ['#e8c9a0', 90, 260], tint: '#ffb84a', particles: 'dust', killY: -20, bloom: [0.97, 0.3],
   },
   {
-    id: 'gulch', name: 'Iron Gulch', heroes: ['hayate', 'seiran', 'gantetsu'], full: true, objective: 'push', payload: 'prop_mile_payload',
+    id: 'gulch', name: 'Iron Gulch', heroes: ['hayate', 'seiran', 'gantetsu'], full: true, objective: 'push', payload: 'prop_mile_payload', payloadYaw: Math.PI / 2,
     story: 'A frontier rail yard at the bottom of a canyon, all boxcars, timber and red rock. Haul the Mikoshi down the main line - fight over the boxcars, across the trestle and up the crags.',
     size: [72, 32],
     floors: [{ x: 0, z: 0, w: 144, d: 64, h: 0.01, mat: 'ground' }],
     boxes: [...border(72, 32, 14).map(b => ({ ...b, mat: 'rock' as const })), ...GULCH.boxes], decor: GULCH.decor,
     props: mirrorProps([
-      { id: 'prop_gulch_loco', x: -50, z: -12, s: 5, solid: 2.2 },
+      { id: 'prop_gulch_loco', x: -50, z: -12, rot: Math.PI / 2, s: 5 },
       { id: 'prop_gulch_watertower', x: -6, z: 9, s: 11, solid: 1.6 },
       { id: 'prop_gulch_windpump', x: -11, z: -29, y: 12, s: 9 }, { id: 'prop_gulch_windpump', x: -44, z: 27, y: 8, s: 9, solid: 0.5 },
       { id: 'prop_gulch_minecart', x: -32, z: 28, s: 1.6, solid: 0.9 }, { id: 'prop_gulch_minecart', x: -30, z: 24.5, rot: 0.6, s: 1.6, solid: 0.9 },
