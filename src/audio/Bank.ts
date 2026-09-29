@@ -18,11 +18,12 @@ export class SampleBank {
   words(voice: string, key: string, buf: AudioBuffer): string { const i = this.idx.get(buf); return i === undefined ? '' : this.info?.subs?.[voice]?.[key]?.[i] ?? ''; }
 
   async load(ctx: AudioContext, base: string, onProgress?: (k: number) => void) {
+    this.loading = true;
     try {
       const r = await fetch(`${base}sfx/bank.json`);
-      if (!r.ok) return;
+      if (!r.ok) { this.loading = false; return; }
       this.info = await r.json() as BankInfo;
-    } catch { return; }
+    } catch { this.loading = false; return; }
     const jobs: [string, string][] = [];
     // loops ship lossless (.flac: a sample-exact loop point), one-shots as Vorbis
     for (const [id, s] of Object.entries(this.info!.sfx)) for (let i = 0; i < s.n; i++) jobs.push([`sfx:${id}`, `${base}sfx/${id}/${i}.${s.ext ?? 'ogg'}`]);
@@ -37,10 +38,30 @@ export class SampleBank {
       } catch { /* a missing line just falls back */ }
       onProgress?.(++done / jobs.length);
     };
-    // a few decodes in flight at once
-    const q = [...jobs];
-    await Promise.all(Array.from({ length: 8 }, async () => { while (q.length) await one(q.shift()!); }));
-    this.ready = true;
+    // a few decodes in flight at once; heroes in the match jump the queue (prioritize)
+    this.queue = [...jobs];
+    if (this.want.size) this.prioritize([...this.want]);
+    const q = this.queue;
+    await Promise.all(Array.from({ length: 12 }, async () => { while (q.length) { this.inFlight++; try { await one(q.shift()!); } finally { this.inFlight--; } } }));
+    this.ready = true; this.loading = false;
+  }
+
+  /** jobs still waiting to decode for these voices, plus every sound effect (the preloader waits on this) */
+  pendingFor(voices: string[]) {
+    if (!this.info) return this.loading ? 1 : 0;
+    const hit = (k: string) => k.startsWith('sfx:') || voices.some(v => k.startsWith(`vo:${v}:`));
+    return this.queue.filter(j => hit(j[0])).length + this.inFlight;
+  }
+  private loading = false;
+  private inFlight = 0;
+  private queue: [string, string][] = [];
+  private want = new Set<string>();
+  /** decode these voices' lines next (the heroes in the match that's starting): 580+ lines take ~30s to decode all */
+  prioritize(voices: string[]) {
+    for (const v of voices) this.want.add(v);
+    const hit = (k: string) => voices.some(v => k.startsWith(`vo:${v}:`)) || k.startsWith('vo:announcer:');
+    const first = this.queue.filter(j => hit(j[0])), rest = this.queue.filter(j => !hit(j[0]));
+    this.queue.length = 0; this.queue.push(...first, ...rest);
   }
 
   has(id: string) { return this.bufs.has(`sfx:${id}`); }

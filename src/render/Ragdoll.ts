@@ -17,6 +17,7 @@ interface Link { a: number; b: number; d: number; kind: 'rigid' | 'min' | 'band'
 const G = 20;                  // a little floatier than the game's 24: the fall reads, as Overwatch's does
 const STEP = 1 / 120;
 const TONE = 0.45;             // seconds of fading muscle tone after death
+const MAX_SUB = 3;             // physics sub-steps a frame at most
 
 export class Ragdoll {
   private p: P[] = [];
@@ -119,11 +120,26 @@ export class Ragdoll {
     return new THREE.Matrix4().makeBasis(side, up, fwd);
   }
 
-  /** advance the simulation and pose the skeleton; `sink` lowers the body into the floor (the respawn fade) */
-  step(dt: number, sink = 0) {
+  /** true once the body has come to rest: no more simulation or posing (it just lies there, for free) */
+  asleep = false;
+  private still = 0;
+  private floor: number[] = [];
+
+  /** advance the simulation and pose the skeleton */
+  step(dt: number) {
+    if (this.asleep) return;
     this.age += dt;
-    this.acc += Math.min(dt, 0.1);
+    // at most MAX_SUB sub-steps a frame: a slow frame plays the fall in slow motion instead of costing more physics,
+    // which would make the next frame slower still
+    this.acc = Math.min(this.acc + Math.min(dt, 0.1), STEP * MAX_SUB);
     const P = this.p, L = this.level;
+    // the map is queried once a frame per joint, not inside the solver: every query walks every box of the map
+    for (let i = 0; i < P.length; i++) {
+      const q = P[i];
+      const g = L ? L.groundAt(q.x.x, q.x.z, q.x.y + this.H * 0.3, 0) : this.floorY;
+      this.floor[i] = Number.isFinite(g) ? g : this.floorY - 50;
+    }
+    let moved = 0;
     while (this.acc >= STEP) {
       this.acc -= STEP;
       for (const q of P) {
@@ -149,32 +165,32 @@ export class Ragdoll {
           const k = (len - want) / len * 0.5;
           A.addScaledVector(d, k); B.addScaledVector(d, -k);
         }
-        for (const q of P) this.collide(q);
+        for (let i = 0; i < P.length; i++) this.ground(P[i], i);
       }
+      for (const q of P) moved = Math.max(moved, q.x.distanceToSquared(q.prev));
     }
-    if (sink > 0) for (const q of P) { q.x.y -= sink; q.prev.y -= sink; }
+    // walls: once a frame per joint
+    if (L) for (const q of P) {
+      const w = { x: q.x.x, y: q.x.y - q.r, z: q.x.z };
+      if (L.collide(w, q.r, q.r * 2)) { q.x.x = w.x; q.x.z = w.z; q.prev.x += (q.x.x - q.prev.x) * 0.5; q.prev.z += (q.x.z - q.prev.z) * 0.5; }
+    }
     this.pose();
+    // at rest (every joint moving under ~0.25 m/s for 0.4 s, after the first second): sleep
+    if (this.age > 1 && moved < (0.25 * STEP) ** 2) { this.still += dt; if (this.still > 0.4) this.asleep = true; } else this.still = 0;
   }
 
   /** the body's first hard landings (pelvis, chest): world position and impact speed (m/s), for the thud */
   onImpact?: (at: THREE.Vector3, speed: number) => void;
   private landed = new Set<number>();
 
-  private collide(q: P) {
-    const L = this.level;
-    const g = L ? L.groundAt(q.x.x, q.x.z, q.x.y + this.H * 0.3, 0) : this.floorY;
-    const floor = Number.isFinite(g) ? g : this.floorY - 50;
+  private ground(q: P, i: number) {
+    const floor = this.floor[i];
     if (q.x.y < floor + q.r) {
-      const i = this.p.indexOf(q), vy = (q.prev.y - q.x.y) / STEP;
+      const vy = (q.prev.y - q.x.y) / STEP;
       if (!this.landed.has(i) && vy > 2.5 && (i === this.idx.get('hips') || i === this.idx.get('chest'))) { this.landed.add(i); this.onImpact?.(q.x.clone(), vy); }
       q.x.y = floor + q.r;
       // floor friction: the body slides a little, then stops
       q.prev.x += (q.x.x - q.prev.x) * 0.18; q.prev.z += (q.x.z - q.prev.z) * 0.18;
-      if (q.prev.y < q.x.y) q.prev.y = q.x.y - (q.prev.y - q.x.y) * 0;
-    }
-    if (L) {
-      const w = { x: q.x.x, y: q.x.y - q.r, z: q.x.z };
-      if (L.collide(w, q.r, q.r * 2)) { q.x.x = w.x; q.x.z = w.z; q.prev.x += (q.x.x - q.prev.x) * 0.5; q.prev.z += (q.x.z - q.prev.z) * 0.5; }
     }
   }
 

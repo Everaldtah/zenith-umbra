@@ -22,6 +22,9 @@ const info = await p.evaluate(f0 => { const g = window.__zu.game; const c = g.re
 console.log(JSON.stringify(info, null, 1));
 // the recorded sound bank decodes in the packaged app; Hibiki, Gantetsu and Tomoe are on the roster with their portraits, and
 // Tomoe's model, weapon props, sounds and voice ship
+// the full bank (580+ voice lines) decodes in the background: report when it's all in (the match's own voices go first)
+const bankAt = await p.evaluate(async () => { const t0 = performance.now(); for (let i = 0; i < 120 && !window.__zu.sfx.bank.ready; i++) await new Promise(r => setTimeout(r, 500)); return window.__zu.sfx.bank.ready ? ((performance.now() - t0) / 1000).toFixed(1) + 's after the match check' : 'NOT READY after 60s'; });
+console.log('bank', bankAt);
 console.log('sound', await p.evaluate(async () => { const s = window.__zu.sfx; const img = async id => (await fetch(`img/portrait_${id}.webp`)).ok;
   return JSON.stringify({ clips: !!(await window.__zu.anim), ctx: s.ctx?.state, bank: s.bank.ready, sfx: Object.keys(s.bank.info?.sfx ?? {}).length, voices: Object.keys(s.bank.info?.vo ?? {}).length, hibiki: await img('hibiki'), gantetsu: await img('gantetsu'), tomoe: await img('tomoe'),
     tomoeModel: (await fetch('models/tomoe.glb')).ok, tomoeProps: (await Promise.all(['axe', 'blade', 'shotgun'].map(async n => (await fetch(`models/prop_tomoe_${n}.glb`)).ok))).every(Boolean),

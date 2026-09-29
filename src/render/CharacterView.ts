@@ -275,6 +275,8 @@ export class CharacterView {
   lids: Eyelids | null = null;
   /** the map the ragdolls collide with (set by the match; the Hero Viewer has none - a flat floor) */
   static level: Level | null = null;
+  /** set by the match once its preload has run: warms a model that loads mid-match before it's shown */
+  static warm: ((o: THREE.Object3D) => Promise<void>) | null = null;
   /** a ragdoll's hard landing (the match plays the thud) */
   onBodyFall?: (a: Actor, at: THREE.Vector3, speed: number) => void;
   /** Overwatch-style death: the body goes limp and is thrown by the killing blow (desktop edition, humanoid rigs) */
@@ -434,6 +436,9 @@ export class CharacterView {
     this.anim = anim;
     this.scaleFit = s;
     this.real = true;
+    // mid-match arrivals (a hero swap, a pilot ejecting, a new wave): textures uploaded and shaders compiled before the
+    // body shows, so it never pops in half-ready or hitches the frame it first draws (Preload.ts)
+    if (CharacterView.warm) { wrap.visible = false; void CharacterView.warm(wrap).finally(() => { if (this.model === wrap) wrap.visible = true; }); }
     this.hookStep();
     this.attachClips();
     // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path
@@ -599,8 +604,10 @@ export class CharacterView {
     if (!this.ragdoll) return false;
     this.rim.value = 0;
     this.group.visible = age < 3.8;
-    this.ragdoll.step(dt, age > 2.6 ? dt * 0.6 : 0);
-    this.anim.placeGunsFromBones();
+    this.ragdoll.step(dt);
+    // sinking into the floor before the respawn: the whole body lowers (a sleeping ragdoll costs nothing)
+    this.inner.position.y = -Math.max(0, age - 2.6) * 0.6;
+    if (!this.ragdoll.asleep) this.anim.placeGunsFromBones();
     this.lids?.update(time, a.anim.hitAt, true);
     return true;
   }

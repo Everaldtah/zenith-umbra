@@ -12,7 +12,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PLAY_MAPS } from '../data/maps';
-import { HEROES, HERO } from '../data/heroes';
+import { HEROES, HERO, PILOTS } from '../data/heroes';
 import { createMatch, createCampaign, type Match } from '../game/setup';
 import { bossCard } from '../campaign/Cinematic';
 import type { Director } from '../campaign/Director';
@@ -29,7 +29,9 @@ import { FirstPersonArms } from '../render/FirstPerson';
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
-import { loadManifest } from '../render/Assets';
+import { loadManifest, heroModel, riggedModel, hasModel } from '../render/Assets';
+import { DRAGON_MODEL } from '../render/SpiritDragon';
+import { FX_KINDS, compileFor, loadsIdle, nextFrame, showProgress, sleep, texturesOf, uploadTextures, warmObject } from './Preload';
 import { animLibrary } from '../render/ClipLibrary';
 import { sfx } from '../audio/Sfx';
 import { Input, KEYS } from './Input';
@@ -139,7 +141,9 @@ export class Game {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 0.95;
     this.renderer.shadowMap.enabled = q.shadows > 0;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // three r186 removed PCFSoftShadowMap (it silently switches to PCF on the first shadow render - after the preload
+    // has compiled every shader for the old type, so they'd all compile again in play)
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     host.append(this.renderer.domElement);
     this.renderer.domElement.className = 'game-canvas';
     this.input = new Input(this.renderer.domElement);
@@ -166,7 +170,7 @@ export class Game {
     if (!v.dynamicRes) this.dynScale = 1;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * Q.pixelRatio * this.dynScale);
     this.renderer.shadowMap.enabled = Q.shadows > 0;
-    const st = Q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    const st = THREE.PCFShadowMap;             // (softShadows: PCFSoftShadowMap is gone in r186, see the constructor)
     if (this.renderer.shadowMap.type !== st) { this.renderer.shadowMap.type = st; this.renderer.shadowMap.needsUpdate = true; }
     this.renderer.toneMappingExposure = 0.95 * v.gamma;
     this.input.sens = 0.0022 * s.sens;
@@ -281,6 +285,7 @@ export class Game {
     this.bossCam = null;
     const w = this.match.world;
     CharacterView.level = w.level;                  // ragdolls land on this map's floors and walls
+    sfx.bank.prioritize([...new Set(w.actors.map(a => a.def.id))]);   // this match's voices decode first
     this.mapScene = new MapScene(w.map, w.level, q, this.scene);
     // bright daylight maps (pale plaster, white stone): only real highlights bloom, or sunlit walls glow white
     if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
@@ -291,8 +296,8 @@ export class Game {
     this.scene.environmentIntensity = 0.55;
     this.fx = new Fx(this.scene, quality(this.settings).fxCap);
     // scene detail options now, and again once the heroes' models have streamed in (texture filtering)
+    // (texture filtering is applied again by the preload, once every model is in - no re-uploads mid-match)
     this.buildComposer(); this.applySceneDetail();
-    for (const ms of [3000, 9000]) setTimeout(() => { if (this.running) this.applySceneDetail(); }, ms);
     // first person: your rounds leave the viewmodel's gun(s) - right hand, or alternating hands for twin guns
     let hand = 1;
     this.fx.muzzleFor = (a, from) => {
@@ -305,6 +310,7 @@ export class Game {
     };
     const viewerTeam = this.match.player?.team ?? 'zenith';
     for (const a of w.actors) this.addView(a, viewerTeam);
+    await this.warmUp(w, viewerTeam);
     this.hud.reset();
     this.hud.show(true);
     if (o.mode === 'aitest') { this.lab ??= new AiLab(this.host); this.lab.panel.style.display = ''; this.timeScale = 1; }
@@ -318,6 +324,128 @@ export class Game {
   }
   /** desktop edition: the match's soundscape (space, threat mix, loops, physics sounds, voice lines) */
   sound = new Soundscape();
+
+  /** what the last match preload did (for the e2e checks) */
+  preloadStats: { ms: number; textures: number; programs: number; phases: Record<string, number> } | null = null;
+
+  /**
+   * Everything the match will draw loaded, uploaded to the GPU and compiled while the loading screen is still up
+   * (Preload.ts): models and their props, the map, what arrives later (pilots, campaign waves, spirit dragons), the
+   * sound bank for this match, every texture, every shader against this scene's lights, one of every combat effect,
+   * then a full turn of real frames through shadows, post and the first-person pass.
+   */
+  private async warmUp(w: WorldCls, viewerTeam: string) {
+    const r = this.renderer, me = this.match!.player, t0 = performance.now(), phases: Record<string, number> = {};
+    let mark = t0;
+    const phase = (name: string) => { const n = performance.now(); phases[name] = Math.round(n - mark); mark = n; };
+    const P = (label: string, a: number, b: number) => (k: number) => showProgress(label, a + (b - a) * Math.max(0, Math.min(1, k)));
+    CharacterView.warm = null;
+    const viewer = { team: viewerTeam, sees: () => true };
+    // ---- 1. assets
+    const assets = P('Loading heroes and map', 0, 0.45);
+    assets(0);
+    const later = new Set<string>();
+    for (const a of w.actors) { const pilot = PILOTS[a.baseDef.id]; if (pilot) later.add(pilot.id); }
+    if (w.mode === 'campaign' && this.opts && LEVEL[this.opts.map]) {
+      const L = LEVEL[this.opts.map], enc = JSON.stringify(L.encounters);
+      for (const id of [...Object.keys(ENEMIES), ...Object.keys(BOSSES)]) if (enc.includes(`"${id}"`)) later.add(id);
+      later.add(L.boss);
+    }
+    const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
+    const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
+    for (const [hero, id] of Object.entries(DRAGON_MODEL)) if (FULL && w.actors.some(a => a.def.id === hero)) laterLoads.push(riggedModel(id).then(m => { if (m) warmGroup.add(m); }));
+    const views = () => [...this.views.values()];
+    const needs = (v: CharacterView) => hasModel(v.actor.def.id);
+    for (const t = performance.now(); performance.now() - t < 45000; await sleep(100)) {
+      const vs = views(), done = vs.filter(v => v.real || !needs(v)).length;
+      assets(vs.length ? done / vs.length * 0.9 : 0.9);
+      if (done === vs.length) break;
+    }
+    // the props the views attach once their bodies are in, the map's props and textures, the later arrivals
+    for (const v of views()) v.update(1 / 60, w.time, viewer);
+    await Promise.all([loadsIdle(20000), Promise.race([Promise.all(laterLoads), sleep(30000)])]);
+    await loadsIdle(10000);
+    assets(1); phase('assets');
+    // ---- 2. sounds: every effect and this match's voice lines decoded (the rest of the bank keeps decoding in play)
+    if (FULL) {
+      const voices = [...new Set(w.actors.map(a => a.def.id)), 'announcer'], snd = P('Loading sounds', 0.45, 0.58);
+      const n0 = Math.max(1, sfx.bank.pendingFor(voices));
+      for (const t = performance.now(); performance.now() - t < 25000 && sfx.bank.pendingFor(voices) > 0; await sleep(100)) snd(1 - sfx.bank.pendingFor(voices) / n0);
+    }
+    phase('sounds');
+    // ---- settle the scene: every view posed with its props, the camera at the player, the first-person arms built
+    this.scene.add(warmGroup);
+    for (const v of views()) v.update(1 / 60, w.time, viewer);
+    this.mapScene!.update(w.time, w.point, viewerTeam, w.packs, w.rules === 'push' ? w.push : null);
+    this.updateCamera(1 / 60, me);
+    if (me && this.view === 'first' && me.alive) {
+      this.fp ??= new FirstPersonArms(me, equippedSkin(me.def.id));
+      for (const t = performance.now(); performance.now() - t < 15000 && !this.fp.view.real; await sleep(100)) { /* its own copy of the hero */ }
+      this.fp.scene.environment = this.scene.environment;
+      this.fp.update({ dt: 1 / 60, time: w.time, yawRate: 0, pitchRate: 0, aspect: this.camera.aspect });
+    }
+    this.applySceneDetail();            // texture filtering on every texture now in the scene, BEFORE the upload
+    // ---- 3. GPU: every texture uploaded
+    const tex = texturesOf(this.scene);
+    if (this.fp) texturesOf(this.fp.scene, tex);
+    if (this.scene.environment) tex.add(this.scene.environment);
+    const nTex = await uploadTextures(r, tex, P('Uploading to the GPU', 0.58, 0.72));
+    phase('gpu');
+    // ---- 4. shaders: one of every combat effect spawned in front of the camera, then everything compiled
+    const shaders = P('Compiling shaders', 0.72, 0.9);
+    shaders(0);
+    const cam = this.camera.position.clone(), fwd = this.camera.getWorldDirection(new THREE.Vector3());
+    const at = cam.clone().addScaledVector(fwd, 7), side = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
+    const pos = { x: at.x, y: at.y, z: at.z }, to = { x: at.x + side.x * 3, y: at.y, z: at.z + side.z * 3 };
+    const actor = me ?? w.actors[0], target = w.actors.find(a => a !== actor) ?? actor;
+    if (this.fx && actor) {
+      for (const kind of FX_KINDS) {
+        try { this.fx.onEvent({ t: 'fx', kind, pos, to, actor, target, color: '#ffffff', r: 3, dur: 0.6 } as unknown as Parameters<Fx['onEvent']>[0], w.time, this.camera.position); } catch { /* an effect that needs more context */ }
+      }
+      this.fx.update(1 / 60, w, w.time);
+    }
+    // compiled into the composer's buffer: the scene is drawn there (linear output), not straight to the screen, and
+    // the output colour space is part of every program's key
+    const into = this.composer ? (this.composer as unknown as { readBuffer: THREE.WebGLRenderTarget }).readBuffer : null;
+    const rt0 = r.getRenderTarget();
+    r.setRenderTarget(into);
+    await compileFor(r, this.scene, this.camera, this.scene);
+    r.setRenderTarget(rt0);
+    shaders(0.7);
+    if (this.fp) await compileFor(r, this.fp.scene, this.fp.camera, this.fp.scene);
+    shaders(1); phase('shaders');
+    // ---- 5. warm-up: a full turn of real frames (shadow maps, post-processing, the first-person pass)
+    const warm = P('Warming up', 0.9, 1), q0 = this.camera.quaternion.clone(), e0 = new THREE.Euler().setFromQuaternion(q0, 'YXZ');
+    const N = 12;
+    // stealth (Kagemaru's veil and the like) turns a hero's materials transparent, drawn in two passes (back faces, then
+    // front): two more programs per material, compiled here by drawing a few of these frames that way. Each material
+    // keeps every program it has used, so switching back costs nothing and the variants stay compiled.
+    const stealthMats = [...views().flatMap(v => v.mats), ...(this.fp ? this.fp.view.mats : [])];
+    const stealth = (on: boolean) => { for (const m of stealthMats) { m.transparent = on; m.depthWrite = !on; m.needsUpdate = true; } };
+    for (let i = 0; i < N; i++) {
+      if (i === 2) stealth(true);
+      if (i === 4) stealth(false);
+      this.camera.quaternion.setFromEuler(new THREE.Euler(e0.x, e0.y + i / N * Math.PI * 2, 0, 'YXZ'));
+      this.camera.updateMatrixWorld();
+      if (this.composer) this.composer.render(); else r.render(this.scene, this.camera);
+      if (this.fp) { r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false; }
+      warm((i + 1) / N);
+      await nextFrame();
+    }
+    this.camera.quaternion.copy(q0);
+    // the sample effects played out and gone, the far-off copies removed
+    if (this.fx) for (let k = 1; k <= 8; k++) this.fx.update(0.5, w, w.time + k * 2);
+    this.scene.remove(warmGroup);
+    phase('warmup');
+    // mid-match arrivals get the same treatment before they show (CharacterView.warm)
+    const aniso = Math.min(r.capabilities.getMaxAnisotropy(), this.settings.video.texFilter);
+    CharacterView.warm = async (o: THREE.Object3D) => {
+      o.traverse(ob => { const m = (ob as THREE.Mesh).material; for (const mt of Array.isArray(m) ? m : m ? [m] : []) { const t = (mt as THREE.MeshStandardMaterial).map; if (t && t.anisotropy !== aniso) { t.anisotropy = aniso; t.needsUpdate = true; } } });
+      await warmObject(r, o, this.camera, this.scene);
+    };
+    this.preloadStats = { ms: Math.round(performance.now() - t0), textures: nTex, programs: r.info.programs?.length ?? 0, phases };
+    console.info('[preload]', JSON.stringify(this.preloadStats));
+  }
 
   /** the camera for this match: fixed by the mode (Normal = first person, Stadium = third person), else the setting */
   get view(): 'first' | 'third' { const m = this.match?.world.mode; return (m && FIXED_VIEW[m]) || this.settings.view; }

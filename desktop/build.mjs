@@ -48,7 +48,8 @@ if (process.argv.includes('--installer')) {
 if (!process.argv.includes('--no-install')) {
   const dest = path.join(process.env.LOCALAPPDATA, 'Programs', 'ZenithUmbra');
   try { execSync('taskkill /IM ZenithUmbra.exe /F', { stdio: 'ignore' }); } catch { /* not running */ }
-  fs.rmSync(dest, { recursive: true, force: true });
+  // the killed app (and the antivirus scanning it) can hold files for a moment: retry the removal
+  fs.rmSync(dest, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
   fs.cpSync(appDir, dest, { recursive: true });
   const exe = path.join(dest, 'ZenithUmbra.exe');
   const ps1 = path.join(HERE, 'out', 'shortcuts.ps1');
