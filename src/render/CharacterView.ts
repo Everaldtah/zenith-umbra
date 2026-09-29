@@ -15,6 +15,7 @@ import type { Level } from '../engine/Physics';
 
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
+const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
 /** speed (m/s) above which fast moves smear (Davis GDC17: stretch the mesh along its motion - automated smear frames) */
 const SMEAR_FROM = 12;
 import { skinsFor, type Skin } from '../data/skins';
@@ -220,6 +221,7 @@ export class CharacterView {
   guns: ChaingunProp[] = [];
   /** first-person viewmodels don't smear (the camera rides the motion) */
   noSmear = false;
+  private downYaw: number | null = null;
   private spinA = [0, 0];
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
@@ -606,6 +608,7 @@ export class CharacterView {
       hitDir: this.hitDir(), knocked: !!a.forced && (a.forced.kind === 'knock' || a.forced.kind === 'pull'),
       swoop: a.has('swoop', time) ? a.sv.swoopProg ?? 0 : -1, swoopFlare: a.has('swoopflare', time) ? 0.4 - (a.st.swoopflare - time) : 9,
       superjump: a.has('superjump', time), slingshot: a.has('slingshot', time), rush: a.has('tachiai', time),
+      leap: a.has('stompair', time), knockdown: a.has('knockdown', time) ? Math.max(0, a.st.knockdown - time) : 0,
       skate: a.def.id === 'hibiki', grind: a.has('grinding', time) ? (a.sv.grindSide ?? 1) : 0,
       dual: a.def.dualGuns ? { fireL: time - a.anim.fireL, fireR: time - a.anim.fireR } : undefined,
       reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
@@ -741,6 +744,18 @@ export class CharacterView {
     this.inner.quaternion.setFromEuler(new THREE.Euler(an2.tilt.pitch, 0, an2.tilt.roll, 'XZY'));
     _jp.set(0, piv, 0).applyQuaternion(this.inner.quaternion);
     this.inner.position.set(-_jp.x, piv - _jp.y, -_jp.z);
+    // knocked flat: the whole body laid down about the feet along the push, its back on the ground; the body keeps the
+    // facing it fell with (the aim may turn, a body on the floor doesn't spin)
+    if (an2.down > 0) {
+      if (this.downYaw === null) this.downYaw = a.yaw;
+      let dy = this.downYaw - a.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      this.group.rotation.y = a.yaw + dy * Math.min(1, an2.down * 3);
+      const th = an2.down * 1.5, d = an2.downDir;
+      _kq.setFromAxisAngle(_kv.set(d.z, 0, -d.x).normalize(), th);          // up x the push
+      this.inner.quaternion.premultiply(_kq);
+      this.inner.position.applyQuaternion(_kq);
+      this.inner.position.y += Math.sin(th) * a.height * a.scale * 0.09;
+    } else this.downYaw = null;
     this.smear(time);
     this.updateGuns(dt, time);
     const an = a.anim;

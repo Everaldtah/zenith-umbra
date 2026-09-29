@@ -104,6 +104,8 @@ export interface AnimState {
   slingshot?: boolean;      // flung onward out of a swoop
   dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
+  leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
+  knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
   skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
   grind?: number;           // Hibiki's Mag-Grind: which side the wall is on (-1 / 1), 0 = not grinding
 }
@@ -317,6 +319,9 @@ export class Animator {
   private headStab = 0;                             // the head's counter-pitch against the body's lean (smoothed)
   private kick = { x: 0, v: 0 };                   // heavy footfall punctuation (chest + hips dip on each contact)
   private tumble = 0; private hitX = 0; private hitZ = 1;
+  private leapW = 0; private slamDip = 0; private lastLeap = false;
+  /** knocked flat: 0 standing .. 1 lying; downDir = the way the body fell (model space) - the view lays it down */
+  down = 0; downDir = new THREE.Vector3(0, 0, -1);
   private shiftT = 0; private shift = { x: 0, v: 0 };   // contrapposto weight side
   private ang = { swoop: 0, sup: 0, glide: 0, flare: 0, hover: 0, sling: 0 };   // angel state weights (smoothed)
   private wLift = { x: 0, v: 0 }; private wSweep = { x: 0.5, v: 0 }; private wFidget = 0; private stepFlutter = 0;
@@ -881,6 +886,32 @@ export class Animator {
   /** undo the first-person head collapse (the view is reused in third person) */
   restoreHead() { this.bones.head?.scale.setScalar(1); }
 
+  /**
+   * Knocked flat (Gantetsu's Shiko slam): the limbs sprawl over whatever the body was doing - arms flung out, knees a
+   * little up, the spine straight, chin up. Model space, parents first; the view lays the whole body down along the
+   * push (down, downDir).
+   */
+  private sprawl(w: number) {
+    const cur = (n: BoneName) => (this.modelQ.get(this.bones[n]!) ?? this.rest[n]!.q).clone().multiply(this.rest[n]!.q.clone().invert());
+    const toQ = (n: BoneName, D: THREE.Quaternion, k = 1) => { if (this.bones[n] && this.rest[n]) this.applyDelta(n, cur(n).slerp(D, w * k)); };
+    const toDir = (n: BoneName, x: number, y: number, z: number) => {
+      const r = this.rest[n]; if (!this.bones[n] || !r) return;
+      toQ(n, new THREE.Quaternion().setFromUnitVectors(r.dir, new THREE.Vector3(x, y, z).normalize()));
+    };
+    const I = new THREE.Quaternion();
+    for (const n of ['hips', 'spine', 'chest', 'neck'] as BoneName[]) toQ(n, I, 0.85);
+    toQ('head', new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.22));
+    for (const [S, side] of [['L', 1], ['R', -1]] as const) {
+      toQ(`shoulder_${S}` as BoneName, I, 0.85);
+      toDir(`upperarm_${S}` as BoneName, side, 0.3, 0.12);
+      toDir(`forearm_${S}` as BoneName, side * 0.7, 0.7, 0.3);
+      toDir(`thigh_${S}` as BoneName, side * 0.24, -1, 0.26);
+      toDir(`shin_${S}` as BoneName, side * 0.1, -1, -0.22);
+      const sh = `shin_${S}` as BoneName, ft = `foot_${S}` as BoneName;
+      if (this.bones[sh] && this.rest[sh] && this.bones[ft]) toQ(ft, cur(sh));
+    }
+  }
+
   update(s: AnimState) {
     if (!this.ok) return;
     const R = this.rest as Record<BoneName, Rest>;
@@ -940,6 +971,21 @@ export class Animator {
     this.prevVel.copy(vNow);
     // knocked about in the air: a tumble pose blends in (Davis: knockbacks spring between directional float poses)
     this.tumble += ((PERF && s.knocked && !s.grounded ? 1 : 0) - this.tumble) * Math.min(1, dt * 7);
+    // Gantetsu's Shiko leap: up with the guns overhead, then the two-footed slam - a deep squat the frame he lands
+    const leaping = PERF && !!s.leap && !s.grounded;
+    this.leapW += ((leaping ? 1 : 0) - this.leapW) * Math.min(1, dt * (leaping ? 9 : 16));
+    if (PERF && this.lastLeap && !s.leap && s.grounded) { this.slamDip = 1; this.sq.v -= 2.2 * PS.squash; }
+    this.lastLeap = !!s.leap;
+    this.slamDip = Math.max(0, this.slamDip - dt / 0.5);
+    // knocked flat by a slam: falls along the push (away from whoever hit), lies there, gets up over the last 0.3 s
+    const kd = s.knockdown ?? 0;
+    if (kd > 0 && this.down < 0.02) {
+      this.downDir.set(s.hitDir ? -s.hitDir[0] : 0, 0, s.hitDir ? -s.hitDir[1] : -1);
+      if (this.downDir.lengthSq() < 1e-6) this.downDir.set(0, 0, -1);
+      this.downDir.normalize();
+    }
+    this.down += ((kd > 0.32 ? 1 : 0) - this.down) * Math.min(1, dt * (kd > 0.32 ? 11 : 5.5));
+    if (this.down < 1e-3) this.down = 0;
     // angel state weights (Mirei): smoothed so every change of state reads as a follow-through, not a pop
     const AW = this.ang, angel = !!s.angel;
     const inSwoop = angel && (s.swoop ?? -1) >= 0;
@@ -1176,6 +1222,10 @@ export class Animator {
     // clip torso: the clip's deltas with the gameplay additives on top (aim pitch, flinch, recoil)
     const withAim = (q: THREE.Quaternion | null, pitch: number) => q ? q.clone().premultiply(rot(X, pitch)) : null;
     const blendD = (D: THREE.Quaternion, q: THREE.Quaternion | null, w: number) => { if (q && w > 0) D.slerp(q, w); return D; };
+    // the slam's landing: down into a deep squat within two frames, then back up
+    if (this.slamDip > 0.01) hipsOff.y -= (this.slamDip > 0.85 ? (1 - this.slamDip) / 0.15 : this.slamDip / 0.85) * 0.14 * this.height;
+    // getting up off the floor: through a crouch, not like a plank on a hinge
+    if (this.down > 0.01 && kd <= 0.32) hipsOff.y -= Math.sin(this.down * Math.PI) * 0.13 * this.height;
     blendD(Dh, cq('hips'), wLegs);
     this.applyDelta('hips', Dh);
     const hb = this.bones.hips!;
@@ -1241,6 +1291,8 @@ export class Animator {
       const th = R[`thigh_${L_}` as BoneName], sh = R[`shin_${L_}` as BoneName];
       const hipJ = th.p.clone().sub(R.hips.p).applyQuaternion(Dh).add(hipsPos);
       const ft = this.foot[i].clone(); ft.y = Math.max(ft.y, this.footY * 0.6);
+      // the Shiko leap: knees up and wide, a sumo's stomp wound up in the air
+      if (this.leapW > 0.01) { ft.y += this.leapW * 0.26 * this.legLen; ft.z += this.leapW * 0.1 * this.legLen; ft.x += (i === 0 ? 1 : -1) * this.leapW * 0.14 * this.legLen; }
       const pole = new THREE.Vector3(0, 0, 1).applyQuaternion(Dh);
       if (L && wLegs > 0) {
         // the clip's knee direction (off the hip-ankle line) steers the IK bend: deep crouches, rolls, kneeling deaths
@@ -1363,6 +1415,9 @@ export class Animator {
         if (age < 0.12) hand.add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, 0).multiplyScalar(0.02 * Lr));
         hand.y -= (0.06 * run + Math.abs(armSwing) * 0.05 + (s.rush ? 0.08 : 0)) * Lr;
         if (s.rush) hand.x -= side * 0.06 * Lr;
+        // the leap: both guns hauled up overhead; the slam drives them down in front as he lands
+        if (this.leapW > 0.01) hand.lerp(shoulder.clone().add(new THREE.Vector3(side * 0.2 * Lr, 0.8 * Lr, 0.2 * Lr).applyQuaternion(Dc)), this.leapW);
+        if (this.slamDip > 0.01) hand.lerp(shoulder.clone().add(new THREE.Vector3(side * 0.3 * Lr, -0.62 * Lr, 0.5 * Lr).applyQuaternion(Dc)), Math.min(1, this.slamDip * 1.6));
         over = { hand, w: 1, pole: new THREE.Vector3(side * 0.9, -0.6, -0.5) };
       } else if (s.angel) {
         over = this.angelArm(i, side, shoulder, l1 + l2, s, idleW, run);
@@ -1520,6 +1575,7 @@ export class Animator {
       this.tilt.pitch = spring(this.tiltP, pT, k, d, dt); this.tilt.roll = spring(this.tiltR, rT, k, d, dt);
     }
     // ---------------- secondary motion: hair / coat tails / skirts
+    if (this.down > 0.01) this.sprawl(kd > 0.32 ? this.down : this.down * this.down);
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
     this.dynamics(s, dt);
     this.placeGuns();

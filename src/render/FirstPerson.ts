@@ -277,6 +277,8 @@ export class FirstPersonArms {
   private walk = 0; private swayX = 0; private swayY = 0; private dip = 0; private dipV = 0;
   /** an archer's aim-down (Yuzu's Hawk Eye), eased in ~150 ms like Freja's Take Aim */
   private aimK = 0;
+  /** Gantetsu's Shiko leap: the guns rise with him, then the slam throws the whole viewmodel down */
+  private leapK = 0; private wasLeap = false;
   private prev = { attack: 9, cast: 9, hit: 9, land: 9 };
   private swings = 0;
   private oneShot: { name: string; until: number } | null = null;
@@ -366,6 +368,10 @@ export class FirstPersonArms {
     const newAttack = t - a.anim.attackAt < P.attack - 1e-6, newCast = t - a.anim.castAt < P.cast - 1e-6, newHit = t - a.anim.hitAt < P.hit - 1e-6, newLand = t - a.anim.landAt < P.land - 1e-6;
     P.attack = t - a.anim.attackAt; P.cast = t - a.anim.castAt; P.hit = t - a.anim.hitAt; P.land = t - a.anim.landAt;
     if (newLand) this.dipV -= 0.35;
+    const leap = a.has('stompair', t);
+    if (this.wasLeap && !leap && a.grounded) this.dipV -= 1.3;                 // the slam lands
+    this.wasLeap = leap;
+    this.leapK += ((leap && !a.grounded ? 1 : 0) - this.leapK) * Math.min(1, dt * (leap ? 8 : 16));
     if (newAttack && a.anim.attackKind !== 'punch') this.swings++;
     this.dipV += (-this.dip * 120 - this.dipV * 14) * dt; this.dip += this.dipV * dt;
     const bob: V = [Math.sin(this.walk * 1.0) * 0.012 * mv + this.swayX, -Math.abs(Math.cos(this.walk * 1.0)) * 0.016 * mv + this.swayY + this.dip * 0.2, 0];
@@ -461,6 +467,10 @@ export class FirstPersonArms {
         wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3 - u * 0.6, 0, dir * (0.9 - u * 1.4)));
         src = 'slash';
       }
+    } else if (S.grip === 'dual' && L && this.leapK > 0.05) {
+      // the leap: both guns hauled up and in, muzzles to the sky, ready to come down with him
+      R = add(R, [-0.06, 0.2, -0.1], this.leapK); L = add(L, [0.06, 0.2, -0.1], this.leapK);
+      src = 'leap';
     } else if (S.grip === 'dual' && L) {
       // twin chainguns: each gun kicks straight back on its own rounds (Boehm: push, snap back, a little rock) and the
       // spun-up guns chatter; nothing covers the reticle

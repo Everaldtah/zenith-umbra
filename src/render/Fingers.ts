@@ -129,6 +129,7 @@ export function gripsFor(a: Actor, t: number, o: { drawW?: number; fp?: boolean 
   let [L, R] = BASE[id] ?? (['relaxed', 'relaxed'] as [Grip, Grip]);
   let sqL = 0, sqR = 0, rate = 20;
   if (!a.alive) return { L: 'relaxed', R: 'relaxed', sqL, sqR, rate: 4 };
+  if (a.has('knockdown', t)) return { L: 'relaxed', R: 'relaxed', sqL, sqR, rate: 12 };      // knocked flat: hands fall open
   const an = a.anim, atk = t - an.attackAt, cast = t - an.castAt;
   if (R === 'trigger') sqR = Math.max(0, 1 - (t - an.fireR) / 0.09);
   if (L === 'trigger') sqL = Math.max(0, 1 - (t - (id === 'gantetsu' ? an.fireL : an.fireR)) / 0.09);
