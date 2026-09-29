@@ -63,13 +63,13 @@ const res = await p.evaluate(async (n, showKeys) => {
     const dead = w.actors.filter(a => !a.alive).length, objs = (() => { let n = 0; g.scene.traverse(() => n++); return n; })(), lights = (() => { let n = 0; g.scene.traverse(o => { if (o.isLight) n++; }); return n; })();
     const census = () => { const c = {}; g.scene.traverseVisible(o => { if (o.isLight) { const k = o.type + (o.castShadow ? '*' : ''); c[k] = (c[k] ?? 0) + 1; } }); return JSON.stringify(c); };
     const nf = fresh(); if (nf.length) out.push({ s: s + 1, fresh: [...nf, 'lights ' + census()] });
-    out.push({ s: s + 1, frames: d.length, worst: Math.round(Math.max(...d)), newPrograms: now - progs, sim, views, fx, ren, dead, objs, lights, calls: g.renderer.info.render.calls });
+    out.push({ s: s + 1, frames: d.length, worst: Math.round(Math.max(...d)), newPrograms: now - progs, sim, views, fx, ren, dead, objs, lights, calls: g.renderer.info.render.calls, tex: g.renderer.info.memory.textures, geo: g.renderer.info.memory.geometries });
     progs = now;
   }
   return out;
 }, Number(secs), !!process.env.KEYS);
 for (const r of res.filter(r => r.fresh)) console.log('NEW PROGRAMS at', r.s + 's', JSON.stringify(r.fresh));
-for (const r of res.filter(r => !r.fresh)) console.log(`${r.s}s frames=${r.frames} worst=${r.worst}ms newPrograms=${r.newPrograms} | sim ${r.sim} views ${r.views} fx ${r.fx} render ${r.ren} dead ${r.dead} objs ${r.objs} lights ${r.lights} calls ${r.calls}`);
+for (const r of res.filter(r => !r.fresh)) console.log(`${r.s}s frames=${r.frames} worst=${r.worst}ms newPrograms=${r.newPrograms} | sim ${r.sim} views ${r.views} fx ${r.fx} render ${r.ren} dead ${r.dead} objs ${r.objs} lights ${r.lights} calls ${r.calls} tex ${r.tex} geo ${r.geo}`);
 const R = res.filter(r => !r.fresh);
 const worst = R.reduce((a, r) => Math.max(a, r.worst), 0), hitches = R.filter(r => r.worst > 50).length, np = R.reduce((a, r) => a + r.newPrograms, 0);
 console.log(`SUMMARY worst frame ${worst} ms, seconds with a >50 ms hitch ${hitches}/${R.length}, shaders compiled mid-match ${np}, errors ${errors.length}`, errors.slice(0, 3));
