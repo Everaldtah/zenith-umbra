@@ -302,6 +302,28 @@ def vertex_albedo(obj):
     return out
 
 
+def weld_weights(W):
+    """Tripo splits a vertex into copies along every UV seam: copies of one point must carry the same weights or the
+    seam opens into a crack as soon as a chain moves them apart (the patchy hair and faces). Averages each point's
+    copies (positions equal to 0.1 mm)."""
+    key = np.round(co / 1e-4).astype(np.int64)
+    _, inv, cnt = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    inv = inv.reshape(-1)
+    sums = np.zeros((len(cnt), W.shape[1]), dtype=np.float64)
+    np.add.at(sums, inv, W)
+    return (sums / cnt[:, None])[inv].astype(np.float32), int(len(co) - len(cnt))
+
+
+def read_weights(obj):
+    W = np.zeros((len(obj.data.vertices), len(names_out)), dtype=np.float32)
+    gidx = {vg.index: oi[vg.name] for vg in obj.vertex_groups if vg.name in oi}
+    for v in obj.data.vertices:
+        for ge in v.groups:
+            d = gidx.get(ge.group)
+            if d is not None: W[v.index, d] += ge.weight
+    return W
+
+
 def add_col(n, parent_like):
     """a new (initially empty) weight column for a procedural bone"""
     global Wt
@@ -460,6 +482,11 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
                 got = nxt
             return got
         head_zone = (dxy < head_r * 1.6) & (co[:, 2] > hb.z - H * 0.02)
+        # the face (front half of the head, chin to brow, the width of the face): a pale face matched pale hair and
+        # the hair chains dragged it (Nocturne); bangs over the brow stay hair
+        face = (co[:, 1] < hb.y - head_r * 0.1) & (np.abs(co[:, 0] - hb.x) < head_r * 0.7) \
+            & (co[:, 2] > hb.z - H * 0.035) & (co[:, 2] < hb.z + (top_z - hb.z) * 0.62)
+        LOG["face_excluded"] = int(face.sum())
         seed = match & head_zone & (co[:, 2] > hb.z + (top_z - hb.z) * 0.35)
         if a.scarf:             # a scarf / hood cloth: seeded around the neck instead of on the scalp
             seed = match & (dxy < head_r * 2.5) & (co[:, 2] > bones["neck"][0].z - H * 0.03) & (co[:, 2] < hb.z + H * 0.05)
@@ -482,7 +509,7 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
                     nxt = grow(nxt, allow)
                     if nxt.sum() == hairv.sum(): break
                     hairv = nxt
-            hang = hairv & (co[:, 2] < hb.z + H * 0.015)
+            hang = hairv & (co[:, 2] < hb.z + H * 0.015) & ~face
             back = co[:, 1] > hb.y                                  # behind the head's centre (the face looks down -Y)
             chain("hair_B", hang & back, "head", min_verts=40, min_len=0.04)
             for sd, sg in (("L", 1), ("R", -1)):                     # locks / scarf ends hanging in front, per side
@@ -490,7 +517,7 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
             LOG["hair_verts"] = int(hang.sum()); LOG["hair_match_zone"] = int((match & zone).sum())
         if a.crown:
             # hair piled on the head: everything hair-coloured above the brow, rooted at the scalp, the tips free
-            crown = grow(seed, match & head_zone) & (co[:, 2] > hb.z + (top_z - hb.z) * 0.55)
+            crown = grow(seed, match & head_zone) & (co[:, 2] > hb.z + (top_z - hb.z) * 0.55) & ~face
             chain("hair_T", crown, "head", min_verts=60, keep_top=0.35, up=True, min_len=0.03)
             LOG["crown_verts"] = int(crown.sum())
     # ---- wide sleeves: cloth hanging below the forearm, nearer the arm than the torso, not the arm itself
@@ -527,6 +554,7 @@ for n, (hd_, tl, par) in bones.items():
 bpy.ops.object.mode_set(mode="OBJECT")
 for b in arm_data.bones:
     if b.name == "root" or b.name in TIPS: b.use_deform = False
+Wt, LOG["seam_copies"] = weld_weights(Wt)
 lost = apply_weights(body, Wt)
 LOG["unweighted_fixed"] = lost
 # smooth the weight transitions (panel seams, leg / cloth borders), keep 4 influences, renormalise
@@ -539,6 +567,9 @@ try:
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
     bpy.ops.object.mode_set(mode="OBJECT")
     LOG["smoothed"] = True
+    # smoothing walks the mesh's edges, and the two sides of a seam aren't connected: weld again afterwards
+    W2, _ = weld_weights(read_weights(body))
+    apply_weights(body, W2)
 except Exception as e:
     LOG["smooth_error"] = str(e)[:120]
     try: bpy.ops.object.mode_set(mode="OBJECT")

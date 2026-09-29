@@ -28,8 +28,9 @@ export { BONES };
 type DynKind = 'hair' | 'tuft' | 'skirt' | 'cape' | 'sleeve';
 const DYN: Record<DynKind, { stiff: number; drag: number; grav: number; maxA: number; wind: number; cols: BoneName[] }> = {
   hair: { stiff: 0.09, drag: 0.06, grav: 0.55, maxA: 1.0, wind: 1, cols: ['head', 'neck', 'chest', 'spine', 'upperarm_L', 'upperarm_R'] },
-  // hair standing up off the head (topknot, buns, dreadlocks): springy, holds its shape against gravity, bounces with the head
-  tuft: { stiff: 0.32, drag: 0.1, grav: 0.12, maxA: 0.4, wind: 0.35, cols: ['head'] },
+  // hair standing up off the head (topknot, buns, dreadlocks): springy, holds its shape against gravity, bounces with the head.
+  // Solid masses (a bun is one lump of mesh): a small, stiff bounce - past ~15 degrees the mesh folds where the chain bends
+  tuft: { stiff: 0.42, drag: 0.12, grav: 0.1, maxA: 0.26, wind: 0.3, cols: ['head'] },
   // wide sleeves: hang and swing off the forearm, can't pass through the torso, the thighs or the arm itself
   sleeve: { stiff: 0.11, drag: 0.06, grav: 0.95, maxA: 1.1, wind: 0.8, cols: ['spine', 'chest', 'hips', 'thigh_L', 'thigh_R', 'forearm_L', 'forearm_R'] },
   skirt: { stiff: 0.16, drag: 0.06, grav: 0.9, maxA: 0.7, wind: 0.5, cols: ['hips', 'spine', 'thigh_L', 'thigh_R', 'shin_L', 'shin_R'] },
