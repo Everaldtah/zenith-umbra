@@ -88,9 +88,9 @@ class PuppetBrain {
 /** the nearest enemy hero, spread out so the whole army doesn't pile onto one body */
 function pickTarget(w: World, a: Actor): Actor | null {
   const t = w.time;
-  const foes = w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon && x.def.id !== 'bot_dummy'
+  const foes = w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon
     && !x.has('phased', t) && !(x.has('stealth', t) && !x.has('revealed', t)));
-  const pool = foes.length ? foes : w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon);
+  const pool = foes.length ? foes : w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon);   // (the veiled, if that's all there is)
   if (!pool.length) return null;
   const army = w.actors.filter(x => x.alive && x.isSummon && x.team === a.team && x !== a);
   const cap = Math.ceil((army.length + 1) / pool.length) + 2;
