@@ -23,7 +23,8 @@ const PLAN: Record<string, Plan> = {
   colossus: { secs: 10, fight: 4 },
   nova: { secs: 5 },
   rebirth: { secs: 6, dead: 1.5 },
-  sanctuary: { secs: 6 },
+  sanctuary: { secs: 6 },                       // (the web edition's Kaien)
+  sealstorm: { secs: 16, wide: 0.4, tough: 3 },  // Divine Seal Storm: bursts on every enemy within 18 m for 15 s
   judgment: { secs: 7, fight: 2.2 },
   susanoo: { secs: 11, wide: 0.6, tough: 2.5 },
   hundredsuns: { secs: 4.5 },
