@@ -1150,6 +1150,52 @@
    },
    "hd": true,
    "fpArms": true
+  },
+  "enra_susanoo": {
+   "height": 6.15,
+   "tris": 18672,
+   "bones": [
+    "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.64842,
+    "spine": 0.54883,
+    "chest": 0.44695,
+    "neck": 0.42667,
+    "head": 0.37338,
+    "upperarm_L": 0.62373,
+    "upperarm_R": 0.62825,
+    "forearm_L": 0.46634,
+    "forearm_R": 0.38324,
+    "thigh_L": 0.49811,
+    "thigh_R": 0.51466,
+    "shin_L": 0.25441,
+    "shin_R": 0.25745
+   }
+  },
+  "raijin_susanoo": {
+   "height": 5.4,
+   "tris": 18517,
+   "bones": [
+    "humanoid"
+   ],
+   "source": "tripo",
+   "colliders": {
+    "hips": 0.37132,
+    "spine": 0.49324,
+    "chest": 0.27676,
+    "neck": 0.25185,
+    "head": 0.29901,
+    "upperarm_L": 0.26209,
+    "upperarm_R": 0.24198,
+    "forearm_L": 0.11557,
+    "forearm_R": 0.1329,
+    "thigh_L": 0.40694,
+    "thigh_R": 0.43212,
+    "shin_L": 0.14215,
+    "shin_R": 0.14576
+   }
   }
  },
  "props": {
@@ -1322,6 +1368,9 @@
    "height": 1
   },
   "prop_hayate_shuriken": {
+   "height": 1
+  },
+  "prop_enra_blade": {
    "height": 1
   }
  },
