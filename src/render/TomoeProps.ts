@@ -54,7 +54,8 @@ export function buildFang(modelHeight: number): THREE.Group {
   put(body, new THREE.CylinderGeometry(0.011 * L, 0.012 * L, 0.07 * L, 10).rotateX(Math.PI / 2), M.dark, 0, 0, 0);
   put(body, new THREE.SphereGeometry(0.014 * L, 10, 8), M.gem, 0, 0, -0.04 * L);                    // gem pommel
   body.scale.setScalar(0.7);
-  upgrade(body, 'prop_tomoe_blade', 'blade', 0.26 * L / 0.7, new THREE.Vector3(0, 0, 0.1 * L));
+  // the knife's grip is the back third of it: centred a little further forward so the fist closes on the middle of the grip
+  upgrade(body, 'prop_tomoe_blade', 'blade', 0.26 * L / 0.7, new THREE.Vector3(0, 0, 0.125 * L));
   return g;
 }
 
