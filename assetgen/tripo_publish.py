@@ -20,7 +20,7 @@ RIGGED = HERE / 'out' / 'rigged_tripo'
 #   the --hair chains at the neck (Hayate's scarf)
 WHITE = ['--hair-rgb', '0.9,0.9,0.9']
 # masks and shades: MediaPipe still finds a "face" on a skull mask or behind sunglasses, and skin lids would blink over them
-NO_BLINK = {'hex', 'kagemaru', 'hibiki', 'hibiki_armor'}
+NO_BLINK = {'hex', 'kagemaru', 'hibiki', 'hibiki_armor', 'enra_susanoo', 'raijin_susanoo'}   # (the Susanoo forms are holograms)
 # ...and the masks' sockets glow instead (the detected eyes are stored as glowEyes; CharacterView's EyeGlow)
 GLOW_EYES = {'hex', 'kagemaru'}
 # desktop close-ups (the first-person viewmodel, the Hero Viewer): the original high-detail generation (real fingers, folds,
@@ -44,6 +44,8 @@ TRIPO = {
     'tomoe': (2.0, ['--chains']), 'hayate': (1.78, ['--hair', '--scarf', '--hair-rgb', '0.153,0.416,0.384', '--hair-tol', '0.2']),
     'seiran': (1.84, ['--chains', '--hair']), 'hibiki_armor': (1.82, ['--crown']),
     'qelvaris': (2.3, ['--chains']), 'minion_lancer': (2.0, []), 'minion_sentinel': (2.2, ['--mech']),
+    # the summoned ultimates' giant forms (Enra's Crimson Effigy, Raijin's Susanoo): 3x their hero, drawn as holograms
+    'enra_susanoo': (6.15, []), 'raijin_susanoo': (5.4, []),
     'bot_dummy': (1.9, []), 'bot_sentry': (1.7, ['--mech']),
     'boss_ironmaw': (14, ['--mech']), 'boss_leviathan': (16, ['--mech']), 'boss_reaper': (16, ['--mech']), 'boss_genesis': (18, ['--mech']),
 }

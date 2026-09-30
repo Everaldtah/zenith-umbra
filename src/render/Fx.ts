@@ -411,7 +411,13 @@ export class Fx {
       else if (t.kind === 'beam' || t.kind === 'fade' || t.kind === 'fadegeo') { if (mat) mat.opacity = 0.9 * (1 - k); }
       else if (t.kind === 'shatter') { t.obj.scale.set(Math.min(1, k * 2.6), Math.min(1, k * 2.6), 1); if (mat) mat.opacity = 0.75 * (1 - k * k); }
       else if (t.kind === 'tether' && t.actor && t.target) { this.orient(t.obj, t.actor.center, t.target.center, t.r ?? 0.03); if (mat) mat.opacity = 0.7 + 0.3 * Math.sin(now * 20); t.obj.visible = t.actor.alive && t.target.alive; }
-      else if (t.kind === 'trail' && t.actor) { const c = (t.obj as any).__col as THREE.Color; this.parts.emit(t.actor.center, 3, c, { speed: 1, life: 0.35, size: 0.4, spread: 0.6 }); }
+      else if (t.kind === 'trail' && t.actor) {
+        // a speed trail off the waist, small: a chase camera follows a dashing hero (Tomoe's Warpath, the Groove) a few
+        // metres behind at head height, straight through whatever the trail leaves - chest-high 0.4 m puffs washed the
+        // whole screen cyan for the dash
+        const c = (t.obj as any).__col as THREE.Color, a = t.actor;
+        this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.42, z: a.pos.z }, 2, c, { speed: 0.8, life: 0.3, size: 0.24, spread: 0.35 });
+      }
       else if (t.kind === 'pod' && t.from) {
         const s = now - t.born;
         t.obj.position.set(t.from.x - s * 2, t.from.y + s * 9 - s * s * 2.2, t.from.z + s * 1.5); t.obj.rotation.z = s * 3;

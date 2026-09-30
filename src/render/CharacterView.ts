@@ -226,6 +226,8 @@ export class CharacterView {
   noSmear = false;
   private downYaw: number | null = null;
   private tideMarked = false;
+  /** a hologram (a summoned effigy, HeroDef.holo): tinted, emissive and translucent, rising in and fading out */
+  private get holo() { return this.actor.def.holo; }
   private spinA = [0, 0];
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
@@ -281,7 +283,10 @@ export class CharacterView {
   }
 
   /** the model this skin wears: its own (model skins, when published) or the hero's */
-  private modelIdFor(s: Skin) { return s.model && hasModel(s.model) ? s.model : this.actor.def.id; }
+  private modelIdFor(s: Skin) {
+    const d = this.actor.def;
+    return d.model && hasModel(d.model) ? d.model : s.model && hasModel(s.model) ? s.model : d.id;   // (a summon wears its own form)
+  }
   private loadedModel = '';
   private loadSeq = 0;
 
@@ -446,6 +451,21 @@ export class CharacterView {
         for (const mt of own) { if ((mt as THREE.MeshStandardMaterial).isMeshStandardMaterial) addLook(mt, this.look); this.mats.push(mt); }
       }
     });
+    if (this.holo) this.hologram(this.holo);
+  }
+
+  /** a summoned effigy's look: the body lit from within in its colour, translucent, rim-lit - a solid enough hologram to
+   *  read as a giant figure (Enra's crimson oni, Raijin's Susanoo) */
+  private hologram(col: string) {
+    const c = new THREE.Color(col);
+    for (const mt of this.mats) {
+      const m = mt as THREE.MeshStandardMaterial;
+      if (!m.isMeshStandardMaterial) continue;
+      m.color.copy(c).lerp(new THREE.Color('#ffffff'), 0.3);
+      m.emissive.copy(c); m.emissiveIntensity = 0.85; m.roughness = 0.6; m.metalness = 0;
+      m.transparent = true; m.opacity = 0.82; m.depthWrite = true; m.needsUpdate = true;
+    }
+    this.rimColor.copy(c).lerp(new THREE.Color('#ffffff'), 0.4);
   }
 
   private fitMannequin() { this.scaleFit = 1; this.model.scale.setScalar(1); }
@@ -710,6 +730,14 @@ export class CharacterView {
       this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
       return;
     }
+    if (!a.alive && this.holo) {
+      // a summon dismissed: the hologram fades out where it stands
+      const k = Math.min(1, (time - a.deathAt) / 0.45);
+      for (const m of this.mats) m.opacity = 0.82 * (1 - k);
+      this.group.visible = k < 1;
+      this.rim.value = 0;
+      return;
+    }
     if (!a.alive) {
       const k = Math.min(1, (time - a.deathAt) / (a.def.frame === 'mech' ? 1.1 : 0.7));
       this.inner.rotation.x = -k * k * Math.PI / 2 * 0.95;
@@ -723,13 +751,21 @@ export class CharacterView {
     const stealth = a.has('stealth', time);
     const seen = viewer.sees(a);
     const alpha = stealth ? (a.team === viewer.team ? 0.35 : seen ? 0.25 : 0.04) : 1;
-    if (stealth !== this.stealthed) {
+    if (stealth !== this.stealthed && !this.holo) {
       this.stealthed = stealth;
       for (const m of this.mats) { m.transparent = stealth; m.depthWrite = !stealth; m.needsUpdate = true; }
     }
-    if (stealth) for (const m of this.mats) m.opacity = alpha;
+    if (stealth && !this.holo) for (const m of this.mats) m.opacity = alpha;
+    if (this.holo) {
+      // rising out of the ground over the rise window, then a slow pulse of the glow
+      const rise = a.sv.riseUntil !== undefined && time < a.sv.riseUntil ? Math.max(0, (time - (a.sv.riseAt ?? time)) / Math.max(0.01, a.sv.riseUntil - (a.sv.riseAt ?? time))) : 1;
+      const k = rise * rise * (3 - 2 * rise);
+      for (const m of this.mats) m.opacity = 0.82 * Math.min(1, 0.2 + k);
+      this.inner.position.y -= (1 - k) * a.height * 0.9;
+      this.rim.value = 1.6 + 0.6 * Math.sin(time * 4);
+    }
     const marked = a.has('revealed', time) || a.has('marked', time);
-    this.rim.value = a.team === viewer.team ? 0.25 : (marked ? 1.6 : 0.7);
+    if (!this.holo) this.rim.value = a.team === viewer.team ? 0.25 : (marked ? 1.6 : 0.7);
     // cut by the Crescent Warpath ('tidemark'): the hero glows blue while weakened - for both teams
     const tided = a.has('tidemark', time);
     if (tided !== this.tideMarked) { this.tideMarked = tided; this.rimColor.set(tided ? TIDE_BLUE : a.team === viewer.team ? UI_COLORS.ally : UI_COLORS.enemy); }

@@ -28,6 +28,8 @@ import { CharacterView } from '../render/CharacterView';
 import { PuppetSwarm } from '../render/PuppetSwarm';
 import { thrownPropReady } from '../render/HeldProps';
 import { FirstPersonArms, FP_STYLE } from '../render/FirstPerson';
+/** the model each summoning ultimate raises (preloaded with the match) */
+const SUMMON_MODEL: Record<string, string> = { effigy: 'enra_susanoo', susanoo: 'raijin_susanoo' };
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
@@ -370,6 +372,8 @@ export class Game {
       for (const id of [...Object.keys(ENEMIES), ...Object.keys(BOSSES)]) if (enc.includes(`"${id}"`)) later.add(id);
       later.add(L.boss);
     }
+    // the giant forms the ultimates summon (Enra's Crimson Effigy, Raijin's Susanoo) load before the match starts
+    for (const a of w.actors) { const sm = SUMMON_MODEL[a.def.ult.id]; if (sm && hasModel(sm)) later.add(sm); }
     const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
     const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
     if (this.swarm) laterLoads.push(this.swarm.ready);
@@ -520,7 +524,7 @@ export class Game {
   }
 
   private addView(a: Actor, viewerTeam: string) {
-    if (a.isSummon) return;                   // (the swarm draws these)
+    if (a.isSummon && !a.def.model) return;   // (the swarm draws those; a summon with a model of its own gets a body)
     const v = new CharacterView(a, viewerTeam, a.isPlayer ? equippedSkin(a.def.id) : 'classic');
     v.onStep = (act, _side, heavy) => {
       if (!this.match) return;
@@ -642,7 +646,7 @@ export class Game {
       // the World swaps hero defs (Tenkai-Oh's pilot ejecting / calling the mech back): rebuild that actor's view
       const old = this.views.get(a.id);
       if (old && old.defId !== a.def.id) { this.scene.remove(old.group); old.dispose(); this.views.delete(a.id); }
-      if (a.isSummon) { this.swarm ??= new PuppetSwarm(this.scene); continue; }
+      if (a.isSummon && !a.def.model) { this.swarm ??= new PuppetSwarm(this.scene); continue; }
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
       v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);

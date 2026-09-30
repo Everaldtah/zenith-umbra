@@ -1,6 +1,7 @@
 // Tomoe's Crescent Warpath in a real match, slow motion: the spin through the air in third person (a side camera), the
 // blue glow on the heroes it cut through ('tidemark'), and the same flight in first person.
 //   node tests/e2e/tide_shot.mjs [port]      ->  tests/e2e/shots/tide_3p.png, tests/e2e/shots/tide_fp.png
+//   CHASE=1: the game's own camera in the third-person pass (what the player sees) instead of the side camera
 // The dash is started here the way the ability does (a.forced kind 'tide', sv.tideT0 / tideDur), slower, so the poses can
 // be checked on any build.
 import puppeteer from 'puppeteer-core';
@@ -53,7 +54,7 @@ const strip = async (name, shots, labels, cols) => {
   console.log(`tests/e2e/shots/${name}.png`);
 };
 for (const view of ['third', 'first']) {
-  await p.evaluate(v => { const g = window.__zu.game; g.settings.view = v; window.__side = v === 'third'; g.timeScale = 1; }, view);
+  await p.evaluate((v, chase) => { const g = window.__zu.game; g.settings.view = v; window.__side = v === 'third' && !chase; g.timeScale = 1; }, view, !!process.env.CHASE);
   for (let i = 0; i < 5; i++) { await p.evaluate(() => { const z = window.__zu; if (z.game.paused) z.game.setPaused(false); }); await wait(500); }
   await p.evaluate(k => { window.__zu.game.timeScale = 1 / k; }, SLOW);
   const shots = [], labels = [];

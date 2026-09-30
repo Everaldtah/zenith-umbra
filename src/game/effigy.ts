@@ -28,7 +28,7 @@ export const EFFIGY_DEF: HeroDef = {
   secondary: none('none'), ability1: none('none'), ability2: none('none'), ult: { ...none('none'), charge: 1e9 },
   passive: { name: '', desc: '' }, lore: 'The oni as the old stories drew him: a mountain of red fire with a blade the size of a gate.', inspiration: '', voice: [80, 0.9],
   summoned: true, full: true,
-  model: 'enra', holo: '#ff2a2a', scale: 3,
+  model: 'enra_susanoo', holo: '#ff2a2a', scale: 3,     // (system32-82's Tripo Susanoo form, published at 6.15 m)
 };
 
 class EffigyBrain {

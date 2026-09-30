@@ -50,7 +50,7 @@ describe('Crimson Effigy', () => {
     expect(castAbility(w, e, 'effigy', 'ult')).toBe(true);
     const g = effigyOf(w, e)!;
     expect(g).toBeTruthy(); expect(g.alive).toBe(true); expect(g.isSummon).toBe(true); expect(g.owner).toBe(e);
-    expect(g.def.model).toBe('enra'); expect(g.def.height).toBeGreaterThan(5);
+    expect(g.def.model).toBe('enra_susanoo'); expect(g.def.height).toBeGreaterThan(5);
     // behind him (he faces +z)
     expect(g.pos.z).toBeLessThan(e.pos.z);
     const h1 = near1.health, h2 = near2.health, ho = out.health;
