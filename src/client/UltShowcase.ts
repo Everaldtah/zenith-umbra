@@ -30,7 +30,8 @@ const PLAN: Record<string, Plan> = {
   requiem: { secs: 4.5 },
   theater: { secs: 17, wide: 1, tough: 2.5 },
   thousandcuts: { secs: 3.2 },
-  asura: { secs: 8.5, fight: 5 },
+  asura: { secs: 8.5, fight: 5 },                 // (the web edition's Enra)
+  effigy: { secs: 11, fight: 5, wide: 0.5, tough: 2 },   // the Crimson Effigy rises behind him and sweeps 12 m for 10 s
   dohyo: { secs: 7, near: 3, fight: 2.5 },
   bassdrop: { secs: 5 },
   tide: { secs: 6, flat: true, wide: 0.45, track: 'row' },
