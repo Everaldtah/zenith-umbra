@@ -1,8 +1,9 @@
-// Tomoe's Crescent Warpath: a 20 m flight in one arc, through every enemy in the way; whoever she passes is cut, wounded
-// and MARKED for 10 s (more damage from anyone's hits); a click ends the flight; it never carries her out of the arena.
+// Tomoe's Crescent Warpath: a 20 m dash along the ground (Junker Queen's Rampage), through every enemy in the way like a
+// ghost; whoever she passes is cut, wounded and MARKED for 10 s (more damage from anyone's hits); a click ends the dash;
+// it never carries her out of the arena.
 import { World } from '../../src/game/World';
 import type { Actor } from '../../src/game/Actor';
-import { TIDE_LEN, TIDE_MARK, TIDE_MARK_AMP, TIDE_APEX, tideReach } from '../../src/game/abilities';
+import { TIDE_LEN, TIDE_SPEED, TIDE_MARK, TIDE_MARK_AMP, tideReach } from '../../src/game/abilities';
 
 const DT = 1 / 60;
 const OX = -10, OZ = -12;     // the clear lane of the training grounds (see kit.test.ts)
@@ -19,18 +20,17 @@ const arena = () => new World('training', 'training');
 function tomoe(w: World, x = 0, z = 0, yaw = 0) { const q = place(w, 'tomoe', 'zenith', x, z, yaw); q.ult = q.def.ult.charge; return q; }
 
 describe('Tomoe: Crescent Warpath', () => {
-  it('flies 20 m in an arc and lands on the far side', () => {
+  it('dashes 20 m along the ground, on her feet the whole way, and stops on the far side', () => {
     const w = arena(), q = tomoe(w);
     const z0 = q.pos.z, y0 = q.pos.y;
     tap(w, q, 'ult');
     expect(q.forced?.kind).toBe('tide');
     expect(q.sv.tideT0).toBeGreaterThan(0);
-    expect(q.sv.tideDur).toBeCloseTo(1, 1);
+    expect(q.sv.tideDur).toBeCloseTo(TIDE_LEN / TIDE_SPEED, 1);
     let top = 0, air = 0;
-    run(w, 0.9, () => { top = Math.max(top, q.pos.y - y0); if (!q.grounded) air++; });
-    expect(top).toBeGreaterThan(TIDE_APEX - 0.4);
-    expect(top).toBeLessThan(TIDE_APEX + 0.4);
-    expect(air).toBeGreaterThan(45);                        // in the air for the flight, not sliding along the floor
+    run(w, TIDE_LEN / TIDE_SPEED - 0.1, () => { top = Math.max(top, q.pos.y - y0); if (!q.grounded) air++; });
+    expect(top).toBeLessThan(0.3);                          // no jump: Rampage runs
+    expect(air).toBe(0);
     run(w, 0.6);
     expect(q.forced).toBeNull();
     expect(q.grounded).toBe(true);
@@ -50,13 +50,13 @@ describe('Tomoe: Crescent Warpath', () => {
     expect(foe.wounds.length).toBe(1);
   });
 
-  it('is a ghost to bodies for the whole flight: low in the arc, at take-off and landing, nobody is shoved and neither is she', () => {
+  it('is a ghost to bodies for the whole dash: nobody in the lane is shoved and neither is she', () => {
     const w = arena(), q = tomoe(w);
     const near = place(w, 'raijin', 'umbra', 0, 1.6), far = place(w, 'raijin', 'umbra', 0, 18.6);
     const x0 = q.pos.x, n = { ...near.pos }, f = { ...far.pos };
     tap(w, q, 'ult');
     let off = 0;
-    run(w, 0.9, () => { off = Math.max(off, Math.abs(q.pos.x - x0)); });
+    run(w, 0.7, () => { off = Math.max(off, Math.abs(q.pos.x - x0)); });
     expect(off).toBeLessThan(0.05);
     expect(Math.hypot(near.pos.x - n.x, near.pos.z - n.z)).toBeLessThan(0.05);
     expect(Math.hypot(far.pos.x - f.x, far.pos.z - f.z)).toBeLessThan(0.05);
@@ -84,10 +84,10 @@ describe('Tomoe: Crescent Warpath', () => {
     expect(hit.has('tidemark', w.time)).toBe(false);
   });
 
-  it('a click drops her out of the flight; holding fire from before the cast does not', () => {
+  it('a click stops the dash where she is; holding fire from before the cast does not', () => {
     const w = arena(), q = tomoe(w);
     const z0 = q.pos.z, ammo = q.ammo;
-    tap(w, q, 'ult'); run(w, 0.4);
+    tap(w, q, 'ult'); run(w, 0.3);
     tap(w, q, 'fire'); run(w, 2 * DT);
     expect(q.forced).toBeNull();
     expect(q.has('tideult', w.time)).toBe(false);

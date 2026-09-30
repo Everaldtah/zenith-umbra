@@ -663,21 +663,23 @@ const I: Record<string, Impl> = {
     return true;
   },
   tide(w, a) {
-    // Crescent Warpath: she leaves the ground and flies the lane in one arc, axe and Fang wheeling around her, straight
-    // through every body in the way; whoever she passes is cut, wounded, starved of healing and MARKED (tidemark)
+    // Crescent Warpath: she zooms the lane along the ground, the axe wheeling around her, straight through every body in
+    // the way; whoever she passes is cut, wounded, starved of healing and MARKED (tidemark). (TIDE_APEX > 0 makes it an
+    // airborne arc instead - the first version, before the user asked for Junker Queen's ground dash.)
     const t = w.time, d = flatDir(a);
     const dist = tideReach(w, a, d), dur = Math.max(TIDE_MIN_SECS, dist / TIDE_SPEED);
     (a as any)._tideHit = new Set<number>();
-    a.sv.tideT0 = t; a.sv.tideDur = dur; a.sv.tideApex = Math.max(1.2, TIDE_APEX * Math.sqrt(dist / TIDE_LEN));
+    a.sv.tideT0 = t; a.sv.tideDur = dur; a.sv.tideApex = TIDE_APEX > 0 ? Math.max(1.2, TIDE_APEX * Math.sqrt(dist / TIDE_LEN)) : 0;
     a.sv.tideX = a.pos.x; a.sv.tideZ = a.pos.z; a.sv.tideStuck = 0;
-    a.forced = { vx: d.x * dist / dur, vy: 4 * a.sv.tideApex / dur, vz: d.z * dist / dur, until: t + dur, kind: 'tide', ignoreGravity: true, onEnd: () => {
-      // (the end of the arc, a click, a wall: wherever it ends, she comes down there)
+    const air = a.sv.tideApex > 0;
+    a.forced = { vx: d.x * dist / dur, vy: air ? 4 * a.sv.tideApex / dur : 0, vz: d.z * dist / dur, until: t + dur, kind: 'tide', ignoreGravity: air, onEnd: () => {
+      // (the end of the lane, a click, a wall: wherever it ends, she stops there)
       a.clear('tideult'); a.set('ccimmune', w.time, 0.15);
       a.cd.reaping = 0;
       if (a.sv.fang) fangHome(w, a); else a.cd.crescent = 0;
       w.fx('slam', a.pos, { r: 3, color: a.def.glow, actor: a }); w.sfx('slam', a.pos, a);
     } };
-    a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
+    if (air) { a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t; }
     a.set('ccimmune', t, dur + 0.15); a.set('tideult', t, dur + 0.05);
     w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur });
     w.sfx('ultcall', a.center, a); w.sfx('charge', a.center, a); w.sfx('roar', a.center, a);
@@ -698,8 +700,9 @@ const I: Record<string, Impl> = {
 // Tomoe's numbers
 export const FANG_DMG = 55, FANG_WOUND = 30, FANG_SPEED = 42, FANG_RANGE = 30, FANG_BACK = 46, FANG_STICK = 6;
 export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42;
-/** Crescent Warpath: the flight (m, m/s, the top of the arc in m), the lane under the wheeling blades (half-width, m) */
-export const TIDE_LEN = 20, TIDE_SPEED = 20, TIDE_APEX = 3, TIDE_HALF = 2.5, TIDE_MIN_SECS = 0.35;
+/** Crescent Warpath: the dash (m, m/s - Rampage runs 25 m in 0.7 s), the top of the arc if it flies (0 = along the
+ *  ground, the user's call), the lane under the wheeling blades (half-width, m) */
+export const TIDE_LEN = 20, TIDE_SPEED = 28, TIDE_APEX = 0, TIDE_HALF = 2.5, TIDE_MIN_SECS = 0.35;
 /** ... the cut, the wound, the healing it denies (s) */
 export const TIDE_CUT = 40, TIDE_WOUND = 90, TIDE_ANTIHEAL = 4.5;
 /** ... the mark it leaves: seconds, damage taken from anyone (x), the colour of the glow */
@@ -1119,24 +1122,25 @@ export function tickAbilities(w: World, dt: number) {
       // Crescent Warpath: each enemy under the wheel of blades is passed through once - cut, wounded, marked
       const hit: Set<number> = (a as any)._tideHit ?? ((a as any)._tideHit = new Set<number>());
       const f = norm({ x: a.forced.vx, y: 0, z: a.forced.vz });
-      const flying = a.sv.tideT0 !== undefined && !!a.forced.ignoreGravity;     // (the Hero Viewer holds the pose without a flight)
-      if (flying) {
-        // the arc: up over the first half, down over the second
+      const live = a.sv.tideX !== undefined && a.forced.until < 1e8;        // (the Hero Viewer holds the pose without a dash)
+      const air = live && !!a.forced.ignoreGravity && a.sv.tideApex > 0;
+      if (live) {
         const s = (t - a.sv.tideT0) / a.sv.tideDur;
-        a.forced.vy = 4 * a.sv.tideApex * (1 - 2 * s) / a.sv.tideDur;
-        // stopped by a wall (or the rope of a Grand Dohyo), or down early on higher ground: it ends there
+        // the arc, if it flies: up over the first half, down over the second
+        if (air) a.forced.vy = 4 * a.sv.tideApex * (1 - 2 * s) / a.sv.tideDur;
+        // stopped by a wall (or the rope of a Grand Dohyo), or a flight down early on higher ground: it ends there
         const want = Math.hypot(a.forced.vx, a.forced.vz) * dt, went = Math.hypot(a.pos.x - a.sv.tideX, a.pos.z - a.sv.tideZ);
         a.sv.tideStuck = want > 0.01 && went < want * 0.25 ? a.sv.tideStuck + 1 : 0;
         a.sv.tideX = a.pos.x; a.sv.tideZ = a.pos.z;
-        if (a.sv.tideStuck >= 3 || (a.grounded && s > 0.5)) a.forced.until = t;
+        if (a.sv.tideStuck >= 3 || (air && a.grounded && s > 0.5)) a.forced.until = t;
       }
       for (const x of w.enemies(a)) {
         if (hit.has(x.id) || x.has('phased', t)) continue;
         const v = { x: x.pos.x - a.pos.x, z: x.pos.z - a.pos.z }, along = v.x * f.x + v.z * f.z, lat = Math.abs(v.x * -f.z + v.z * f.x);
         if (along < -a.radius - x.radius - 0.5 || along > a.radius + x.radius + 1.4 || lat > TIDE_HALF + x.radius) continue;
-        // (she is up to TIDE_APEX above the floor they stand on)
+        // (if it flies she is up to TIDE_APEX above the floor they stand on)
         if (x.pos.y + x.height < a.pos.y - TIDE_APEX - 1.5 || x.pos.y > a.pos.y + a.height + 1) continue;
-        if (flying && !w.level.lineOfSight(a.center, x.center)) continue;
+        if (live && !w.level.lineOfSight(a.center, x.center)) continue;
         hit.add(x.id);
         x.set('tidemark', t, TIDE_MARK, undefined, a);
         w.damage(a, x, TIDE_CUT, { kind: 'ability' }); wound(w, a, x, TIDE_WOUND); x.set('antiheal', t, TIDE_ANTIHEAL, undefined, a);

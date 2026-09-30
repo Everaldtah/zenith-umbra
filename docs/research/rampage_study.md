@@ -49,7 +49,7 @@ through the torso, sparks, the halo pulsing about every 0.35 s, for the length o
 ## 3. The user's twists, and what Tomoe does
 | Rampage | Crescent Warpath (the user's request) | implemented |
 |---|---|---|
-| a 25 m ground dash | travel IN THE AIR, land on the other side, about 20 m | a 1.0 s flight in one arc (`TIDE_LEN` 20 m at 20 m/s, `TIDE_APEX` 3 m), driven by `a.forced` with its own vertical velocity; she lands where the arc ends or drops where it is cut short |
+| a 25 m ground dash in 0.7 s | first ask: travel IN THE AIR and land on the other side, about 20 m; second ask (via evera-bc): "just her zooming forward across her enemies to the other side", no jump | now a ground dash: 20 m at 28 m/s = 0.71 s (`TIDE_LEN`, `TIDE_SPEED`), `a.forced` 'tide' under gravity; `TIDE_APEX` 0 - set it above 0 and the first version's arc comes back |
 | bodies stop her | warp through enemies like a ghost | body separation skips her for the whole flight; the lane is 2.5 m to each side of her line (`TIDE_HALF`), reaching down to the floor she took off from; walls block it (line of sight) |
 | she runs, the weapons orbit | a spin animation, axe and knife spinning as she goes through | evera-c1: whole-body spin about her axis plus the weapons wheeling (numbers above); first person: the axe and Fang sweep in mirrored circles, no camera spin |
 | wound + anti-heal | ... plus a BLUE glow that weakens them for ~10 s: more damage from anyone | status `tidemark` 10 s (`TIDE_MARK`): x1.25 damage taken from every source (`TIDE_MARK_AMP`, in `World.damage`, doesn't stack on Hex's `vuln`); cleansable; `TIDE_MARK_COLOR` #4aa8ff; the HUD shows CRESCENT MARK +25% |
