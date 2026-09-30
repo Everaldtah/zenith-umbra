@@ -16,8 +16,9 @@ import { sfx } from '../audio/Sfx';
 /** how each ult is shown: `secs` from the cast to the replay; `near` walks within that of a target before casting (the
  *  Dohyo is stamped around you); `fight` closes to that range after the cast and keeps attacking (the timed ults);
  *  `flat` aims level (the ult travels along the ground); `wide` pulls the camera out and ahead (45 m koi-dragons);
- *  `tough` armours the enemy dummies to this many times their health, so a long ult has targets for its whole length */
-interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number; tough?: number }
+ *  `tough` armours the enemy dummies to this many times their health, so a long ult has targets for its whole length;
+ *  `track: 'row'` keeps the camera on the target row instead of following the hero (a 20 m flight through it) */
+interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number; tough?: number; track?: 'row' }
 const PLAN: Record<string, Plan> = {
   colossus: { secs: 10, fight: 4 },
   nova: { secs: 5 },
@@ -31,7 +32,7 @@ const PLAN: Record<string, Plan> = {
   asura: { secs: 8.5, fight: 5 },
   dohyo: { secs: 7, near: 3, fight: 2.5 },
   bassdrop: { secs: 5 },
-  tide: { secs: 6, flat: true, wide: 1 },
+  tide: { secs: 6, flat: true, wide: 0.45, track: 'row' },
   dragongate: { secs: 10, fight: 2.6 },
   twinkoi: { secs: 5, flat: true, wide: 1 },
 };
@@ -148,11 +149,11 @@ export class UltShowcase {
   /** a slow three-quarter orbit behind the hero's shoulder, framing the hero and the target row (wider for the koi) */
   camera(cam: THREE.PerspectiveCamera, dt: number) {
     const h = this.hero, H = h.height, P = this.plan;
-    const ahead = P.wide ? 14 : 5;
-    const want = { x: h.pos.x + ahead * 0.9, y: h.pos.y + H * 0.45 + 0.4, z: LZ + (h.pos.z - LZ) * 0.6 };
+    const ahead = 5 + 9 * (P.wide ?? 0);
+    const want = P.track === 'row' ? { x: 3.5, y: 1.2, z: LZ } : { x: h.pos.x + ahead * 0.9, y: h.pos.y + H * 0.45 + 0.4, z: LZ + (h.pos.z - LZ) * 0.6 };
     const k = this.camInit ? 1 - Math.exp(-dt * 3) : 1;
     this.focus.x += (want.x - this.focus.x) * k; this.focus.y += (want.y - this.focus.y) * k; this.focus.z += (want.z - this.focus.z) * k;
-    const r = Math.max(9, H * 3.2) * (P.wide ? 2.1 : 1) * this.zoom;
+    const r = Math.max(9, H * 3.2) * (1 + 1.1 * (P.wide ?? 0)) * this.zoom;
     const base = -2.2 + Math.sin(this.w.time * 0.18) * 0.28 + this.orbit, F = this.focus, L = this.w.level;
     // keep a clear shot: nothing between the lens and the action, and no prop right in front of the lens (the Proving
     // Grounds' barriers) - swing around a little first, then rise over it

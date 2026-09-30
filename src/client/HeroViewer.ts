@@ -216,8 +216,14 @@ export class HeroViewer {
     if (m === 'ult') {
       // Tenkai-Oh previews the giant form; everyone else plays their ult cast
       if (a.def.ult.id === 'colossus') { a.set('titan', T, 9999); a.scale += (TITAN_SCALE - a.scale) * Math.min(1, dt * 2.6); }
-      // Tomoe: the Crescent Warpath charge (axe out in front, unstoppable lean)
-      else if (a.def.ult.id === 'tide') { a.forced = { vx: 0, vy: 0, vz: 0, until: 1e9, kind: 'tide' }; a.set('tideult', T, 0.2); a.vel = { x: 0, y: 0, z: 9 }; }
+      // Tomoe: the Crescent Warpath flight, looped - the 1.2 s twirl through the air (the view reads sv.tideT0 / tideDur), a
+      // 3 m hop for the arc, then a beat on the ground before the next
+      else if (a.def.ult.id === 'tide') {
+        const u = T % 2.6, dur = 1.2, fly = u < dur;
+        a.forced = fly ? { vx: 0, vy: 0, vz: 0, until: 1e9, kind: 'tide', ignoreGravity: true } : null;
+        if (fly) { a.sv.tideT0 = T - u; a.sv.tideDur = dur; a.sv.tideApex = 3; a.set('tideult', T, 0.2); a.vel = { x: 0, y: 4 * 3 * (1 - 2 * u / dur) / dur, z: 20 / dur }; a.pos.y = 4 * 0.9 * (u / dur) * (1 - u / dur); a.grounded = false; }   // (a lower hop than the 3 m arc: the turntable frames the ground)
+        else { delete a.sv.tideT0; a.grounded = true; }
+      }
       else if (T % 1.6 < dt) { a.anim.castAt = T; a.anim.castId = a.def.ult.id; }
     } else if (a.forced?.kind === 'tide') a.forced = null;
     if (m === 'alt' && !a.def.dualGuns && T % 1.1 < dt) { a.anim.attackAt = T; a.anim.attackKind = 'secondary'; }
