@@ -783,6 +783,12 @@ export class Fx {
       if (a.has('silence', now) && Math.random() < 0.3 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height + 0.3, z: a.pos.z }, 1, new THREE.Color('#ff4d6d'), { speed: 0.3, life: 0.4, size: 0.3 });
       if (a.has('antiheal', now) && Math.random() < 0.2 * k) this.parts.emit(c, 1, new THREE.Color('#7b2cbf'), { speed: 0.5, life: 0.6, size: 0.25, up: 0.8, spread: a.radius });
       if (a.has('hot', now) && Math.random() < 0.3 * k) this.parts.emit(c, 1, new THREE.Color('#9dffb0'), { speed: 0.5, life: 0.7, size: 0.2, up: 1.5, spread: a.radius });
+      // Hex's life tithe (the puppet army mending its teammates): violet threads winding up the mended hero, a pulse of
+      // brighter ones on the beat - so a healed ally reads in third person and in the Ult Viewer
+      if (a.has('tithe', now) && Math.random() < (0.45 + 0.4 * Math.max(0, Math.sin(now * 4))) * k) {
+        const th = now * 5 + a.id, r = a.radius * 0.9;
+        this.parts.emit({ x: a.pos.x + Math.cos(th) * r, y: a.pos.y + a.height * (0.15 + 0.5 * Math.random()), z: a.pos.z + Math.sin(th) * r }, 1, new THREE.Color(Math.random() < 0.7 ? '#c77dff' : '#f0d8ff'), { speed: 0.3, life: 0.8, size: 0.22, up: 1.6, spread: 0.15 });
+      }
       if (a.has('judgment', now) && Math.random() < 0.5 * k) this.parts.emit(c, 1, new THREE.Color('#8ad8ff'), { speed: 3, life: 0.2, size: 0.18, spread: a.radius * 2 });
       if (a.has('asura', now) && Math.random() < 0.6 * k) this.parts.emit(c, 1, new THREE.Color(Math.random() < 0.5 ? '#ff6a2a' : '#b026ff'), { speed: 1, life: 0.5, size: 0.4, up: 2.5, spread: a.radius * 1.5 });
       if (a.flying && Math.random() < 0.5 * k) this.parts.emit({ x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z }, 1, new THREE.Color(a.def.glow), { speed: 0.6, life: 0.6, size: 0.22, spread: 0.8, grav: 1 });
