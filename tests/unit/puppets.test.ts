@@ -1,7 +1,7 @@
 // Hex - Grand Puppet Theater: fifty puppets rise, fight for him for 15 s, then fall; they fall with him too.
 import { World } from '../../src/game/World';
 import type { Actor } from '../../src/game/Actor';
-import { PUPPET_COUNT, PUPPET_SECS, PUPPET_RISE, puppetsOf } from '../../src/game/puppets';
+import { PUPPET_COUNT, PUPPET_SECS, PUPPET_RISE, PUPPET_HEAL, PUPPET_HEAL_R, puppetsOf } from '../../src/game/puppets';
 
 const DT = 1 / 60;
 function run(w: World, secs: number, each?: () => void) { for (let i = 0; i < Math.round(secs / DT); i++) { each?.(); w.step(DT); w.events.length = 0; } }
@@ -91,6 +91,27 @@ describe('Hex - Grand Puppet Theater', () => {
     expect(h.alive).toBe(false);
     run(w, 0.1);
     expect(standing(w, h).length).toBe(0);
+  });
+
+  it('the life tithe: while the army stands, teammates within 15 m of Hex (and Hex) heal 20 a second, credited to him, with no ultimate charge back', () => {
+    const w = new World('training', 'training');
+    const h = hero(w, 'hex', 'umbra', 0, 0), near = hero(w, 'enra', 'umbra', 6, 2), far = hero(w, 'raijin', 'umbra', PUPPET_HEAL_R + 6, 0);
+    near.hp = near.def.hp - 150; far.hp = far.def.hp - 150; h.hp = h.def.hp - 100;
+    for (const x of [near, far, h]) x.lastDamagedAt = 1e9;                 // (no out-of-combat regen muddying the count)
+    cast(w, h);
+    const ult0 = h.ult, healed0 = h.healDone;
+    run(w, 3);
+    expect(near.has('tithe', w.time)).toBe(true);
+    expect(far.has('tithe', w.time)).toBe(false);
+    expect(near.def.hp - near.hp).toBeCloseTo(150 - PUPPET_HEAL * 3, 0);
+    expect(far.def.hp - far.hp).toBeCloseTo(150, 0);
+    expect(h.def.hp - h.hp).toBeCloseTo(100 - PUPPET_HEAL * 3, 0);
+    expect(h.healDone - healed0).toBeCloseTo(PUPPET_HEAL * 3, 0);          // the teammate's share is his healing done
+    expect(h.ult - ult0).toBeLessThan(3 * 6);                              // only the passive trickle, nothing from the tithe
+    run(w, PUPPET_SECS);
+    expect(standing(w, h)).toHaveLength(0);
+    const hp = near.hp; run(w, 1);
+    expect(near.hp).toBeCloseTo(hp, 0);                                    // the army is down: the tithe stops with it
   });
 
   it('puppets take no objective, health packs or scoreboard rows', () => {

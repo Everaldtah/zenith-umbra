@@ -626,7 +626,7 @@ export class World {
     this.separate();
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
-    tickPuppets(this); tickSusanoo(this);
+    tickPuppets(this, dt); tickSusanoo(this);
     this.zones = this.zones.filter(z => z.until > t);
     this.updatePacks();
     if (this.director) this.director.update(dt);

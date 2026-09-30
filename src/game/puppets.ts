@@ -1,4 +1,5 @@
-// Hex - Grand Puppet Theater: fifty masked puppets rise around him and fight for him, then fall lifeless.
+// Hex - Grand Puppet Theater: fifty masked puppets rise around him and fight for him, then fall lifeless. While they
+// stand they pay a life tithe: every teammate near him is mended (PUPPET_HEAL a second within PUPPET_HEAL_R).
 //
 // The puppets are Actors (every weapon, ability and bot treats them like any other body on the field) from a pool that
 // is reused by each cast, flagged by their def (`summoned`): no respawn, no objective time, no kill feed, no ultimate
@@ -7,6 +8,7 @@ import type { HeroDef, AbilityDef } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import { Actor } from './Actor';
 import type { World } from './World';
+import { dist3 } from './World';
 
 export const PUPPET_COUNT = 50;
 /** how long the army fights before the strings go slack */
@@ -17,6 +19,9 @@ export const PUPPET_RISE = 0.9;
 export const PUPPET_HIT = { dmg: 10, reach: 0.9, every: 0.9 };
 /** cut the strings when the puppeteer falls */
 export const PUPPETS_FALL_WITH_HEX = true;
+/** the life tithe: while the army stands, every teammate within this of Hex (him too) heals this much a second */
+export const PUPPET_HEAL_R = 15, PUPPET_HEAL = 20;
+export const PUPPET_HEAL_COLOR = '#c77dff';
 
 const none = (id: string): AbilityDef => ({ id, name: '-', key: '-', cooldown: 999, desc: '' });
 export const PUPPET_DEF: HeroDef = {
@@ -176,11 +181,22 @@ export function raisePuppets(w: World, a: Actor, count = PUPPET_COUNT, secs = PU
   return count;
 }
 
-/** per tick: the path budget, and the puppeteer's own fall */
-export function tickPuppets(w: World) {
+/** per tick: the path budget, the life tithe, and the puppeteer's own fall */
+export function tickPuppets(w: World, dt: number) {
   w.sv.puppetPaths = 0;
-  if (!PUPPETS_FALL_WITH_HEX) return;
-  for (const a of w.actors) if (!a.alive && !a.isSummon && a.sv.puppetsCast !== undefined && a.deathAt >= a.sv.puppetsCast && w.time - a.deathAt < 0.2) {
-    if (puppetsOf(w, a).some(p => p.alive)) dropPuppets(w, a);
+  const t = w.time;
+  for (const a of w.actors) {
+    if (a.isSummon || a.sv.puppetsCast === undefined) continue;
+    if (a.alive && a.has('puppeteer', t) && puppetsOf(w, a).some(p => p.alive)) {
+      // the life tithe: the army mends every teammate in reach of the puppeteer, him included - his healing done, but
+      // (like the puppets' damage) never charge toward his next ultimate
+      for (const x of w.allies(a)) {
+        if (dist3(x.pos, a.pos) > PUPPET_HEAL_R) continue;
+        x.set('tithe', t, 0.35);
+        if (x.hp < x.def.hp) { const ult = a.ult; w.heal(a, x, PUPPET_HEAL * dt, true); a.ult = ult; }
+      }
+    } else if (!a.alive && PUPPETS_FALL_WITH_HEX && a.deathAt >= a.sv.puppetsCast && t - a.deathAt < 0.2) {
+      if (puppetsOf(w, a).some(p => p.alive)) dropPuppets(w, a);
+    }
   }
 }
