@@ -4,6 +4,7 @@ import { isAbility } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from '../game/Actor';
 import { dist3, type World } from '../game/World';
+import { LEASHED, STOMP_CORE, STOMP_H, STOMP_R } from '../game/abilities';
 import type { Nav } from './Nav';
 
 // modulo, not a subtract loop: a runaway angle (1e20 / Infinity) would otherwise spin forever and freeze the sim
@@ -44,6 +45,9 @@ export class Bot {
     this.moveAlong(dt);
     this.aim(dt);
     this.shoot();
+    // Gantetsu mid-rush: jump is the Shiko Stomp's leap and nothing else (no hop over a kerb, no unsticking jump), and it
+    // is judged every tick - at the rush's speed the 2.5m heart of the slam is crossed between two ability thinks
+    if (a.has('tachiai', t)) i.jump = a.grounded && this.stompNow();
     // Mirei mid-swoop: slingshot onward or superjump out, the way a guardian-angel player chains her mobility
     if (a.has('swoop', t)) {
       const prog = a.sv.swoopProg ?? 0;
@@ -59,7 +63,8 @@ export class Bot {
     const vis = foes.filter(x => dist3(x.pos, a.pos) < 55 && w.visible(a, x));
     // target: close + low + visible, sticky
     const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0)
-      + (x.isSummon ? 10 : 0);                 // a puppet only when it is much closer than any hero
+      + (x.isSummon ? 10 : 0)                  // a puppet only when it is much closer than any hero
+      - (a.def.id === 'gantetsu' && x.has('knockdown', t) ? 10 : 0);      // Gantetsu: whoever his stomp has put on the ground
     this.target = vis.sort((p, q) => score(p) - score(q))[0] ?? null;
     // the objective: the capture point, or (Mikoshi Rush) wherever the float is now
     const P: [number, number, number] = w.rules === 'push' ? [w.push.pos.x, w.push.pos.y, w.push.pos.z] : w.map.point;
@@ -284,8 +289,9 @@ export class Bot {
     if (inRange && this.onTarget(P.kind === 'melee' ? 35 : P.kind === 'beam' ? 14 : 5)) i.fire = true;
     // quick melee when an enemy is in arm's reach (ranged heroes finish low targets / fight off divers this way)
     if (d < 1.2 + a.radius * 1.3 + tg.radius && t >= a.nextMelee && this.onTarget(30) && (P.kind !== 'melee' || Math.random() < 0.15)) i.melee = true;
-    // twin chainguns: both triggers down together once on target
+    // twin chainguns: both triggers down together once on target - and emptied into anyone the stomp has knocked flat
     if (a.def.dualGuns && inRange && this.onTarget(7)) i.alt = true;
+    if (a.def.dualGuns && inRange && tg.has('knockdown', t) && this.onTarget(12)) i.fire = i.alt = true;
     // melee secondaries / ranged secondaries
     if (!isAbility(S) && !S.heal && !a.def.dualGuns) {
       if (S.kind === 'melee' && d < S.range + tg.radius && this.onTarget(35)) i.alt = true;
@@ -299,6 +305,20 @@ export class Bot {
     const e = a.eye, c = al.center;
     const yaw = Math.atan2(c.x - e.x, c.z - e.z);
     return Math.abs(wrap(yaw - a.input.yaw)) < 0.12;
+  }
+
+  /** Gantetsu's Shiko Stomp: would a slam landing here catch a crowd (2+ within a metre of its edge), or anyone in
+   *  its heart? Only those the shockwave can reach count: on his level, nothing solid in between */
+  private stompNow() {
+    const w = this.w, a = this.a, eye = { x: a.pos.x, y: a.pos.y + 0.6, z: a.pos.z };
+    let crowd = 0;
+    for (const x of w.enemies(a)) {
+      if (x.isRobot && x.def.id === 'bot_dummy') continue;
+      const d = Math.hypot(x.pos.x - a.pos.x, x.pos.z - a.pos.z) - x.radius;
+      if (d > STOMP_R - 1 || Math.abs(x.pos.y - a.pos.y) > STOMP_H || !w.level.lineOfSight(eye, x.center)) continue;
+      if (d < STOMP_CORE || ++crowd >= 2) return true;
+    }
+    return false;
   }
 
   /** look at a point and fire an ability on the next tick */
@@ -318,7 +338,8 @@ export class Bot {
     const d = tg ? dist3(tg.pos, a.pos) : 99;
     const near = (p: V3, r: number, list: Actor[]) => list.filter(x => dist3(x.pos, p) < r);
     const ultReady = a.ult >= a.def.ult.charge;
-    const rdy = (id: string) => a.ready(id, t);
+    // (bound by the Grand Dohyo's chains, castAbility refuses the dashes and teleports: don't spend the think on them)
+    const rdy = (id: string) => a.ready(id, t) && !(LEASHED.has(id) && a.has('chained', t));
     const rival = foes.find(x => x.def.id === a.def.rival);
     const lowAllies = allies.filter(x => x.health / x.maxHp < 0.5 && dist3(x.pos, a.pos) < 20);
     const vis = (x: Actor) => w.visible(a, x);
@@ -397,8 +418,9 @@ export class Bot {
       }
       case 'hayate': {
         const seiran = foes.find(x => x.def.id === 'seiran');
-        // COUNTER: turn his brother's arrows (and any volley) back
-        if (rdy('mirrorwater') && ((seiran && vis(seiran) && dist3(seiran.pos, a.pos) < 40 && t - seiran.anim.attackAt < 0.3) || w.projs.filter(p => p.team !== a.team && dist3(p.pos, a.pos) < 7).length >= 3)) { this.castAt('a2'); break; }
+        // COUNTER: turn his brother's arrows (and any volley) back - the blade only covers his front, so he faces the shots
+        const volley = w.projs.filter(p => p.team !== a.team && dist3(p.pos, a.pos) < 7);
+        if (rdy('mirrorwater') && ((seiran && vis(seiran) && dist3(seiran.pos, a.pos) < 40 && t - seiran.anim.attackAt < 0.3) || volley.length >= 3)) { this.castAt('a2', seiran && vis(seiran) ? seiran.center : volley[0]?.pos); break; }
         const land = tg ? { x: a.pos.x + (tg.pos.x - a.pos.x) / d * 15, z: a.pos.z + (tg.pos.z - a.pos.z) / d * 15 } : null;
         const safe = land && w.level.groundAt(land.x, land.z, a.pos.y + 1) > a.pos.y - 3;
         if (tg && safe && rdy('currentdash') && d > 4 && d < 15 && vis(tg) && (tg.health / tg.maxHp < 0.5 || Math.random() < 0.02)) { this.castAt('a1', tg.center); a.input.mz = 1; a.input.mx = 0; break; }
@@ -516,15 +538,21 @@ export class Bot {
       case 'gantetsu': {
         const ten = foes.find(x => x.def.id === 'tenkai');
         const rushing = a.has('tachiai', t);
-        // stomp: leap out of the rush when it has carried him into a crowd (or right on top of the target)
-        if (rushing && a.grounded && (near(a.pos, 5, foes).length >= 2 || (tg && d < 3.2))) { a.input.jump = true; break; }
-        if (rushing) break;
+        // in the rush (the leap out of it is decided every tick, in think) or in the air over the slam: nothing else -
+        // SHIFT again would end the rush with no leap
+        if (rushing || a.has('stompair', t)) break;
         // COUNTER: rush straight through the Solar Bulwark (it can't stop him, and it cracks), or meet a Dawn Charge head-on
         if (ten && vis(ten) && rdy('tachiai') && ((ten.barrier.up && dist3(ten.pos, a.pos) < 13) || (ten.forced?.kind === 'dawncharge' && dist3(ten.pos, a.pos) < 18))) { this.castAt('a1', ten.center); break; }
-        // Grand Dohyo: trap a crowd (or a duel he's winning) in the ring
-        if (ultReady && (near(a.pos, 8, foes).length >= 2 || (tg && d < 7 && tg.health / tg.maxHp < 0.5 && a.health / a.maxHp > 0.5))) { this.castAt('ult', tg?.center); break; }
-        // Taiko Heartbeat: under fire, or when the team is brawling around him
-        if (rdy('taiko') && ((t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.8) || near(a.pos, 12, allies).filter(x => x !== a && t - x.lastDamagedAt < 1).length >= 2)) { this.castAt('a2'); break; }
+        // Grand Dohyo: chain a crowd inside the ring (8 s, no dashes or flight out of it) - or a duel he's winning
+        const ring = foes.filter(x => Math.hypot(x.pos.x - a.pos.x, x.pos.z - a.pos.z) < 8 && Math.abs(x.pos.y - a.pos.y) < 6);
+        if (ultReady && (ring.length >= 2 || (tg && d < 7 && tg.health / tg.maxHp < 0.5 && a.health / a.maxHp > 0.5))) { this.castAt('ult', tg?.center); break; }
+        // Taiko Heartbeat (3 s: 40% less damage taken, the guns' damage comes back as health): under fire, the team
+        // brawling around him, or the guns on someone his stomp has just laid out
+        const downed = tg && tg.has('knockdown', t) && d < 12 && vis(tg);
+        if (rdy('taiko') && ((t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.8) || (downed && a.health / a.maxHp < 0.9)
+          || near(a.pos, 12, allies).filter(x => x !== a && t - x.lastDamagedAt < 1).length >= 2)) { this.castAt('a2'); break; }
+        // a target on the ground is there to be shot: no rushing past it
+        if (downed) break;
         // Tachiai Rush: close the gap on a visible target across solid ground
         if (tg && vis(tg) && rdy('tachiai') && d > 6 && d < 18 && Math.abs(tg.pos.y - a.pos.y) < 1.5 && Math.random() < 0.35) {
           let solid = true;
