@@ -16,6 +16,8 @@ import { FULL } from '../edition';
 export const TITAN_SCALE = 2.2;
 
 export const G = 24;
+/** abilities whose damage is dealt by a summon on its master's behalf: credited to the master, never ultimate charge */
+export const SUMMON_ABILITIES = new Set(['puppet', 'susanoo', 'effigy']);
 /** Hibiki's Groove: the top of his jump-rhythm speed multiplier (tapping jump ~8.5x a second holds it) */
 export const GROOVE_MAX = 20;
 /** the tap rates (taps a second) the Groove spans: none below GROOVE_TAPS[0], the full GROOVE_MAX at GROOVE_TAPS[1] */
@@ -333,8 +335,8 @@ export class World {
       m.set(src.id, t);
       // shooting a summoned puppet, or a puppet's own claws, never feeds an ultimate or the damage column
       if (!tgt.isSummon) src.dmgDone += dealt;
-      // (a summon's damage - the puppets', the Susanoo's - never feeds its master's next ultimate)
-      if (!tgt.isSummon && o.ability !== 'puppet' && o.ability !== 'susanoo') src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
+      // (a summon's damage - the puppets', the Susanoo's, the effigy's - never feeds its master's next ultimate)
+      if (!tgt.isSummon && !SUMMON_ABILITIES.has(o.ability ?? '')) src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
       // Gantetsu - Roar of the Crowd: critical hits turn half their damage into temporary health (max 150)

@@ -3,7 +3,8 @@
 // whoever is still standing in it; then it fades. Raijin fights on freely the whole time.
 //
 // The giant is an Actor from the same summon plumbing as Hex's puppets (def.summoned -> isSummon: no kill feed, no ult
-// charge for hitting it, no respawn), untouchable ('phased') and drawn by its own view, not the puppet swarm.
+// charge for hitting it, no respawn), untouchable ('phased') and drawn by its own view (HeroDef.model / holo / scale, the
+// contract shared with Enra's Crimson Effigy), not the puppet swarm.
 import type { HeroDef, AbilityDef } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import { Actor } from './Actor';
@@ -29,6 +30,7 @@ export const SUSANOO_DEF: HeroDef = {
   secondary: none('none'), ability1: none('none'), ability2: none('none'), ult: { ...none('none'), charge: 1e9 },
   passive: { name: '', desc: '' }, lore: 'The thunder god Raijin sees in the mirror.', inspiration: '', voice: [120, 0.3],
   summoned: true, full: true,
+  model: 'raijin_susanoo', holo: SUSANOO_COLOR, scale: 3,    // (system32-82's Tripo Zeus-robed giant, published at 5.4 m)
 };
 
 /** a strike from the sky reaches a target that has open sky above it (roofs keep the thunder out) */
