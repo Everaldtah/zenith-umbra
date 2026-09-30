@@ -59,7 +59,7 @@ export const FP_STYLE: Record<string, Style> = {
   gantetsu: { grip: 'dual', R: [0.4, -0.28, 0.56], L: [-0.4, -0.28, 0.56], recoil: 0.03, push: 0.08, gunScale: 0.7 },
   hibiki: { grip: 'pistol', R: [0.2, -0.2, 0.44], L: [-0.18, -0.21, 0.4], recoil: 0.05 },
   // the scattergun one-handed on the right, the Crescent Fang held low in the left fist
-  tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.21, -0.19, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
+  tomoe: { grip: 'shotgun', R: [0.21, -0.2, 0.44], L: [-0.24, -0.24, 0.38], recoil: 0.1, push: 0.04, keep: 0.97, drape: 0.5 },
   // koi-scale shuriken flicked from the chest (the scarf is cut out: it wraps the neck, not the arms)
   hayate: { grip: 'kunai', R: [0.17, -0.17, 0.4], L: [-0.17, -0.18, 0.4], recoil: 0, keep: 0.9 },
   // the Riverbow in the left hand, the draw hand on the right
