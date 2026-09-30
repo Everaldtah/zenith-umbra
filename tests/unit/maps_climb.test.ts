@@ -50,16 +50,17 @@ describe('climbers\' maps: the climb routes climb', () => {
     });
   }
 
-  // the canyon wall can't be reached from a summit: Hayate running at it from the top, tapping jump, stays in the arena
+  // the canyon wall is never a way out: Hayate running at it from a summit, tapping jump, may climb the face (one climb
+  // per time in the air, capped below its top) but never stands above the summit and never gets past the arena edge
   for (const [map, x, z, yaw, lim] of [['mile', -28, 31, 0, 34], ['gulch', -11, -30.5, Math.PI, 32]] as const) {
-    it(`${map}: no jump from the 12 m summit reaches the top of the boundary wall`, () => {
+    it(`${map}: no climb from the 12 m summit stands on the boundary wall or leaves the arena`, () => {
       const w = new World(map, 'practice');
       const a: Actor = w.addHero('hayate', 'zenith'); a.clear('spawnprot');
       a.pos = { x, y: 12, z }; a.vel = { x: 0, y: 0, z: 0 }; a.yaw = a.input.yaw = yaw; a.input.mz = 1; a.input.jumpHeld = true;
-      let f = 0, maxY = 0, maxZ = 0;
-      run(w, 6, () => { a.input.jump = f++ % 12 === 0; maxY = Math.max(maxY, a.pos.y); maxZ = Math.max(maxZ, Math.abs(a.pos.z)); });
+      let f = 0, stoodAbove = 0, maxZ = 0;
+      run(w, 6, () => { a.input.jump = f++ % 12 === 0; if (a.grounded && a.pos.y > 12.5) stoodAbove = Math.max(stoodAbove, a.pos.y); maxZ = Math.max(maxZ, Math.abs(a.pos.z)); });
       expect(maxZ).toBeLessThan(lim);
-      expect(a.pos.y).toBeLessThan(13);
+      expect(stoodAbove).toBe(0);
     });
   }
 
