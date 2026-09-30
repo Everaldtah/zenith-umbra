@@ -61,7 +61,8 @@ export class Bot {
   private decide() {
     const w = this.w, a = this.a, t = w.time;
     const foes = w.enemies(a).filter(x => w.perceivable(a, x) && !x.isRobot || (x.isRobot && x.def.id !== 'bot_dummy'));
-    const vis = foes.filter(x => dist3(x.pos, a.pos) < 55 && w.visible(a, x));
+    // (a phased body - Enra's effigy - can't be hit: no shots at it)
+    const vis = foes.filter(x => dist3(x.pos, a.pos) < 55 && w.visible(a, x) && !x.has('phased', t));
     // target: close + low + visible, sticky
     const score = (x: Actor) => dist3(x.pos, a.pos) + x.health / x.maxHp * 12 - (x === this.target ? 8 : 0) - (x.def.id === a.def.rival ? 5 : 0) - (x.has('marked', t) ? 4 : 0)
       + (x.isSummon ? 10 : 0)                  // a puppet only when it is much closer than any hero
@@ -572,7 +573,8 @@ export class Bot {
         if (rdy('chain') && rai && (rai.forced?.kind === 'flashstep' || dist3(rai.pos, a.pos) > 5)) { this.castAt('a1', rai.center); break; }
         if (rdy('chain') && tg && d > 7 && d < 17 && vis(tg)) { this.castAt('a1', tg.center); break; }
         if (rdy('brand') && tg && d < 6) { this.castAt('a2', tg.center); break; }
-        if (ultReady && tg && d < 10 && a.health / a.maxHp > 0.4) this.castAt('ult');
+        // Crimson Effigy: a fight in his perimeter - two or more within 12 m, or the rival close and him still standing
+        if (ultReady && ((near(a.pos, 12, foes).length >= 2) || (tg && d < 8 && a.health / a.maxHp > 0.4))) this.castAt('ult');
         break;
       }
     }

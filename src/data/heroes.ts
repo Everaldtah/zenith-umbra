@@ -71,6 +71,9 @@ export interface HeroDef {
   dualGuns?: boolean;    // a rotary chaingun in each fist: LMB fires the left, RMB the right, both spin up and reload together
   full?: boolean;        // desktop edition only
   summoned?: boolean;    // a summoned body (Hex's puppets): no respawn, no objective time, no kill feed, no ultimate charge
+  model?: string;        // drawn with this other hero's model (a summoned effigy of its summoner)
+  holo?: string;         // ...as a hologram in this colour (Enra's Crimson Effigy)
+  scale?: number;        // ...at this size (the render side; the sim's height / radius above are already scaled)
 }
 
 const isAbility = (x: WeaponDef | AbilityDef): x is AbilityDef => (x as AbilityDef).id !== undefined;
@@ -205,11 +208,11 @@ export const HEROES: HeroDef[] = [
   {
     id: 'enra', name: 'Enra', title: 'The Crimson Oni', team: 'umbra', role: 'dps', frame: 'human', rival: 'raijin',
     hp: 275, armor: 0, speed: 5.8, height: 2.05, radius: 0.5, color: '#ff5a1f', glow: '#ff6a2a',
-    primary: { kind: 'beam', damage: 95, rate: 10, range: 9, sfx: 'flame', fx: 'flame' },
+    primary: { kind: 'melee', name: 'Hellfire Cleaver', damage: 72, rate: 1.3, range: 3.8, sweep: true, delay: 0.16, sfx: 'katana', fx: 'flame' },
     secondary: { kind: 'melee', damage: 70, rate: 0.4, range: 3.4, sfx: 'punch', fx: 'flame' },
     ability1: { id: 'chain', name: 'Chain of Oblivion', key: 'SHIFT', cooldown: 8, desc: 'Hurl a chain 18m: roots the target for 1.2s and hauls you to them.', counter: "Roots Raijin mid-dash and cancels Flash Step." },
     ability2: { id: 'brand', name: 'Eclipse Brand', key: 'E', cooldown: 10, desc: 'Brand enemies in a 6m cone: 12 dmg/s and -20% speed for 5s.' },
-    ult: { id: 'asura', name: 'Asura Awakening', key: 'Q', cooldown: 0, charge: 1800, desc: '8s: grow huge, +150 armor, +50% flame range, 30% lifesteal.' },
+    ult: { id: 'effigy', name: 'Crimson Effigy', key: 'Q', cooldown: 0, charge: 1900, desc: '10s: a giant crimson hologram of the oni rises behind you and fights on its own - every 0.9s its blade lands on every enemy within 12m of you (45 damage, knocked back). Nothing can touch it.' },
     passive: { name: 'Oni Blood', desc: 'Regenerate 12 HP/s after 3s without taking damage.' },
     lore: 'An oni sealed beneath Neo-Kurogane for a thousand years until the Eclipse cracked the city\'s foundation stone. Enra burned the district to find the one blade that ever wounded him - and found it in a boy\'s hands.',
     inspiration: 'Demon-slaying shonen and oni folklore berserkers.',

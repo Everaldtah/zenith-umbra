@@ -6,6 +6,7 @@ import { DEFLECT_SECS, dist3, norm, type Proj, type World, type Zone } from './W
 import { ignite, wound } from './weapons';
 import { raisePuppets } from './puppets';
 import { stellarRebirth } from './rebirth';
+import { raiseEffigy } from './effigy';
 
 /** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
 export const DRAGONBLADE_SECS = 15;
@@ -544,6 +545,12 @@ const I: Record<string, Impl> = {
       x.set('brand', w.time, 5, undefined, a); x.set('slow', w.time, 5);
     }
     w.fx('brandcone', a.center, { to: { x: a.pos.x + f.x * 6, y: a.pos.y + 1, z: a.pos.z + f.z * 6 }, color: '#ff6a2a', actor: a }); w.sfx('brand', a.center, a);
+    return true;
+  },
+  effigy(w, a) {
+    // Crimson Effigy (effigy.ts): the giant hologram rises behind him and sweeps the perimeter for EFFIGY_SECS
+    raiseEffigy(w, a);
+    w.fx('ultflash', a.center, { color: '#ff2a2a', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('roar', a.center, a);
     return true;
   },
   asura(w, a) {
