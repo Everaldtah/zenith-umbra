@@ -2,7 +2,7 @@
 // team rim light, stealth fade, shields, Solar Bulwark, death collapse.
 import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
-import { Animator, type AnimState } from './Animator';
+import { Animator, REAP_SECS, REAP_STOP, type AnimState } from './Animator';
 import { hasModel, heroModel, loadManifest, modelInfo, type EyeInfo } from './Assets';
 import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
@@ -17,9 +17,8 @@ const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
 const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
 /** Tomoe's Crescent Warpath: turns of the body over the flight, and the glow of the heroes it cut through */
-const TIDE_TURNS = 2, TIDE_BLUE = '#3fa9ff';
-/** ...and how fast her axe and her Fang spin in her hands on top of it (turns a second; Junker Queen's blades: 5-6) */
-const TIDE_TWIRL = 4;
+/** the glow of the heroes Tomoe's Crescent Warpath cut through */
+const TIDE_BLUE = '#3fa9ff';
 /** speed (m/s) above which fast moves smear (Davis GDC17: stretch the mesh along its motion - automated smear frames) */
 const SMEAR_FROM = 12;
 import { skinsFor, type Skin } from '../data/skins';
@@ -226,8 +225,6 @@ export class CharacterView {
   /** first-person viewmodels don't smear (the camera rides the motion) */
   noSmear = false;
   private downYaw: number | null = null;
-  /** Crescent Warpath: the body's spin about its own axis (radians); finishes its turn when the flight is cut short */
-  private tideSpin = 0;
   private tideMarked = false;
   private spinA = [0, 0];
   private stealthed = false;
@@ -296,6 +293,8 @@ export class CharacterView {
   static warm: ((o: THREE.Object3D) => Promise<void>) | null = null;
   /** a ragdoll's hard landing (the match plays the thud) */
   onBodyFall?: (a: Actor, at: THREE.Vector3, speed: number) => void;
+  /** a heavy strike landed (Crescent Reaping's cleave): the match kicks the camera for the player, shakes it nearby */
+  onImpact?: (a: Actor) => void;
   /** Overwatch-style death: the body goes limp and is thrown by the killing blow (desktop edition, humanoid rigs) */
   private ragdoll: Ragdoll | null = null;
   private ragdollDone = false;
@@ -600,7 +599,7 @@ export class CharacterView {
   /** Tomoe has the great axe in her hands (a Crescent Reaping in flight, or the Crescent Warpath charge) */
   axeOut(time: number) {
     const a = this.actor, an = a.anim;
-    return a.def.id === 'tomoe' && (a.forced?.kind === 'tide' || (an.castId === 'reaping' && time - an.castAt < 0.75));
+    return a.def.id === 'tomoe' && (a.forced?.kind === 'tide' || (an.castId === 'reaping' && time - an.castAt < REAP_SECS + REAP_STOP));
   }
 
   /** gameplay state -> animation state */
@@ -618,14 +617,14 @@ export class CharacterView {
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
       move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter'
-        : a.forced?.kind === 'tide' ? 'tide' : an.castId === 'reaping' && time - an.castAt < 0.75 ? 'reaping' : a.flying && a.def.jets ? 'jets' : '',
+        : a.forced?.kind === 'tide' ? 'tide' : an.castId === 'reaping' && time - an.castAt < REAP_SECS + REAP_STOP ? 'reaping' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
       hero: a.def.id,
       hitDir: this.hitDir(), knocked: !!a.forced && (a.forced.kind === 'knock' || a.forced.kind === 'pull'),
       swoop: a.has('swoop', time) ? a.sv.swoopProg ?? 0 : -1, swoopFlare: a.has('swoopflare', time) ? 0.4 - (a.st.swoopflare - time) : 9,
       superjump: a.has('superjump', time), slingshot: a.has('slingshot', time), rush: a.has('tachiai', time),
       leap: a.has('stompair', time), knockdown: a.has('knockdown', time) ? Math.max(0, a.st.knockdown - time) : 0,
-      twirl: a.forced?.kind === 'tide' ? 0.001 + (time - (a.sv.tideT0 ?? a.anim.castAt)) * TIDE_TWIRL * 2 * Math.PI : 0,
+      tide: a.forced?.kind === 'tide' ? { age: Math.max(0, time - (a.sv.tideT0 ?? a.anim.castAt)) } : undefined,
       skate: a.def.id === 'hibiki', grind: a.has('grinding', time) ? (a.sv.grindSide ?? 1) : 0,
       dual: a.def.dualGuns ? { fireL: time - a.anim.fireL, fireR: time - a.anim.fireR } : undefined,
       reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
@@ -757,6 +756,7 @@ export class CharacterView {
     }
     // animation
     this.anim.update(this.animState(dt, time));
+    if (this.anim.impact) this.onImpact?.(a);
     this.lids?.update(time, a.anim.hitAt, false);
     this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, false);
     // performance layer: squash & stretch (about the feet) and the whole-body tilt (about the hips)
@@ -777,22 +777,6 @@ export class CharacterView {
       this.inner.position.applyQuaternion(_kq);
       this.inner.position.y += Math.sin(th) * a.height * a.scale * 0.09;
     } else this.downYaw = null;
-    // Tomoe's Crescent Warpath: the whole body turns about its vertical axis as she flies - TIDE_TURNS over the flight,
-    // eased in and out (in the Hero Viewer, with no flight clock, a steady spin). Cut short, it finishes the turn it is in
-    if (a.forced?.kind === 'tide') {
-      const t0 = a.sv.tideT0, dur = Math.max(0.2, a.sv.tideDur ?? 1.2);
-      if (t0 === undefined) this.tideSpin += dt * TIDE_TURNS * 2 * Math.PI / dur;
-      else { const u = Math.min(1, Math.max(0, (time - t0) / dur)); this.tideSpin = Math.max(this.tideSpin, u * u * (3 - 2 * u) * TIDE_TURNS * 2 * Math.PI); }
-    } else if (this.tideSpin > 0) {
-      const goal = Math.ceil(this.tideSpin / (2 * Math.PI) - 1e-3) * 2 * Math.PI;
-      this.tideSpin = Math.min(goal, this.tideSpin + dt * 16);
-      if (this.tideSpin >= goal - 1e-3) this.tideSpin = 0;
-    }
-    if (this.tideSpin > 0) {
-      _kq.setFromAxisAngle(_kv.set(0, 1, 0), this.tideSpin);
-      this.inner.quaternion.premultiply(_kq);
-      this.inner.position.applyQuaternion(_kq);
-    }
     this.smear(time);
     this.updateGuns(dt, time);
     const an = a.anim;

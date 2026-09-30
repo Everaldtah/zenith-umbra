@@ -144,6 +144,8 @@ export function gripsFor(a: Actor, t: number, o: { drawW?: number; fp?: boolean 
     else if (shot && atk < ARROW_GONE[1] + 0.05) R = 'pinch';
     else if (!o.fp && (o.drawW ?? 1) < 0.3 && !a.charging) R = 'relaxed';
   }
+  // Tomoe's Fang out of her hand: the throwing hand stays open until the catch
+  if (id === 'tomoe' && (a.sv.fang ?? 0) > 0) L = 'open';
   // casts: casters open their palms (both), everyone's free hand opens for the gesture
   if (an.castId && cast < 0.55) {
     if (CASTERS.has(id)) { L = 'open'; R = id === 'kaien' ? 'pinch' : 'open'; }

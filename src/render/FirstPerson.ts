@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
+import { reapPhase, REAP_SECS, REAP_STOP } from './Animator';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BASE } from './Assets';
 import { driveFingers } from './Fingers';
@@ -277,6 +278,8 @@ export class FirstPersonArms {
   private walk = 0; private swayX = 0; private swayY = 0; private dip = 0; private dipV = 0;
   /** an archer's aim-down (Yuzu's Hawk Eye), eased in ~150 ms like Freja's Take Aim */
   private aimK = 0;
+  /** a strike's impact: the viewmodel jolts down (the dip spring), as on a landing */
+  kick(k: number) { this.dipV -= 0.45 * k; }
   /** Gantetsu's Shiko leap: the guns rise with him, then the slam throws the whole viewmodel down */
   private leapK = 0; private wasLeap = false;
   private prev = { attack: 9, cast: 9, hit: 9, land: 9 };
@@ -451,6 +454,9 @@ export class FirstPersonArms {
     R = add(R, [0, br, 0]); if (L) L = add(L, [0, br * 0.8, 0]);
     let wristR: THREE.Quaternion | null = null, wristL: THREE.Quaternion | null = null;
     if (S.grip === 'katana') wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.6, 0, 0.3));
+    // Tomoe's Fang hand: a hand that simply follows the forearm shows its palm to the lens on these rigs; the knife is
+    // held knuckles-up, the blade out past the fingers
+    if (a.def.id === 'tomoe') wristL = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 1.5));
     // reload: hands dip, off hand comes to the weapon
     if (a.reloadUntil > t) {
       const dur = 'reload' in a.def.primary && a.def.primary.reload ? a.def.primary.reload : 1.4;
@@ -526,13 +532,22 @@ export class FirstPersonArms {
     let axe: 'cleave' | 'warpath' | 'spin' | null = null, spinPh = 0;
     if (a.def.id === 'tomoe' && S.L) {
       const id = a.anim.castId;
-      if (id === 'crescent' && cast < 0.45) {
+      // the Fang (Junker Queen's knife): a sharp forward throw, the empty hand held open and forward a beat, then down;
+      // on the recall the hand comes up palm-out for the whole return, and the catch slaps it back into the fist
+      const fang = a.sv.fang ?? 0, fs = t - (a.sv.fangAt ?? -9);
+      if (id === 'crescent' && cast < 0.45 && fang !== 4) {
         const u = cast / 0.45, back: V = [-0.32, 0.06, 0.12], out: V = [-0.02, -0.06, 0.62];
-        L = lerp(u < 0.35 ? lerp(S.L, back, smooth(u / 0.35)) : lerp(back, out, smooth((u - 0.35) / 0.4)), S.L, smooth((u - 0.8) / 0.2));
+        L = u < 0.35 ? lerp(S.L, back, smooth(u / 0.35)) : lerp(back, out, smooth((u - 0.35) / 0.25));
         src = 'throw';
-      } else if (id === 'recall' && cast < 0.5) { L = lerp(S.L, [-0.1, -0.02, 0.56], bump(cast / 0.5)); src = 'recall'; }
-      if (id === 'reaping' && cast < 0.75) {
-        const u = cast / 0.75, hi: V = [0.3, 0.14, 0.44], lo: V = [-0.34, -0.36, 0.52], home: V = [0.2, -0.22, 0.44];
+      } else if (fang === 4) {
+        L = lerp(S.L, [-0.1, -0.03, 0.56], smooth(Math.min(1, fs / 0.15))); wristL = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.2, 0, 0.4)); src = 'recall';
+      } else if (fang > 0) {
+        L = lerp([-0.02, -0.06, 0.62], S.L, smooth(Math.max(0, (cast - 0.45) / 0.3))); src = 'thrown';
+      } else if (fs < 0.25 && a.anim.castId === 'recall') { L = add(S.L, [0, -0.02, -0.05], bump(fs / 0.25)); src = 'catch'; }
+      if (id === 'reaping' && cast < REAP_SECS + REAP_STOP) {
+        // the cleave: a beat of anticipation with the axe loaded high right, the fast swing down across the view, a
+        // 3-frame hit-stop as it crosses the target (reapPhase), then the recovery
+        const u = reapPhase(cast), hi: V = [0.3, 0.14, 0.44], lo: V = [-0.34, -0.36, 0.52], home: V = [0.2, -0.22, 0.44];
         R = u < 0.3 ? lerp(home, hi, smooth(u / 0.3)) : u < 0.8 ? lerp(hi, lo, smooth((u - 0.3) / 0.32)) : lerp(lo, home, smooth((u - 0.8) / 0.2));
         L = add(R, [-0.06, -0.1, -0.04]); axe = 'cleave'; src = 'cleave';
       } else if (a.forced?.kind === 'tide') {

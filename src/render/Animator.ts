@@ -104,7 +104,7 @@ export interface AnimState {
   slingshot?: boolean;      // flung onward out of a swoop
   dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
-  twirl?: number;           // Tomoe's Crescent Warpath: the angle (radians) her axe and her Fang have spun in her hands
+  tide?: { age: number };   // Tomoe's Crescent Warpath: seconds into the dash (her axe and her Fang wheel round her)
   deflect?: { age: number; x: number; y: number; z: number };   // a shot just turned on the blade: its age and where it came from (model space)
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
   knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
@@ -184,6 +184,12 @@ export const SWING_TIME = 0.96;          // Reinhardt: 0.96s per swing
 // shoulders in body heights. Reference (Reinhardt): both hands together at the bottom of the haft, arms straight out
 // at ~90 degrees to the torso at shoulder height through the whole sweep, the head travelling flat at that height.
 type HPose = { th: number; ph: number; d: number; gy: number };
+/** Crescent Reaping: cast time 0.75 s, the cleave crosses the target at REAP_HIT of it, then a 3-frame hit-stop (the
+ *  pose held, the rest of the swing 0.05 s late) - Overwatch's impact frames */
+export const REAP_SECS = 0.75, REAP_HIT = 0.58, REAP_STOP = 0.05;
+/** Crescent Warpath: turns a second of the wheeling weapons (Junker Queen's blades: 5-6) */
+const TIDE_TURNS = 5;
+export const reapPhase = (castAge: number) => { const cp = castAge / REAP_SECS; return cp < REAP_HIT ? cp : Math.max(REAP_HIT, cp - REAP_STOP / REAP_SECS); };
 const GUARD: HPose = { th: -0.45, ph: 1.05, d: 0.8, gy: -0.2 };
 const smooth = (u: number) => u * u * (3 - 2 * u);
 function keyed(K: [number, HPose][], p: number) {
@@ -229,7 +235,7 @@ function hammerPose(p: number, side: number, shield: boolean, casting: boolean, 
   }
   // Crescent Warpath (after Junker Queen's Rampage): she spins through the air, the great axe out wide in the right hand
   // at shoulder height, trailing the turn (the view spins the whole body; the Fang is out on the left - the arm below)
-  if (mode === 'tide') return { th: -1.85, ph: 0.08, d: 0.92, gy: 0.0, imp: 0, w: 1, side: 1, lean: 0.1 };
+  if (mode === 'tide') return { th: -1.85, ph: 0.08, d: 0.92, gy: 0.0, imp: 0, w: 0, side: 1, lean: 0.1 };   // (the axe leaves her hand: the orbit below)
   if (shield) return { th: -0.75, ph: -1.15, d: 0.6, gy: -0.36, imp: 0, w: 0, side, lean: 0 };      // lowered while the shield is up
   if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side, lean: 0 };
   // Reinhardt's sweep (alternating, first one counter-clockwise from above = his right to his left): a short
@@ -304,7 +310,11 @@ export class Animator {
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
   gunHide: [boolean, boolean] = [false, false];
   /** a held prop spun in its hand, flat like a propeller (radians about the model's vertical; Tomoe's Fang in the ult) */
-  gunTwirl: [number, number] = [0, 0];
+  /** a held prop taken out of the hand and placed on its own (Tomoe's Fang wheeling round her in the ult): model-space
+   *  position, the direction its +Z (the blade) points, its up, and how far it is from the hand (0 = in the hand) */
+  gunOrbit: [{ p: THREE.Vector3; z: THREE.Vector3; y: THREE.Vector3; w: number } | null, null] = [null, null];
+  /** the Crescent Warpath's orbit, smoothed in over 0.1 s and back into the hands over 0.15 s when the dash ends */
+  private orbitW = 0;
   /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
   gunUpright: [boolean, boolean] = [false, false];
   /** skating (Hibiki): how much of the skate stroke is blended in, and each stroke's lateral weight shift */
@@ -323,6 +333,9 @@ export class Animator {
   private lagY = { x: 0, v: 0 }; private lagP = { x: 0, v: 0 }; private lastPitch = 0; private yawRate = 0;
   private headF = { x: 0, v: 0 };                  // the head's follow-through on hits (lags, then overshoots the body)
   private headStab = 0;                             // the head's counter-pitch against the body's lean (smoothed)
+  private lastCastAge = -1;
+  /** 1 on the frame a heavy strike lands (Crescent Reaping's cleave): the view kicks the camera */
+  impact = 0;
   private kick = { x: 0, v: 0 };                   // heavy footfall punctuation (chest + hips dip on each contact)
   private tumble = 0; private hitX = 0; private hitZ = 1;
   private leapW = 0; private slamDip = 0; private lastLeap = false;
@@ -436,7 +449,12 @@ export class Animator {
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
-      if (this.gunTwirl[i]) g.quaternion.premultiply(_q.setFromAxisAngle(Y, this.gunTwirl[i]));
+      const ob = this.gunOrbit[i];
+      if (ob && ob.w > 0.001) {
+        // out of the hand: blended toward its own place and facing
+        const oq = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(ob.y, ob.z).normalize(), ob.y, ob.z));
+        g.position.lerp(ob.p, ob.w); g.quaternion.slerp(oq, ob.w);
+      }
       g.visible = !this.gunHide[i];
     });
   }
@@ -476,7 +494,12 @@ export class Animator {
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
-      if (this.gunTwirl[i]) g.quaternion.premultiply(_q.setFromAxisAngle(Y, this.gunTwirl[i]));
+      const ob = this.gunOrbit[i];
+      if (ob && ob.w > 0.001) {
+        // out of the hand: blended toward its own place and facing
+        const oq = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(ob.y, ob.z).normalize(), ob.y, ob.z));
+        g.position.lerp(ob.p, ob.w); g.quaternion.slerp(oq, ob.w);
+      }
       g.visible = !this.gunHide[i];
     });
   }
@@ -958,7 +981,11 @@ export class Animator {
     const pq = punching ? s.attackAge / 0.42 : 9;
     this.punchExt = pq < 0.14 ? -0.35 * pq / 0.14 : pq < 0.26 ? -0.35 + 1.35 * (pq - 0.14) / 0.12 : Math.max(0, 1 - (pq - 0.26) / 0.74);
     this.punchW = pq >= 1 ? 0 : pq < 0.85 ? 1 : (1 - pq) / 0.15;
-    const cp = s.move === 'shatter' ? s.castAge / 0.75 : s.move === 'reaping' ? s.castAge / 0.75 : 9;
+    const cp = s.move === 'shatter' ? s.castAge / 0.75 : s.move === 'reaping' ? reapPhase(s.castAge) : 9;
+    // the cleave's impact frame: a squash into the strike and a flag the view turns into a camera kick
+    const reapHit = s.move === 'reaping' && s.castAge >= REAP_HIT * REAP_SECS && this.lastCastAge < REAP_HIT * REAP_SECS;
+    this.lastCastAge = s.move === 'reaping' ? s.castAge : -1;
+    if (reapHit) { this.sq.v -= 1.4 * PS.squash; this.impact = 1; } else this.impact = 0;
     const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05 && s.move !== 'shatter', s.move ?? '', cp) : null;
     const charging = s.move === 'dawncharge';
     const hTw = hs ? Math.max(-1.1, Math.min(1.1, hs.th * 0.6)) * hs.w : 0;
@@ -1354,7 +1381,7 @@ export class Animator {
       // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
       let over: { hand: THREE.Vector3; w: number; pole?: THREE.Vector3 } | null = null;
       const leftFree = s.move === 'shatter' || s.move === 'reaping' ? false : (s.move === 'tide' || s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
-      if (hs && (i === 1 || !leftFree)) {
+      if (hs && s.move !== 'tide' && (i === 1 || !leftFree)) {
         const HH = this.height;
         const Sh = R.upperarm_L && R.upperarm_R ? R.upperarm_L.p.clone().add(R.upperarm_R.p).multiplyScalar(0.5).add(hipsOff) : R.chest.p.clone().add(hipsOff);
         const dirH = new THREE.Vector3(Math.sin(hs.th), 0, Math.cos(hs.th));
@@ -1370,9 +1397,10 @@ export class Animator {
         }
         over = { hand, w: wh };
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
-      } else if (i === 0 && s.move === 'tide') {
-        // Crescent Warpath: the Crescent Fang held out wide on the left, trailing the spin like the axe on the right
-        over = { hand: shoulder.clone().add(new THREE.Vector3(side * 0.9, 0.03, -0.3).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: 1, pole: new THREE.Vector3(side * 0.3, -0.4, -0.9) };
+      } else if (i === 1 && s.move === 'tide') {
+        // Crescent Warpath: the right arm up as the hub the weapons wheel round (Junker Queen's Rampage); the left swings
+        // with the run
+        over = { hand: shoulder.clone().add(new THREE.Vector3(side * 0.12, 0.8, 0.28).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: this.orbitW, pole: new THREE.Vector3(side * 0.8, 0.2, 0.9) };
       } else if (i === 0 && charging) {
         over = { hand: shoulder.clone().add(new THREE.Vector3(-0.15, 0.05, 0.75).multiplyScalar(l1 + l2)), w: 1 };
       } else if (i === 0 && this.punchW > 0.01 && armAct < 0.3) {
@@ -1514,15 +1542,34 @@ export class Animator {
     if (this.prop) {
       this.prop.visible = !!hs;
       if (hs) {
-        // Crescent Warpath: the great axe spun in her hand, flat like a propeller, the hand at its hub
-        if (s.move === 'tide' && s.twirl) { this.gripH.set(Math.sin(s.twirl), 0.1, Math.cos(s.twirl)).normalize(); this.gripT.set(0, 1, 0); }
         const H = this.gripH, T = this.gripT.clone().addScaledVector(H, -this.gripT.dot(H));
         if (T.lengthSq() < 1e-6) T.set(1, 0, 0);
         T.normalize();
         const Zb = new THREE.Vector3().crossVectors(T, H);
         this.prop.position.copy(this.gripG).addScaledVector(H, -0.1 * this.hammerLen);
         this.prop.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(T, H, Zb));
-      }
+        // Crescent Warpath (Junker Queen's Rampage, docs/research/rampage_study.md): the axe and the Fang leave her
+        // hands and wheel round her at shoulder height, hafts in and heads out, anticlockwise from above at TIDE_TURNS
+        // a second, opposite each other; the ring is a wheel across her back in the first moment and levels as she goes
+        const tide = s.move === 'tide' ? s.tide : undefined;
+        this.orbitW += ((tide ? 1 : 0) - this.orbitW) * Math.min(1, dt * (tide ? 22 : 14));
+        if (tide || this.orbitW > 0.01) {
+          const age = tide?.age ?? 9, phi = age * TIDE_TURNS * 2 * Math.PI, tilt = 1.05 * Math.max(0, 1 - age / 0.15);
+          const centre = R.chest.p.clone().add(hipsOff).add(new THREE.Vector3(0, 0.2 * this.height, 0.05 * this.height));
+          const rad = 0.62 * this.height, ring = rot(Z, tilt);
+          const at = (a: number) => new THREE.Vector3(Math.sin(a) * rad, 0, Math.cos(a) * rad).applyQuaternion(ring).add(centre);
+          const tangent = (a: number) => new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)).applyQuaternion(ring).normalize();
+          const up = new THREE.Vector3(0, 1, 0).applyQuaternion(ring);
+          // the axe: its pommel toward the hub, the crescent head out past the ring, the edge leading round
+          const pa = at(phi), out = pa.clone().sub(centre).normalize(), pommel = pa.clone().addScaledVector(out, -0.45 * this.hammerLen);
+          const Ha = out, Ta = tangent(phi), Za = new THREE.Vector3().crossVectors(Ta, Ha);
+          this.prop.position.lerp(pommel, this.orbitW);
+          this.prop.quaternion.slerp(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(Ta, Ha, Za)), this.orbitW);
+          // the Fang half a turn behind, its blade pointing in at the hub (placed by placeGuns from gunOrbit)
+          const pf = at(phi + Math.PI), inward = centre.clone().sub(pf).normalize();
+          this.gunOrbit[0] = { p: pf, z: inward, y: up, w: this.orbitW };
+        } else this.gunOrbit[0] = null;
+      } else this.gunOrbit[0] = null;
     }
     // ---------------- wings
     if ((this.bones.wing_L || this.bones.wing_R) && s.angel && !PERF) {
@@ -1596,8 +1643,6 @@ export class Animator {
     }
     // ---------------- secondary motion: hair / coat tails / skirts
     if (this.down > 0.01) this.sprawl(kd > 0.32 ? this.down : this.down * this.down);
-    // (the Fang is half a turn behind the axe, so one blade is always crossing in front of her)
-    this.gunTwirl[0] = s.move === 'tide' && s.twirl ? s.twirl + Math.PI : 0;
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
     this.dynamics(s, dt);
     this.placeGuns();

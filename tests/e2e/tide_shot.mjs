@@ -1,8 +1,8 @@
 // Tomoe's Crescent Warpath in a real match, slow motion: the spin through the air in third person (a side camera), the
 // blue glow on the heroes it cut through ('tidemark'), and the same flight in first person.
 //   node tests/e2e/tide_shot.mjs [port]      ->  tests/e2e/shots/tide_3p.png, tests/e2e/shots/tide_fp.png
-// The flight is started here the way the ability does (a.forced kind 'tide', sv.tideT0 / tideDur), so the poses can be
-// checked on any build.
+// The dash is started here the way the ability does (a.forced kind 'tide', sv.tideT0 / tideDur), slower, so the poses can
+// be checked on any build.
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 const [port = '5199'] = process.argv.slice(2);
@@ -29,12 +29,13 @@ await p.evaluate(() => {
   });
   const orig = g.updateCamera.bind(g);
   window.__side = false;
-  g.updateCamera = (dt, m) => { orig(dt, m); if (m && window.__side) { const c = g.camera; c.position.set(m.pos.x + 3.4, m.pos.y + 1.7, m.pos.z + 1.6); c.lookAt(m.pos.x, m.pos.y + 1.1, m.pos.z + 0.2); } };
+  g.updateCamera = (dt, m) => { orig(dt, m); if (m && window.__side) { const c = g.camera; c.position.set(m.pos.x + 4.2, m.pos.y + 2.0, m.pos.z + 1.2); c.lookAt(m.pos.x, m.pos.y + 1.3, m.pos.z + 0.4); } };
   window.__fly = () => {
     const t = w.time;
-    me.pos = { x: -10, y: w.level.groundAt(-10, -12, 30) + 1.2, z: -12 }; me.vel = { x: 0, y: 0, z: 0 };
+    me.pos = { x: -10, y: w.level.groundAt(-10, -12, 30), z: -12 }; me.vel = { x: 0, y: 0, z: 0 };
     me.yaw = me.input.yaw = 0; g.input.yaw = 0; g.camYaw = 0; g.input.pitch = 0; g.camPitch = 0;
-    me.forced = { vx: 0, vy: 0, vz: 7, until: t + 1.2, kind: 'tide' }; me.sv.tideT0 = t; me.sv.tideDur = 1.2; me.set('tideult', t, 1.2);
+    // (a ground dash as the ability makes it: 20 m at 28 m/s; here slower so the strip catches it)
+    me.forced = { vx: 0, vy: 0, vz: 9, until: t + 1.2, kind: 'tide' }; me.sv.tideT0 = t; me.sv.tideDur = 1.2; me.set('tideult', t, 1.2);
     return t;
   };
 }, null);

@@ -34,7 +34,7 @@ FP_TRIS = 80000
 FP_OUT = HERE / 'out' / 'models_fp'
 # per hero: how close to the hand joints geometry must be to stay hand (x height; default 0.07 keeps bulky gauntlets) -
 # Kaien's generation holds a paper-hung staff right against his fingers
-FP_HELD_CUT = {'kaien': 0.045}
+FP_HELD_CUT = {'kaien': 0.045, 'tomoe': 0.04}     # Tomoe's generation holds her knife tight in the left fist
 TRIPO = {
     'tenkai': (3.3, ['--mech', '--tris', '70000']), 'gorgoth': (3.4, ['--mech', '--tris', '70000']),
     'mirei': (1.7, ['--wings']), 'nocturne': (1.75, ['--wings', '--chains', '--hair', *WHITE]),
