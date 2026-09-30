@@ -19,6 +19,10 @@ export const G = 24;
 export const GROOVE_MAX = 20;
 /** the tap rates (taps a second) the Groove spans: none below GROOVE_TAPS[0], the full GROOVE_MAX at GROOVE_TAPS[1] */
 export const GROOVE_TAPS: [number, number] = [1.5, 8.5];
+/** Hayate's Sun-Alloy Frame: the same tap-rate speed as Hibiki's Groove, up to this multiplier on his run and his climb */
+export const KOI_GROOVE_MAX = 5;
+/** Hayate's Mirror Water (Genji's Deflect): the window, and the least of it before E again ends it (the cooldown is in heroes.ts) */
+export const DEFLECT_SECS = 2, DEFLECT_MIN = 0.27;
 /** the Koryu brothers' wall climb: seconds of climbing per touch of the ground (jump taps add a little back) */
 export const CLIMB_SECS = 2.2;
 /** Grand Dohyo: height of the rope wall above the ring floor (m) */
@@ -49,6 +53,8 @@ export type GameEvent =
 export interface Proj {
   id: number; owner: Actor; team: TeamId; pos: V3; vel: V3; dmg: number; splash: number; heal: boolean;
   fx: string; life: number; r: number; grav: number; special?: string; crit: number; hits: Set<number>; pierce?: boolean; homing?: number; born: number;
+  /** drawn as this prop (WeaponDef.mesh), spinning at `spin` rad/s about its flat axis (Fx.syncProjectiles) */
+  mesh?: string; spin?: number;
 }
 export interface Zone {
   id: number; kind: string; owner: Actor; team: TeamId; x: number; y: number; z: number; r: number; born: number; until: number; next: number; data?: any;
@@ -262,6 +268,19 @@ export class World {
       src.set('stun', t, 1);
       this.sfx('parry', tgt.center); this.fx('parry', tgt.center, { color: '#8ad8ff', actor: tgt });
       if (src.def.id === 'enra') this.emit({ t: 'counter', actor: tgt, target: src, text: 'Thunder Parry stuns Enra' });
+      return 0;
+    }
+    // Mirror Water (Genji's Deflect): a blow or a shot from in front of him is turned on the blade - melee stops dead,
+    // hitscan fire goes back out along his aim at whoever is there
+    if (src && tgt.has('deflect', t) && (o.kind === 'melee' || o.kind === 'hitscan') && this.deflected(tgt, src.pos, tgt.center)) {
+      if (o.kind === 'hitscan') {
+        const e = tgt.eye, d = this.aimDir(tgt);
+        const lh = this.level.ray(e, d, 60), max = lh ? lh.t : 60;
+        const ah = this.rayActors(e, d, max, x => x.team !== tgt.team && x !== tgt);
+        const end = ah ? ah.t : max, endP = { x: e.x + d.x * end, y: e.y + d.y * end, z: e.z + d.z * end };
+        this.fx('tracer', e, { to: endP, color: tgt.def.glow, actor: tgt });
+        if (ah) this.damage(tgt, ah.actor, amount, { crit: o.crit, kind: 'hitscan' });
+      }
       return 0;
     }
     let dmg = amount;
@@ -484,6 +503,13 @@ export class World {
         if (s.d2 <= r * r) hitT = s.s * tEnd;
       }
       if (hitT === null) continue;
+      // Mirror Water (Genji's Deflect): a shot from in front of him leaves again along his aim, now his
+      if (!friendly && x.has('deflect', this.time) && !p.heal && this.deflected(x, p.pos, { x: a.x + dir.x * hitT, y: a.y + dir.y * hitT, z: a.z + dir.z * hitT })) {
+        const sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z), d = this.aimDir(x), e = x.eye;
+        p.owner = x; p.team = x.team; p.vel = { x: d.x * sp, y: d.y * sp, z: d.z * sp }; p.hits.clear(); p.life = Math.max(p.life, 1);
+        p.pos = { x: e.x + d.x * 0.5, y: e.y - 0.1 + d.y * 0.5, z: e.z + d.z * 0.5 };
+        return true;
+      }
       // Thunder Parry: reflect
       if (!friendly && x.has('parry', this.time) && !p.heal) {
         p.owner = x; p.team = x.team; p.vel = { x: -p.vel.x, y: -p.vel.y, z: -p.vel.z }; p.hits.clear(); p.life = Math.max(p.life, 1);
@@ -719,7 +745,10 @@ export class World {
         if (a.forced?.kind === 'dawncharge' && this.pressed(a, 'a1') && t - (a.sv.chargeStart ?? 0) > 0.3) a.forced.until = t;
         else if (a.has('tachiai', t) && this.pressed(a, 'a1') && t - (a.sv.rushStart ?? 0) > 0.3) a.clear('tachiai');
         else if (this.pressed(a, 'a1')) castAbility(this, a, a.def.ability1.id, 'a1');
-        if (this.pressed(a, 'a2')) castAbility(this, a, a.def.ability2.id, 'a2');
+        if (this.pressed(a, 'a2')) {
+          if (a.has('deflect', t) && t - (a.sv.deflectStart ?? 0) >= DEFLECT_MIN) a.clear('deflect');     // Mirror Water ends on E again
+          else castAbility(this, a, a.def.ability2.id, 'a2');
+        }
         if (this.pressed(a, 'ult') && a.ult >= a.def.ult.charge) castAbility(this, a, a.def.ult.id, 'ult');
         const S = a.def.secondary;
         if (isAbility(S) && !S.hold && this.pressed(a, 'alt')) castAbility(this, a, S.id, 'alt');
@@ -754,6 +783,7 @@ export class World {
       if (a.flameOn) spd *= 0.9;
       if (a.has('reapwind', t)) spd *= 0.55;           // Tomoe heaving the axe round
       if (d.id === 'hibiki') spd *= this.grooveStep(a, dt);
+      else if (d.id === 'hayate') spd *= this.grooveStep(a, dt, KOI_GROOVE_MAX);   // Sun-Alloy Frame: tap jump faster, run faster
       if (a.has('dragonblade', t)) spd *= 1.3;         // Hayate's Dragon Gate Blade
       const rooted = a.has('root', t) || a.has('stun', t);
       let mx = inp.mx, mz = inp.mz;
@@ -1013,7 +1043,7 @@ export class World {
    * it can never read faster than the time since the last tap allows, so the moment the tapping slows the speed follows
    * it down. Movement sub-steps every 0.3m, so even at the top of the groove he can't skate through a wall.
    */
-  private grooveStep(a: Actor, dt: number): number {
+  private grooveStep(a: Actor, dt: number, max = GROOVE_MAX): number {
     const t = this.time;
     if (this.pressed(a, 'jump')) {
       const gap = t - (a.sv.tapAt ?? -9);
@@ -1025,13 +1055,13 @@ export class World {
     const since = t - (a.sv.tapAt ?? -9);
     a.sv.tapRate = since > 1.2 ? 0 : Math.min(a.sv.tapRate ?? 0, 1 / Math.max(1e-3, since) * 1.15);
     const x = Math.max(0, Math.min(1, ((a.sv.tapRate ?? 0) - GROOVE_TAPS[0]) / (GROOVE_TAPS[1] - GROOVE_TAPS[0])));
-    const target = 1 + (GROOVE_MAX - 1) * x;
+    const target = 1 + (max - 1) * x;
     // (sv.rhythm / status 'rhythm': 'groove' is the Healing Groove aura's status, which writes sv.groove every tick)
     const g0 = a.sv.rhythm ?? 1;
     a.sv.rhythm = g0 + (target - g0) * Math.min(1, dt * (target > g0 ? 2.2 : 3.5));
     if (a.sv.rhythm > 1.5) a.set('rhythm', t, 0.25);
     // deep in the groove his skates leave a light trail
-    if (a.sv.rhythm > 4 && t >= (a.sv.rhythmFx ?? 0)) { a.sv.rhythmFx = t + 0.3; this.fx('chargetrail', a.pos, { actor: a, dur: 0.4, color: a.def.glow }); }
+    if (a.sv.rhythm > Math.min(4, max * 0.7) && t >= (a.sv.rhythmFx ?? 0)) { a.sv.rhythmFx = t + 0.3; this.fx('chargetrail', a.pos, { actor: a, dur: 0.4, color: a.def.glow }); }
     return a.sv.rhythm;
   }
 
@@ -1047,7 +1077,7 @@ export class World {
     const t = this.time, inp = a.input, L = this.level;
     if (a.grounded) a.sv.climbLeft = CLIMB_SECS;
     const stop = () => { if (a.has('wallclimb', t)) a.clear('wallclimb'); return false; };
-    if (rooted || a.forced || a.has('stun', t) || inp.mz < 0.3) return stop();
+    if (rooted || a.forced || a.has('stun', t) || inp.mz < (id === 'hayate' ? 0.05 : 0.3)) return stop();
     const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), reach = a.radius + 0.5;
     const wall = (y: number) => { const h = L.ray({ x: a.pos.x, y, z: a.pos.z }, { x: fx, y: 0, z: fz }, reach); return h && Math.abs(h.ny) < 0.35 ? h : null; };
     const h = wall(a.pos.y + a.height * 0.55);
@@ -1058,23 +1088,58 @@ export class World {
       return stop();
     }
     const [X, Z] = L.size;
-    if (Math.abs(a.pos.x) > X - 2.5 || Math.abs(a.pos.z) > Z - 2.5) return stop();
+    const border = Math.abs(a.pos.x) > X - 2.5 || Math.abs(a.pos.z) > Z - 2.5;
+    // the arena's own walls: Seiran stops short of them; Hayate climbs them the way Genji climbs a map's edge - one
+    // Cyber-Agility climb (7.8 m) per time in the air, never onto the top (mantle() refuses the border) - so the Proving
+    // Grounds' walls climb, but nobody perches on the arena wall or leaves the map
+    if (border && id !== 'hayate') return stop();
+    if (a.grounded) a.sv.edgeClimb = 0;
+    if (border) {
+      const top = L.groundAt(a.pos.x + fx * (reach + 0.4), a.pos.z + fz * (reach + 0.4), 500);
+      if ((Number.isFinite(top) && a.pos.y >= top - a.height - 0.3) || (a.sv.edgeClimb ?? 0) >= 7.8) { a.vel.y = Math.min(a.vel.y, 0); return stop(); }
+    }
     const tap = this.pressed(a, 'jump');
     // (holding jump into a wall starts a climb too - Genji's - as does Seiran just moving into one in the air)
     const want = tap || inp.jumpHeld || (id === 'seiran' && !a.grounded && (on || a.vel.y < 2));
     if (!want) return on ? true : false;
-    if (tap) a.sv.climbLeft = Math.min(CLIMB_SECS, (a.sv.climbLeft ?? CLIMB_SECS) + 0.14);
-    if ((a.sv.climbLeft ?? CLIMB_SECS) <= 0) return stop();
-    a.sv.climbLeft = (a.sv.climbLeft ?? CLIMB_SECS) - dt;
+    // Hayate's Sun-Alloy Frame climbs any wall or building to its top for as long as jump is held (or tapped) - Genji's
+    // climb without its one-second limit; Seiran has CLIMB_SECS of climb per touch of the ground, every tap adding a little back
+    if (id !== 'hayate') {
+      if (tap) a.sv.climbLeft = Math.min(CLIMB_SECS, (a.sv.climbLeft ?? CLIMB_SECS) + 0.14);
+      if ((a.sv.climbLeft ?? CLIMB_SECS) <= 0) return stop();
+      a.sv.climbLeft = (a.sv.climbLeft ?? CLIMB_SECS) - dt;
+    }
     const nl = Math.hypot(h.nx, h.nz) || 1;
     a.sv.grindNx = h.nx / nl; a.sv.grindNz = h.nz / nl; a.sv.grindDir = 1;
-    const up = 6.8 * (a.has('dragonblade', t) ? 1.25 : 1);
+    // Hayate runs up at Genji's 7.8 m/s (Cyber-Agility), and the faster the jump taps, the faster the climb - the same
+    // rhythm that drives his run
+    const up = (id === 'hayate' ? 7.8 * Math.min(KOI_GROOVE_MAX, Math.max(1, a.sv.rhythm ?? 1)) : 6.8) * (a.has('dragonblade', t) ? 1.25 : 1);
     a.vel.y = up; a.vel.x = -a.sv.grindNx * 1.2; a.vel.z = -a.sv.grindNz * 1.2;          // hug the wall
+    if (border) a.sv.edgeClimb = (a.sv.edgeClimb ?? 0) + up * dt;
     a.grounded = false; a.flying = false; a.lastGroundedAt = -9;
     if (!on) { a.anim.jumpAt = t; this.sfx('jump', a.pos, a); }
     a.set('wallclimb', t, 0.18);
     // reaching the top: the wall is gone at head height - vault over
     if (!wall(a.pos.y + a.height + 0.35) && this.mantle(a)) { a.clear('wallclimb'); return false; }
+    return true;
+  }
+
+  /** where an actor is aiming (unit vector from yaw and pitch) */
+  aimDir(a: Actor): V3 {
+    const c = Math.cos(a.pitch);
+    return { x: Math.sin(a.yaw) * c, y: Math.sin(a.pitch), z: Math.cos(a.yaw) * c };
+  }
+  /** Mirror Water: is something coming at him from in front (within 90 degrees of where he faces)? If so it is turned:
+   *  the blade flicks toward where it came from (anim.deflectAt / deflectDir / deflectN for the animator, an fx
+   *  'deflect' at the contact point with that direction in `n`) and the caller decides what becomes of it. */
+  private deflected(x: Actor, from: V3, at: V3): boolean {
+    const dx = from.x - x.pos.x, dz = from.z - x.pos.z, l = Math.hypot(dx, dz);
+    if (l > 1e-3 && (dx * Math.sin(x.yaw) + dz * Math.cos(x.yaw)) / l < 0) return false;
+    const dy = from.y - x.center.y, n = Math.hypot(l, dy) || 1;
+    const dir = { x: dx / n, y: dy / n, z: dz / n };
+    x.anim.deflectAt = this.time; x.anim.deflectDir = dir; x.anim.deflectN++;
+    x.stats.deflects = (x.stats.deflects ?? 0) + 1;
+    this.sfx('parry', at); this.fx('deflect', at, { color: '#8ad8ff', actor: x, n: dir });
     return true;
   }
 

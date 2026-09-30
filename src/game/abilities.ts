@@ -2,7 +2,7 @@
 import { isAbility, type WeaponDef } from '../data/heroes';
 import type { V3 } from '../engine/Physics';
 import type { Actor } from './Actor';
-import { dist3, norm, type Proj, type World, type Zone } from './World';
+import { DEFLECT_SECS, dist3, norm, type Proj, type World, type Zone } from './World';
 import { ignite, wound } from './weapons';
 import { raisePuppets } from './puppets';
 
@@ -61,7 +61,7 @@ function zone(w: World, a: Actor, kind: string, p: V3, r: number, dur: number, d
 }
 const inZone = (z: Zone, x: Actor) => Math.hypot(x.pos.x - z.x, x.pos.z - z.z) < z.r + x.radius * 0.5 && x.pos.y > z.y - 2 && x.pos.y < z.y + 6;
 /** Grand Dohyo: a hero bound by the ring's chains can't dash, leap or teleport (the chain holds) */
-const LEASHED = new Set(['spiritstep', 'flashstep', 'currentdash', 'riverstep', 'shadowstep', 'dawncharge', 'abysscharge', 'sunhop', 'chain', 'pilotroll']);
+export const LEASHED = new Set(['spiritstep', 'flashstep', 'currentdash', 'riverstep', 'shadowstep', 'dawncharge', 'abysscharge', 'sunhop', 'chain', 'pilotroll']);
 function sealed(w: World, a: Actor) {
   if (a.has('sealed', w.time)) { w.fx('blocked', a.center, { color: '#ffe28a', actor: a }); w.sfx('denied', a.pos, a); return true; }
   return false;
@@ -278,8 +278,12 @@ const I: Record<string, Impl> = {
     return true;
   },
   mirrorwater(w, a) {
-    a.set('parry', w.time, 2);
-    w.fx('parrystance', a.center, { color: '#4fe3c1', actor: a, dur: 2 }); w.sfx('parrystance', a.center, a);
+    // after Genji's Deflect: for DEFLECT_SECS everything that comes at him from in front is turned on the blade -
+    // projectiles and hitscan fire go back out along his aim, melee stops dead (World.damage and the projectile hits,
+    // through World.deflected); E again ends it early, after DEFLECT_MIN
+    if (a.has('deflect', w.time)) return false;
+    a.set('deflect', w.time, DEFLECT_SECS); a.sv.deflectStart = w.time; a.anim.deflectN = 0;
+    w.fx('parrystance', a.center, { color: '#4fe3c1', actor: a, dur: DEFLECT_SECS }); w.sfx('parrystance', a.center, a);
     return true;
   },
   dragongate(w, a) {

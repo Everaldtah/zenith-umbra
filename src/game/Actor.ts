@@ -50,7 +50,10 @@ export class Actor {
   shots = 0; hits = 0; crits = 0; mitigated = 0; objTime = 0; ults = 0; streak = 0; bestStreak = 0;
   stats: Record<string, number> = {};
   // animation cues read by the renderer
-  anim = { attackAt: -9, attackKind: 'primary' as string, attackSide: 1, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0, fireL: -9, fireR: -9 };
+  anim = { attackAt: -9, attackKind: 'primary' as string, attackSide: 1, castAt: -9, castId: '', hitAt: -9, jumpAt: -9, landAt: -9, stepPhase: 0, fireL: -9, fireR: -9,
+    // Hayate's Mirror Water (Genji's Deflect): the last turned shot - when, the world direction from him to where it
+    // came from (the blade flicks that way), and how many so far this window
+    deflectAt: -9, deflectDir: { x: 0, y: 0, z: 1 } as V3, deflectN: 0 };
   isPlayer = false;
   isRobot = false;
   noRespawn = false;

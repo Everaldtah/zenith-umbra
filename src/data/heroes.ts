@@ -21,6 +21,8 @@ export interface WeaponDef {
   ammo?: number;
   reload?: number;
   heal?: boolean;        // beam / projectile heals allies instead of hurting enemies
+  mesh?: string;         // projectile drawn as this prop (a manifest id, e.g. Hayate's shuriken), lying flat along its flight
+  spin?: number;         // ...spinning about its own flat axis, rad/s (a thrown shuriken: 30)
   sweep?: boolean;       // melee: a wide two-handed arc (alternating swing sides) instead of a thrust
   delay?: number;        // melee: seconds from the button press to the blow landing (heavy weapons wind up)
   burst?: number;        // rounds per trigger pull (fired burstGap seconds apart); rate is then bursts per second
@@ -254,12 +256,12 @@ export const HEROES: HeroDef[] = [
   {
     id: 'hayate', name: 'Hayate', title: 'The Rebuilt Blade', team: 'zenith', role: 'dps', frame: 'human', rival: 'seiran', full: true,
     hp: 200, armor: 0, speed: 6.4, height: 1.78, radius: 0.42, color: '#4fe3c1', glow: '#7ff5d8',
-    primary: { kind: 'projectile', name: 'Koi-Scale Shuriken', damage: 27, rate: 1.05, range: 45, speed: 62, burst: 3, burstGap: 0.08, ammo: 24, reload: 1.4, sfx: 'shuriken', fx: 'tide' },
-    secondary: { kind: 'projectile', name: 'Fan of Scales', damage: 27, rate: 1.4, range: 38, speed: 62, pellets: 3, spread: 0.11, sfx: 'shuriken', fx: 'tide' },
+    primary: { kind: 'projectile', name: 'Koi-Scale Shuriken', damage: 27, rate: 1.05, range: 45, speed: 62, burst: 3, burstGap: 0.08, ammo: 24, reload: 1.4, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken', spin: 30 },
+    secondary: { kind: 'projectile', name: 'Fan of Scales', damage: 27, rate: 1.4, range: 38, speed: 62, pellets: 3, spread: 0.11, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken', spin: 30 },
     ability1: { id: 'currentdash', name: 'Current Dash', key: 'SHIFT', cooldown: 7, desc: 'Dash 15m through enemies, cutting each for 50. Resets when you get an elimination.' },
-    ability2: { id: 'mirrorwater', name: 'Mirror Water', key: 'E', cooldown: 8, desc: '2s: your blade turns like still water - projectiles aimed at you are reflected back at their shooter, melee attackers are staggered.', counter: "Turns Seiran's Scatter Current back on him." },
+    ability2: { id: 'mirrorwater', name: 'Mirror Water', key: 'E', cooldown: 8, desc: '2s: the blade comes up and everything that comes at you from in front is turned on it - shots and gunfire go back out where you are aiming, blows stop dead. E again to lower it.', counter: "Turns Seiran's Scatter Current back on him." },
     ult: { id: 'dragongate', name: 'Dragon Gate Blade', key: 'Q', cooldown: 0, charge: 1800, desc: 'Draw the nodachi for 15s: your primary becomes a sweeping blade (110 damage a slash, 5m) that looses the koi-dragon through every cut, and you move 30% faster. Current Dash still resets on an elimination.' },
-    passive: { name: 'Sun-Alloy Frame', desc: 'Double jump, and climb walls: jump at a wall and hold SPACE (or keep tapping it) to run up it and vault onto the roof.' },
+    passive: { name: 'Sun-Alloy Frame', desc: 'Double jump, and climb any wall or building: jump at it and hold SPACE (or keep tapping it) to run up it and vault onto the roof. The faster you tap SPACE, the faster he runs and climbs - up to five times his pace.' },
     lore: "The younger son of the Koryu, the waterfront clan that bowed to the Syndicate. Hayate laughed at the clan, at the debt, at the Syndicate - until his brother was ordered to silence him on the Dragon Gate falls. The river gave him back to Hangar Zero, where Haruto's father rebuilt him in sun-alloy around what was left. Now he fights beside the Vanguard, and carries the koi-dragon his brother still thinks he killed.",
     inspiration: 'The cyber-ninja brother of a feuding assassin clan: rebuilt body, dash-and-deflect duelling, a spirit dragon in the blade.',
     voice: [300, 0.55],

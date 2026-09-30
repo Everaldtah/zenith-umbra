@@ -100,6 +100,7 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
         dmg: W.damage * mult, splash: W.splash ?? 0, heal: !!W.heal, fx: W.fx, life: W.range / (W.speed ?? 50) * 1.3,
         r: W.heal ? 0.35 : W.splash ? 0.2 : 0.1, crit: W.kind === 'charge' && mult > 0.99 ? 2 : 1.5,
         homing: W.heal ? 5 : a.def.id === 'kaien' ? 1.2 : 0, grav: 0,
+        ...(W.mesh ? { mesh: W.mesh, spin: W.spin ?? 30 } : {}),        // a prop projectile (Hayate's shuriken)
       });
     }
   } else if (W.kind === 'hitscan') {
