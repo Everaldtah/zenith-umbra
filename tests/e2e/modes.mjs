@@ -1,4 +1,4 @@
-// Normal vs Stadium through the real menus (real GPU): node tests/e2e/modes.mjs [url]
+// Normal (AI Quick Match) vs Stadium through the real menus (real GPU): node tests/e2e/modes.mjs [url]
 //   NORMAL: first person, V does nothing.  STADIUM: third person, the Armory opens, an item + a power can be bought,
 //   READY starts the round.  Screenshots: tests/e2e/shots/modes/*.png
 import puppeteer from 'puppeteer-core';
@@ -8,7 +8,7 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p 
 const OUT = 'tests/e2e/shots/modes'; fs.mkdirSync(OUT, { recursive: true });
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--window-size=1600,900'], defaultViewport: { width: 1600, height: 900 } });
 const p = await b.newPage();
-const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/favicon|404|pointer ?lock/i.test(m.text())) errs.push(m.text().slice(0, 200)); });
+const errs = []; p.on('pageerror', e => { if (!/pointer ?lock/i.test(e.message)) errs.push(e.message); });   // (headless has no user gesture for the lock) p.on('console', m => { if (m.type() === 'error' && !/favicon|404|pointer ?lock/i.test(m.text())) errs.push(m.text().slice(0, 200)); });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let fails = 0;
 const check = (n, ok, info = '') => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'} ${n}${info ? ' - ' + info : ''}`); };
@@ -16,18 +16,20 @@ const click = async sel => { await p.waitForSelector(sel, { timeout: 30000 }); a
 await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await p.waitForFunction(() => !!window.__zu?.menu, { timeout: 60000 });
 
-// ---- NORMAL
-await click('[data-m="play"]');
+// ---- NORMAL (the title's AI QUICK MATCH: difficulty + map, then the hero, then the match)
+check('the title offers AI QUICK MATCH and STADIUM', await p.evaluate(() => !!document.querySelector('[data-q="practice"]') && !!document.querySelector('[data-m="stadium"]')));
+await click('[data-q="practice"]');
 await p.screenshot({ path: `${OUT}/modeselect.png` });
-check('mode select shows NORMAL and STADIUM', await p.evaluate(() => document.querySelectorAll('.mode').length === 2));
-await click('.mode[data-mode="skirmish"]');
+check('AI QUICK MATCH asks for a difficulty and a map', await p.evaluate(() => document.querySelectorAll('.diffs [data-d]').length >= 3 && document.querySelectorAll('.mapsq .mc').length >= 2));
+await click('.go');                                                          // CHOOSE HERO
+await p.waitForSelector('.hc', { timeout: 30000 });
 await click('.go');
 await p.waitForFunction(() => window.__zu.game.running && window.__zu.game.match?.player, { timeout: 90000 });
 await sleep(5000);
 await p.evaluate(() => { const z = window.__zu; z.menu.close(); if (z.game.paused) z.game.setPaused(false); });
 await sleep(1500);
 let st = await p.evaluate(() => { const g = window.__zu.game; return { mode: g.match.world.mode, view: g.view, fp: !!g.fp }; });
-check('NORMAL is first person with viewmodel arms', st.mode === 'skirmish' && st.view === 'first' && st.fp, JSON.stringify(st));
+check('NORMAL is first person with viewmodel arms', st.mode === 'practice' && st.view === 'first' && st.fp, JSON.stringify(st));
 await p.keyboard.press('KeyV'); await sleep(400);
 check('NORMAL: V does not leave first person', await p.evaluate(() => window.__zu.game.view === 'first'));
 await p.screenshot({ path: `${OUT}/normal.png` });
@@ -36,8 +38,8 @@ await sleep(1000);
 
 // ---- STADIUM
 await p.evaluate(() => window.__zu.menu.title());
-await click('[data-m="play"]');
-await click('.mode[data-mode="stadium"]');
+await click('[data-m="stadium"]');
+await p.waitForSelector('.hc', { timeout: 30000 });
 await click('.go');
 await p.waitForFunction(() => window.__zu.game.running && window.__zu.game.match?.world.stadium, { timeout: 90000 });
 await sleep(4000);
