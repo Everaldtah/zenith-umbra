@@ -20,10 +20,10 @@ function place(w: World, id: string, team: 'zenith' | 'umbra', x: number, z: num
 function run(w: World, secs: number, each?: () => void) { for (let i = 0; i < Math.round(secs / DT); i++) { each?.(); w.step(DT); w.events.length = 0; } }
 const aimAt = (a: Actor, p: { x: number; y: number; z: number }) => { const e = a.eye; a.yaw = a.input.yaw = Math.atan2(p.x - e.x, p.z - e.z); a.pitch = a.input.pitch = 0; };
 
-describe('Hellfire Cleaver', () => {
-  it('is a sweeping blade: a swing lands on everyone in front within reach, alternating sides', () => {
+describe('Hellfire Chains', () => {
+  it('the primary is a wide arc on the chains: a swing lands on everyone in front within 5 m, alternating sides; the throw reaches 7.5 m', () => {
     const w = arena(), e = place(w, 'enra', 'umbra', 0, 0, 0);
-    const a = place(w, 'raijin', 'zenith', -1, 3, Math.PI), b = place(w, 'yuzu', 'zenith', 1.2, 3.2, Math.PI), far = place(w, 'kaien', 'zenith', 0, 9, Math.PI);
+    const a = place(w, 'raijin', 'zenith', -2.2, 3.8, Math.PI), b = place(w, 'yuzu', 'zenith', 2.4, 4, Math.PI), far = place(w, 'kaien', 'zenith', 0, 6.8, Math.PI);
     const hpA = a.health, hpB = b.health, hpF = far.health;
     expect(e.def.primary.kind).toBe('melee'); expect(e.def.primary.sweep).toBe(true);
     aimAt(e, a.center);
@@ -34,6 +34,10 @@ describe('Hellfire Cleaver', () => {
     expect(far.health).toBe(hpF);
     fire(w, e, e.def.primary as WeaponDef, 'primary');
     expect(e.anim.attackSide).toBe(-side1);
+    // the throw: straight out on the chain, past the arc's reach
+    aimAt(e, far.center);
+    fire(w, e, e.def.secondary as WeaponDef, 'secondary');
+    expect(far.health).toBeLessThan(hpF);
   });
 });
 
