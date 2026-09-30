@@ -16,6 +16,10 @@ import type { Level } from '../engine/Physics';
 const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
 const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
+/** Tomoe's Crescent Warpath: turns of the body over the flight, and the glow of the heroes it cut through */
+const TIDE_TURNS = 2, TIDE_BLUE = '#3fa9ff';
+/** ...and how fast her axe and her Fang spin in her hands on top of it (turns a second; Junker Queen's blades: 5-6) */
+const TIDE_TWIRL = 4;
 /** speed (m/s) above which fast moves smear (Davis GDC17: stretch the mesh along its motion - automated smear frames) */
 const SMEAR_FROM = 12;
 import { skinsFor, type Skin } from '../data/skins';
@@ -222,6 +226,9 @@ export class CharacterView {
   /** first-person viewmodels don't smear (the camera rides the motion) */
   noSmear = false;
   private downYaw: number | null = null;
+  /** Crescent Warpath: the body's spin about its own axis (radians); finishes its turn when the flight is cut short */
+  private tideSpin = 0;
+  private tideMarked = false;
   private spinA = [0, 0];
   private stealthed = false;
   onStep: ((a: Actor, side: number, heavy: boolean) => void) | null = null;
@@ -609,6 +616,7 @@ export class CharacterView {
       swoop: a.has('swoop', time) ? a.sv.swoopProg ?? 0 : -1, swoopFlare: a.has('swoopflare', time) ? 0.4 - (a.st.swoopflare - time) : 9,
       superjump: a.has('superjump', time), slingshot: a.has('slingshot', time), rush: a.has('tachiai', time),
       leap: a.has('stompair', time), knockdown: a.has('knockdown', time) ? Math.max(0, a.st.knockdown - time) : 0,
+      twirl: a.forced?.kind === 'tide' ? 0.001 + (time - (a.sv.tideT0 ?? a.anim.castAt)) * TIDE_TWIRL * 2 * Math.PI : 0,
       skate: a.def.id === 'hibiki', grind: a.has('grinding', time) ? (a.sv.grindSide ?? 1) : 0,
       dual: a.def.dualGuns ? { fireL: time - a.anim.fireL, fireR: time - a.anim.fireR } : undefined,
       reloadLeft: Math.max(0, (a.reloadUntil ?? 0) - time), reloadDur: 'reload' in p ? p.reload : undefined,
@@ -714,6 +722,10 @@ export class CharacterView {
     if (stealth) for (const m of this.mats) m.opacity = alpha;
     const marked = a.has('revealed', time) || a.has('marked', time);
     this.rim.value = a.team === viewer.team ? 0.25 : (marked ? 1.6 : 0.7);
+    // cut by the Crescent Warpath ('tidemark'): the hero glows blue while weakened - for both teams
+    const tided = a.has('tidemark', time);
+    if (tided !== this.tideMarked) { this.tideMarked = tided; this.rimColor.set(tided ? TIDE_BLUE : a.team === viewer.team ? UI_COLORS.ally : UI_COLORS.enemy); }
+    if (tided) this.rim.value = 2.1 + 0.5 * Math.sin(time * 5);
     if (a.has('spawnprot', time)) this.rim.value = 1.2 + Math.sin(time * 20) * 0.5;
     // shields bubble
     const sh = a.shieldAmt;
@@ -756,6 +768,22 @@ export class CharacterView {
       this.inner.position.applyQuaternion(_kq);
       this.inner.position.y += Math.sin(th) * a.height * a.scale * 0.09;
     } else this.downYaw = null;
+    // Tomoe's Crescent Warpath: the whole body turns about its vertical axis as she flies - TIDE_TURNS over the flight,
+    // eased in and out (in the Hero Viewer, with no flight clock, a steady spin). Cut short, it finishes the turn it is in
+    if (a.forced?.kind === 'tide') {
+      const t0 = a.sv.tideT0, dur = Math.max(0.2, a.sv.tideDur ?? 1.2);
+      if (t0 === undefined) this.tideSpin += dt * TIDE_TURNS * 2 * Math.PI / dur;
+      else { const u = Math.min(1, Math.max(0, (time - t0) / dur)); this.tideSpin = Math.max(this.tideSpin, u * u * (3 - 2 * u) * TIDE_TURNS * 2 * Math.PI); }
+    } else if (this.tideSpin > 0) {
+      const goal = Math.ceil(this.tideSpin / (2 * Math.PI) - 1e-3) * 2 * Math.PI;
+      this.tideSpin = Math.min(goal, this.tideSpin + dt * 16);
+      if (this.tideSpin >= goal - 1e-3) this.tideSpin = 0;
+    }
+    if (this.tideSpin > 0) {
+      _kq.setFromAxisAngle(_kv.set(0, 1, 0), this.tideSpin);
+      this.inner.quaternion.premultiply(_kq);
+      this.inner.position.applyQuaternion(_kq);
+    }
     this.smear(time);
     this.updateGuns(dt, time);
     const an = a.anim;

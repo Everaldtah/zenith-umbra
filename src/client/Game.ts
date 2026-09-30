@@ -119,9 +119,12 @@ export class Game {
     tenkai: a => a.barrier.up || a.forced?.kind === 'dawncharge',
     // Gantetsu's Tachiai Rush and the Shiko leap: a chase camera, as Overwatch shows Mauga's Overrun and its stomp
     gantetsu: (a, t) => a.has('tachiai', t) || a.has('stompair', t),
+    // Tomoe's Crescent Warpath: the flight and its spin are seen from behind (Overwatch cuts to third person for
+    // Junker Queen's Rampage the same way)
+    tomoe: a => a.forced?.kind === 'tide',
   };
   /** ...and how long the camera stays out after the ability ends (Gantetsu: to see the slam land and its victims fall) */
-  static readonly THIRD_HOLD: Record<string, number> = { gantetsu: 0.45 };
+  static readonly THIRD_HOLD: Record<string, number> = { gantetsu: 0.45, tomoe: 0.3 };
   private abilityCamUntil = 0;
   specIdx = 0; specNextSwitch = 0; freeCam = false;
   camPos = new THREE.Vector3();

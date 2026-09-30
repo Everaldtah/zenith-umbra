@@ -512,7 +512,7 @@ export class FirstPersonArms {
     }
     // Tomoe: the Fang leaves the left hand in an overhand throw and is called back palm-out; the great axe is heaved
     // across the screen from high right to low left for Crescent Reaping, and held out in front through the Warpath
-    let axe: 'cleave' | 'warpath' | null = null;
+    let axe: 'cleave' | 'warpath' | 'spin' | null = null, spinPh = 0;
     if (a.def.id === 'tomoe' && S.L) {
       const id = a.anim.castId;
       if (id === 'crescent' && cast < 0.45) {
@@ -524,7 +524,16 @@ export class FirstPersonArms {
         const u = cast / 0.75, hi: V = [0.3, 0.14, 0.44], lo: V = [-0.34, -0.36, 0.52], home: V = [0.2, -0.22, 0.44];
         R = u < 0.3 ? lerp(home, hi, smooth(u / 0.3)) : u < 0.8 ? lerp(hi, lo, smooth((u - 0.3) / 0.32)) : lerp(lo, home, smooth((u - 0.8) / 0.2));
         L = add(R, [-0.06, -0.1, -0.04]); axe = 'cleave'; src = 'cleave';
-      } else if (a.forced?.kind === 'tide') { R = [0.16, -0.22, 0.5]; L = [-0.08, -0.3, 0.44]; axe = 'warpath'; src = 'warpath'; }
+      } else if (a.forced?.kind === 'tide') {
+        // Crescent Warpath in first person: the camera doesn't spin (the body does, in third person) - the great axe
+        // sweeps round her in flat circles, crossing the view from right to left once a turn, the Fang in the left
+        // hand half a turn behind it
+        const t0 = a.sv.tideT0 ?? a.anim.castAt, dur = Math.max(0.2, a.sv.tideDur ?? 1.2);
+        const ph = (t - t0) / dur * 2 * 2 * Math.PI;
+        R = [0.3 * Math.cos(ph), -0.2 + 0.03 * Math.sin(ph * 2), 0.42 + 0.16 * Math.sin(ph)];
+        L = [0.26 * Math.cos(ph + Math.PI), -0.24 + 0.03 * Math.sin(ph * 2 + 1), 0.4 + 0.14 * Math.sin(ph + Math.PI)];
+        axe = 'spin'; spinPh = ph; src = 'warpath';
+      }
     }
     // hit flinch
     const hit = t - a.anim.hitAt;
@@ -534,7 +543,8 @@ export class FirstPersonArms {
     // hand targets are camera-relative; the rig sits wherever puts the grip in reach (viewmodelOffset)
     const toM = (v: V) => new THREE.Vector3(-v[0] * k, v[1] * k, v[2] * k).add(this.eye);
     const hands: [THREE.Vector3 | null, THREE.Vector3 | null] = [L ? toM(L) : null, toM(R)];
-    const prop = axe ? { pos: hands[1]!.clone(), dir: hands[1]!.clone().sub(hands[0]!).normalize(), side: axe === 'cleave' ? new THREE.Vector3(1, -0.3, 0) : new THREE.Vector3(0, 0, 1) }
+    const prop = axe === 'spin' ? { pos: hands[1]!.clone(), dir: new THREE.Vector3(-Math.cos(spinPh), 0.12, Math.sin(spinPh)).normalize(), side: new THREE.Vector3(0, 1, 0) }
+      : axe ? { pos: hands[1]!.clone(), dir: hands[1]!.clone().sub(hands[0]!).normalize(), side: axe === 'cleave' ? new THREE.Vector3(1, -0.3, 0) : new THREE.Vector3(0, 0, 1) }
       : S.grip === 'hammer' ? { pos: hands[1]!.clone(), dir: hands[0] ? hands[0].clone().sub(hands[1]!).normalize().add(new THREE.Vector3(0, 0.9, 0.2)).normalize() : new THREE.Vector3(0, 1, 0.3).normalize(), side: new THREE.Vector3(-1, 0, 0) } : null;
     // twin chainguns converge on a point well past the reticle (hip-held guns never follow the bent forearms)
     const gunAim = an.guns ? toM([0, 0, 14]) : undefined;

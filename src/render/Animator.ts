@@ -104,6 +104,7 @@ export interface AnimState {
   slingshot?: boolean;      // flung onward out of a swoop
   dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
+  twirl?: number;           // Tomoe's Crescent Warpath: the angle (radians) her axe and her Fang have spun in her hands
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
   knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
   skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
@@ -225,7 +226,9 @@ function hammerPose(p: number, side: number, shield: boolean, casting: boolean, 
     const lean = cp < 0.3 ? -0.14 * Math.sin(cp / 0.3 * Math.PI * 0.5) : cp < 0.8 ? -0.14 + 0.5 * smooth(Math.min(1, (cp - 0.3) / 0.32)) : 0.36 * (1 - (cp - 0.8) / 0.2);
     return { ...q, imp: Math.max(0, 1 - Math.abs(cp - 0.56) / 0.12) * 1.2, w: 1, side: -1, lean };
   }
-  if (mode === 'tide') return { th: -0.3, ph: -0.45, d: 0.95, gy: -0.1, imp: 0, w: 1, side: 1, lean: 0.38 };   // the axe driven out ahead and low, both hands, charging in behind it
+  // Crescent Warpath (after Junker Queen's Rampage): she spins through the air, the great axe out wide in the right hand
+  // at shoulder height, trailing the turn (the view spins the whole body; the Fang is out on the left - the arm below)
+  if (mode === 'tide') return { th: -1.85, ph: 0.08, d: 0.92, gy: 0.0, imp: 0, w: 1, side: 1, lean: 0.1 };
   if (shield) return { th: -0.75, ph: -1.15, d: 0.6, gy: -0.36, imp: 0, w: 0, side, lean: 0 };      // lowered while the shield is up
   if (p >= 1 || p < 0) return { ...GUARD, th: GUARD.th + (casting ? -0.25 : 0), imp: 0, w: 0, side, lean: 0 };
   // Reinhardt's sweep (alternating, first one counter-clockwise from above = his right to his left): a short
@@ -299,6 +302,8 @@ export class Animator {
   bowTilt = 0;
   /** gun props to keep hidden (Tomoe: the Fang while it's thrown, both while the axe is out) */
   gunHide: [boolean, boolean] = [false, false];
+  /** a held prop spun in its hand, flat like a propeller (radians about the model's vertical; Tomoe's Fang in the ult) */
+  gunTwirl: [number, number] = [0, 0];
   /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
   gunUpright: [boolean, boolean] = [false, false];
   /** skating (Hibiki): how much of the skate stroke is blended in, and each stroke's lateral weight shift */
@@ -430,6 +435,7 @@ export class Animator {
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
+      if (this.gunTwirl[i]) g.quaternion.premultiply(_q.setFromAxisAngle(Y, this.gunTwirl[i]));
       g.visible = !this.gunHide[i];
     });
   }
@@ -469,6 +475,7 @@ export class Animator {
       const Xv = new THREE.Vector3().crossVectors(Yv, Zv);
       g.position.copy(at).addScaledVector(Yv, -0.018 * this.height);
       g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Xv, Yv, Zv));
+      if (this.gunTwirl[i]) g.quaternion.premultiply(_q.setFromAxisAngle(Y, this.gunTwirl[i]));
       g.visible = !this.gunHide[i];
     });
   }
@@ -1345,7 +1352,7 @@ export class Animator {
       // attack / cast: reach along the aim line (right arm leads primaries, both for casts)
       // overrides: the hammer's grip (both hands, or the right one while the left is busy) and the left-hand jab
       let over: { hand: THREE.Vector3; w: number; pole?: THREE.Vector3 } | null = null;
-      const leftFree = s.move === 'shatter' || s.move === 'reaping' || s.move === 'tide' ? false : (s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
+      const leftFree = s.move === 'shatter' || s.move === 'reaping' ? false : (s.move === 'tide' || s.barrier || (this.cast > 0.05 && s.move !== 'dawncharge') || this.punchW > 0.01 || charging);
       if (hs && (i === 1 || !leftFree)) {
         const HH = this.height;
         const Sh = R.upperarm_L && R.upperarm_R ? R.upperarm_L.p.clone().add(R.upperarm_R.p).multiplyScalar(0.5).add(hipsOff) : R.chest.p.clone().add(hipsOff);
@@ -1362,6 +1369,9 @@ export class Animator {
         }
         over = { hand, w: wh };
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
+      } else if (i === 0 && s.move === 'tide') {
+        // Crescent Warpath: the Crescent Fang held out wide on the left, trailing the spin like the axe on the right
+        over = { hand: shoulder.clone().add(new THREE.Vector3(side * 0.9, 0.03, -0.3).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: 1, pole: new THREE.Vector3(side * 0.3, -0.4, -0.9) };
       } else if (i === 0 && charging) {
         over = { hand: shoulder.clone().add(new THREE.Vector3(-0.15, 0.05, 0.75).multiplyScalar(l1 + l2)), w: 1 };
       } else if (i === 0 && this.punchW > 0.01 && armAct < 0.3) {
@@ -1496,6 +1506,8 @@ export class Animator {
     if (this.prop) {
       this.prop.visible = !!hs;
       if (hs) {
+        // Crescent Warpath: the great axe spun in her hand, flat like a propeller, the hand at its hub
+        if (s.move === 'tide' && s.twirl) { this.gripH.set(Math.sin(s.twirl), 0.1, Math.cos(s.twirl)).normalize(); this.gripT.set(0, 1, 0); }
         const H = this.gripH, T = this.gripT.clone().addScaledVector(H, -this.gripT.dot(H));
         if (T.lengthSq() < 1e-6) T.set(1, 0, 0);
         T.normalize();
@@ -1576,6 +1588,8 @@ export class Animator {
     }
     // ---------------- secondary motion: hair / coat tails / skirts
     if (this.down > 0.01) this.sprawl(kd > 0.32 ? this.down : this.down * this.down);
+    // (the Fang is half a turn behind the axe, so one blade is always crossing in front of her)
+    this.gunTwirl[0] = s.move === 'tide' && s.twirl ? s.twirl + Math.PI : 0;
     this.hipsOffNow.copy(hipsOff); this.posCache.clear();
     this.dynamics(s, dt);
     this.placeGuns();
