@@ -63,6 +63,14 @@ describe('Divine Seal Storm', () => {
     run(w, 1.2, () => e.set('phased', w.time, 0.3));
     expect(e.health).toBe(h2);
   });
+  it('bursts on training dummies too (the Proving Grounds targets, the Ult Viewer)', () => {
+    const w = arena(), k = place(w, 'kaien', 'zenith', 0, 4, 0), d = w.addHero('bot_dummy', 'umbra');
+    d.pos = { x: OX + 2, y: 0, z: OZ + 12 }; d.clear('spawnprot');
+    const hd = d.health;
+    k.ult = k.def.ult.charge; castAbility(w, k, 'sealstorm', 'ult');
+    run(w, 2);
+    expect(d.health).toBeLessThan(hd);
+  });
   it('mends every ally in reach he can see, credited to him', () => {
     const w = arena(), k = place(w, 'kaien', 'zenith', 0, 4, 0), al = place(w, 'raijin', 'zenith', 4, 8), farAl = place(w, 'yuzu', 'zenith', 0, 26);
     al.hp = 50; farAl.hp = 50;

@@ -977,7 +977,8 @@ export function tickAbilities(w: World, dt: number) {
     a.sv.stormNext = t + SEALSTORM_TICK;
     let n = 0;
     for (const x of w.enemies(a)) {
-      if (!x.alive || x.isSummon || x.def.id === 'bot_dummy' || x.has('phased', t)) continue;
+      // (training dummies included: they are what the Proving Grounds and the Ult Viewer put in front of him)
+      if (!x.alive || x.isSummon || x.has('phased', t)) continue;
       if (dist3(x.pos, a.pos) > SEALSTORM_R + x.radius || !w.level.lineOfSight(a.eye, x.center)) continue;
       const dealt = w.damage(a, x, SEALSTORM_DMG, { kind: 'ability', ability: 'sealstorm' });
       if (dealt <= 0) continue;

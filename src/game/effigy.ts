@@ -71,7 +71,7 @@ class EffigyBrain {
     const eye = { x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z };
     let n = 0;
     for (const x of w.enemies(o)) {
-      if (!x.alive || x.isSummon || x.def.id === 'bot_dummy') continue;
+      if (!x.alive || x.isSummon) continue;                             // (training dummies included)
       if (Math.hypot(x.pos.x - o.pos.x, x.pos.z - o.pos.z) > EFFIGY_R + x.radius || Math.abs(x.pos.y - o.pos.y) > EFFIGY_H) continue;
       if (!w.level.lineOfSight(eye, x.center)) continue;
       const dealt = w.damage(o, x, EFFIGY_HIT.dmg, { kind: 'ability', ability: 'effigy', noLifesteal: true });
