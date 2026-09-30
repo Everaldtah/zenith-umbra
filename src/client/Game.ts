@@ -376,8 +376,9 @@ export class Game {
     for (const a of w.actors) { const sm = SUMMON_MODEL[a.def.ult.id]; if (sm && hasModel(sm)) later.add(sm); }
     const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
     const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
-    // ...and the greatsword the effigy swings
+    // ...and the greatsword the effigy swings, and the seals of Kaien's storm (the instanced swarm's own material)
     if (w.actors.some(a => a.def.ult.id === 'effigy') && hasProp(GIANT_SWORD.enra_effigy)) laterLoads.push(propModel(GIANT_SWORD.enra_effigy).then(m => { if (m) warmGroup.add(m); }));
+    if (this.fx && w.actors.some(a => a.def.ult.id === 'sealstorm')) laterLoads.push(this.fx.seals.ready);
     if (this.swarm) laterLoads.push(this.swarm.ready);
     // thrown props (Hayate's shuriken): fitted now and drawn parked with the rest, so the first throw compiles nothing
     for (const a of w.actors) for (const wd of [a.def.primary, a.def.secondary]) {

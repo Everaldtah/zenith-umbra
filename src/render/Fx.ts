@@ -13,6 +13,7 @@ import { thrownProp } from './HeldProps';
 import { CharacterView } from './CharacterView';
 import { SpiritDragons } from './SpiritDragon';
 import { ChainCage } from './ChainCage';
+import { SealStorm } from './SealStorm';
 
 const FXCOL: Record<string, string> = {
   sun: '#ffd76a', star: '#bfe8ff', talisman: '#ffe28a', bolt: '#8ad8ff', void: '#ff2244', blood: '#ff2d55', hex: '#c77dff',
@@ -131,6 +132,8 @@ export class Fx {
   dragons: SpiritDragons | null = null;
   /** Grand Dohyo's binding chains (desktop edition) */
   chains: ChainCage | null = null;
+  /** Kaien's Divine Seal Storm: the instanced swarm of seals (SealStorm.ts) */
+  seals: SealStorm;
   /** Game: where the local player's rounds leave the gun in first person (the viewmodel's muzzle, not the body's) */
   muzzleFor: ((a: Actor, from: V3) => V3) | null = null;
 
@@ -147,6 +150,11 @@ export class Fx {
     }
     this.flash = new THREE.PointLight('#ffffff', 0, 18, 2);
     this.group.add(this.flash);
+    this.seals = new SealStorm(this.group, {
+      emit: (p, n, c, o) => this.parts.emit(p, Math.max(1, Math.round(n * this.lodScale)), c, o),
+      ring: (p, r, c, now, dur) => this.ring(p, r, c, now, dur),
+      light: (p, c, i, now, dur) => this.light(p, c, i, now, dur),
+    });
     scene.add(this.group);
   }
 
@@ -180,6 +188,7 @@ export class Fx {
     const dmgFx = ['hit', 'impact', 'slash', 'wound', 'burst'].includes(e.kind) ? this.damageScale : 1;
     const lod = (near > 60 ? 0.35 : near > 30 ? 0.7 : 1) * this.lodScale * dmgFx;
     const n = (k: number) => Math.max(1, Math.round(k * lod));
+    if (this.seals.onEvent(e, now)) return;                 // Kaien's Divine Seal Storm (sealstorm / sealshield / sealstrike / sealburst / sealmend)
     switch (e.kind) {
       case 'hit': P.emit(p, n(8), c, { speed: 5, life: 0.25, size: 0.18 }); if (this.wfx) this.wfx.impact(p, undefined, e.color ?? '#fff', now); break;
       case 'impact': if (this.wfx) this.wfx.impact(p, e.n, e.color ?? '#fff', now); else P.emit(p, n(6), c, { speed: 3, life: 0.3, size: 0.15, grav: 6 }); break;
@@ -498,6 +507,7 @@ export class Fx {
       return true;
     });
     this.syncProjectiles(w.projs, now);
+    this.seals.update(w, now, dt);
     this.syncSouls(w, now);
     this.syncFangs(w, now);
     this.syncZones(w.zones, now);
