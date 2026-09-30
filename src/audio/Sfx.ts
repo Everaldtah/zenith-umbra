@@ -108,6 +108,9 @@ const R: Record<string, Layer[]> = {
   silence: [{ w: 'sine', f: 1760, f1: 440, d: 0.6, v: 0.25 }, { w: 'sine', f: 1760 * 1.5, f1: 660, d: 0.6, v: 0.12 }],
   bloodpact: [{ w: 'sine', f: 220, f1: 330, d: 0.5, v: 0.2 }, { w: 'sine', f: 262, f1: 392, d: 0.5, v: 0.15 }],
   requiem: [{ w: 'sine', f: 220, d: 2, v: 0.2, a: 0.2 }, { w: 'sine', f: 262, d: 2, v: 0.15, a: 0.3 }, { w: 'sine', f: 330, d: 2, v: 0.15, a: 0.4 }, { w: 'sine', f: 415, d: 2, v: 0.1, a: 0.5 }],
+  // Mirei's Stellar Rebirth: a rising choir chord for the call, and a bright chime as each soul stands
+  rebirthcast: [{ w: 'sine', f: 392, f1: 523, d: 1.8, v: 0.16, a: 0.15 }, { w: 'sine', f: 494, f1: 659, d: 1.8, v: 0.14, a: 0.2 }, { w: 'sine', f: 587, f1: 784, d: 2, v: 0.12, a: 0.25 }, { w: 'triangle', f: 1046, d: 1.2, v: 0.06, a: 0.5 }],
+  rebirth: [{ w: 'sine', f: 1318, d: 0.8, v: 0.12, a: 0.02 }, { w: 'sine', f: 1568, d: 0.9, v: 0.1, a: 0.05 }, { w: 'triangle', f: 2093, d: 0.7, v: 0.06, a: 0.08 }],
   strings: [{ w: 'triangle', f: 1200, f1: 600, d: 0.5, v: 0.15 }, { w: 'triangle', f: 1210, f1: 605, d: 0.5, v: 0.12 }],
   yank: [{ n: true, d: 0.2, v: 0.25, bp: 1500, q: 2 }, { w: 'sine', f: 300, f1: 900, d: 0.15, v: 0.12 }],
   throw: [{ n: true, d: 0.15, v: 0.15, bp: 1200, q: 1 }],

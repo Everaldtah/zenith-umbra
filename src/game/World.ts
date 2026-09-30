@@ -263,7 +263,7 @@ export class World {
     const t = this.time;
     if (!tgt.alive || amount <= 0) return 0;
     if (src && src.team === tgt.team && src !== tgt) return 0;
-    if (tgt.has('phased', t) || tgt.has('spawnprot', t)) return 0;
+    if (tgt.has('phased', t) || tgt.has('spawnprot', t) || tgt.has('reborn', t)) return 0;
     if (tgt.has('parry', t) && o.kind === 'melee' && src) {
       src.set('stun', t, 1);
       this.sfx('parry', tgt.center); this.fx('parry', tgt.center, { color: '#8ad8ff', actor: tgt });
@@ -735,7 +735,7 @@ export class World {
     }
     this.move(a, dt);
     if (!a.alive) return;
-    const stunned = a.has('stun', t);
+    const stunned = a.has('stun', t) || a.has('reborn', t);       // (the reborn can't fight until their guard ends)
     if (!stunned && !a.has('phased', t)) {
       updateWeapons(this, a, dt);
       // Crescent Warpath: a click drops her out of the flight where she is
@@ -785,7 +785,7 @@ export class World {
       if (d.id === 'hibiki') spd *= this.grooveStep(a, dt);
       else if (d.id === 'hayate') spd *= this.grooveStep(a, dt, KOI_GROOVE_MAX);   // Sun-Alloy Frame: tap jump faster, run faster
       if (a.has('dragonblade', t)) spd *= 1.3;         // Hayate's Dragon Gate Blade
-      const rooted = a.has('root', t) || a.has('stun', t);
+      const rooted = a.has('root', t) || a.has('stun', t) || a.has('rising', t);
       let mx = inp.mx, mz = inp.mz;
       const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
       if (mz < 0) mz *= 0.9;

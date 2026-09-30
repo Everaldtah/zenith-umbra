@@ -18,10 +18,11 @@ import { sfx } from '../audio/Sfx';
  *  `flat` aims level (the ult travels along the ground); `wide` pulls the camera out and ahead (45 m koi-dragons);
  *  `tough` armours the enemy dummies to this many times their health, so a long ult has targets for its whole length;
  *  `track: 'row'` keeps the camera on the target row instead of following the hero (a 20 m flight through it) */
-interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number; tough?: number; track?: 'row' }
+interface Plan { secs: number; near?: number; fight?: number; flat?: boolean; wide?: number; tough?: number; track?: 'row'; dead?: number }
 const PLAN: Record<string, Plan> = {
   colossus: { secs: 10, fight: 4 },
   nova: { secs: 5 },
+  rebirth: { secs: 6, dead: 1.5 },
   sanctuary: { secs: 6 },
   judgment: { secs: 7, fight: 2.2 },
   hundredsuns: { secs: 4.5 },
@@ -56,6 +57,7 @@ export class UltShowcase {
   phase: 'ready' | 'approach' | 'cast' | 'show' = 'ready';
   at = 0;
   private castTries = 0;
+  private felled = false;
   private ultsBefore = 0;
   private barW = -1;
   // camera state (orbit offset / zoom from the mouse, smoothed focus)
@@ -97,7 +99,7 @@ export class UltShowcase {
     };
     this.foes.forEach((d, i) => put(d, FOES[i][0], FOES[i][1], 1));
     this.friends.forEach((d, i) => put(d, FRIENDS[i][0], FRIENDS[i][1], 0.35));
-    this.phase = 'ready'; this.at = w.time; this.castTries = 0;
+    this.phase = 'ready'; this.at = w.time; this.castTries = 0; this.felled = false;
   }
 
   /** the nearest standing target (or the middle of the row) */
@@ -126,7 +128,9 @@ export class UltShowcase {
     const mid = { x: 3.5, y: 0, z: LZ };
     const dist = this.aimAt(P.flat || this.phase === 'ready' ? { ...tgt, y: h.eye.y } : this.phase === 'cast' && !P.fight ? mid : tgt, !!P.flat);
     if (this.phase === 'ready') {
-      if (t > 1.1) { this.phase = P.near ? 'approach' : 'cast'; this.at = w.time; this.ultsBefore = h.ults; }
+      // (a resurrection needs someone to call back: the friends fall `dead` seconds before the cast)
+      if (P.dead && t > 1.1 && !this.felled) { this.felled = true; for (const d of this.friends) w.kill(d, null); }
+      if (t > 1.1 + (P.dead ?? 0)) { this.phase = P.near ? 'approach' : 'cast'; this.at = w.time; this.ultsBefore = h.ults; }
     } else if (this.phase === 'approach') {
       if (dist > (P.near ?? 0) && t < 3.5) i.mz = 1;
       else { this.phase = 'cast'; this.at = w.time; this.ultsBefore = h.ults; }

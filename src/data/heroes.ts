@@ -100,7 +100,9 @@ export const HEROES: HeroDef[] = [
     secondary: { kind: 'beam', damage: 62, rate: 10, range: 18, heal: true, sfx: 'healbeam', fx: 'star' },
     ability1: { id: 'constellation', name: 'Constellation Link', key: 'SHIFT', cooldown: 12, desc: 'Link allies within 15m for 5s: 25 HP/s and immunity to silence, grounding and roots.', counter: "Linked allies shrug off Nocturne's Silence Aria." },
     ability2: { id: 'wish', name: 'Wish Barrier', key: 'E', cooldown: 10, desc: 'Wrap the ally you aim at (or yourself) in a 300 HP star shield for 4s.' },
-    ult: { id: 'nova', name: 'Nova Requiem', key: 'Q', cooldown: 0, charge: 2000, desc: 'A healing supernova: allies within 25m heal 350 over 2.5s and deal +30% damage for 4s.' },
+    ult: FULL
+      ? { id: 'rebirth', name: 'Stellar Rebirth', key: 'Q', cooldown: 0, charge: 2400, desc: 'Call every teammate who fell within the last 10s back to their feet: all of them within 15m, through walls, at full health where they fell. The reborn are untouchable for 2.25s and can move after 1.5s; you are untouchable for 1.5s while you sing.' }
+      : { id: 'nova', name: 'Nova Requiem', key: 'Q', cooldown: 0, charge: 2000, desc: 'A healing supernova: allies within 25m heal 350 over 2.5s and deal +30% damage for 4s.' },
     passive: { name: 'Starwing Flight', desc: 'Hold SPACE to fly on crystal star-wings; out of flight energy, keep holding SPACE to float down slowly. F: Starwing Swoop - streak to the ally under your crosshair (30m, 2s cooldown); mid-swoop, SPACE slingshots you onward and CTRL launches you straight up. Energy regenerates on the ground.' },
     lore: 'The last apprentice of the Amatsu Star Choir, Mirei stitched her wings from the constellations the night the Eclipse swallowed her teacher\'s voice. She sings to keep the Vanguard alive - and to drown out a song she once loved.',
     inspiration: 'Angelic combat medics of team hero shooters, with a starlit idol-singer soul.',

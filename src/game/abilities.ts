@@ -5,6 +5,7 @@ import type { Actor } from './Actor';
 import { DEFLECT_SECS, dist3, norm, type Proj, type World, type Zone } from './World';
 import { ignite, wound } from './weapons';
 import { raisePuppets } from './puppets';
+import { stellarRebirth } from './rebirth';
 
 /** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
 export const DRAGONBLADE_SECS = 15;
@@ -221,7 +222,13 @@ const I: Record<string, Impl> = {
     w.fx('wish', tg.center, { actor: tg, color: '#bfe8ff', dur: 4 }); w.sfx('wish', tg.center, a);
     return true;
   },
+  rebirth(w, a) {
+    // Stellar Rebirth: every teammate who fell in the last 10 s within 15 m stands up where they fell (rebirth.ts)
+    stellarRebirth(w, a);
+    return true;
+  },
   nova(w, a) {
+    // (the web edition's Nova Requiem)
     for (const x of w.allies(a)) if (dist3(x.pos, a.pos) < 25) { x.set('hot', w.time, 2.5, 140, a); x.set('dmgamp', w.time, 4); }
     w.fx('nova', a.center, { r: 25, color: '#bfe8ff', actor: a }); w.sfx('nova', a.center, a);
     return true;

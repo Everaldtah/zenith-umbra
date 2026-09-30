@@ -6,6 +6,7 @@ import type { Actor } from '../game/Actor';
 import { dist3, type World } from '../game/World';
 import { LEASHED, STOMP_CORE, STOMP_H, STOMP_R } from '../game/abilities';
 import type { Nav } from './Nav';
+import { soulsOf } from '../game/rebirth';
 
 // modulo, not a subtract loop: a runaway angle (1e20 / Infinity) would otherwise spin forever and freeze the sim
 const wrap = (a: number) => {
@@ -379,7 +380,11 @@ export class Bot {
         if (rdy('constellation') && (ccd || (noct && near(noct.pos, 15, allies).length >= 2) || lowAllies.length >= 2)) { this.castAt('a1'); break; }
         const dying = allies.filter(x => x.health / x.maxHp < 0.4 && t - x.lastDamagedAt < 1 && dist3(x.pos, a.pos) < 28 && vis(x))[0];
         if (dying && rdy('wish')) { this.castAt('a2', dying.center); break; }
-        if (ultReady && lowAllies.length >= 2) { this.castAt('ult'); break; }
+        if (ultReady && a.def.ult.id === 'rebirth') {
+          // Stellar Rebirth: two souls in reach with time left on their respawn (one, if she's the last one standing)
+          const souls = soulsOf(w, a).filter(x => x.respawnAt - t > 1.2);
+          if (souls.length >= 2 || (souls.length === 1 && !allies.some(x => x.alive && x !== a))) { this.castAt('ult'); break; }
+        } else if (ultReady && lowAllies.length >= 2) { this.castAt('ult'); break; }
         // Starwing Swoop, the way a guardian-angel player uses it: escape a diver toward the safest teammate, or close the
         // gap to a hurt ally who is out of beam range - then slingshot / superjump out (never a joyride into the front line)
         if (rdy('swoop') && !a.has('swoop', t) && !a.has('grounded', t)) {
