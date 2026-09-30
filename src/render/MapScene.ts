@@ -77,6 +77,8 @@ function blossoms(s: number): THREE.Object3D {
   return inst;
 }
 
+const _camLocal = new THREE.Vector3();
+
 export class MapScene {
   group = new THREE.Group();
   sun: THREE.DirectionalLight;
@@ -89,6 +91,18 @@ export class MapScene {
   packs: { g: THREE.Group; cross: THREE.Object3D; ring: THREE.Mesh; big: boolean }[] = [];
   /** Mikoshi Rush: the festival float and its route */
   float: THREE.Group | null = null;
+  /** the float's model in its own space: while the viewer's camera is inside it (the float has no collision - a
+   *  pusher walks straight into it, and its inside is a black wall over the whole view) its body is hidden */
+  private floatBox: THREE.Box3 | null = null;
+  private floatLocal(): void {
+    const f = this.float; if (!f) return;
+    const pos = f.position.clone(), rot = f.rotation.y;
+    f.position.set(0, 0, 0); f.rotation.y = 0; f.updateMatrixWorld(true);
+    this.floatBox = new THREE.Box3();
+    for (const c of f.children) if (!(c as THREE.Light).isLight) this.floatBox.expandByObject(c);
+    this.floatBox.expandByScalar(0.35);                      // a margin for the eye's height and the near plane
+    f.position.copy(pos); f.rotation.y = rot; f.updateMatrixWorld(true);
+  }
   private pUniforms = { t: { value: 0 } };
   private cloudU = { t: { value: 0 } };
 
@@ -292,7 +306,7 @@ export class MapScene {
       for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8), gold); post.position.set(sx * 0.95, 1.5, sz * 0.8); f.add(post); }
       f.traverse(o => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
       const light = new THREE.PointLight('#ffd27a', 14, 12, 1.6); light.position.y = 2.2; f.add(light);
-      this.float = f; this.group.add(f);
+      this.float = f; this.group.add(f); this.floatLocal();
       propModel(m.payload ?? 'prop_kagura_mikoshi').then(mm => {
         if (!mm || !this.float) return;
         const box = new THREE.Box3().setFromObject(mm), h = box.max.y - box.min.y || 1, s = 3.4 / h;
@@ -300,7 +314,7 @@ export class MapScene {
         for (const c of [...this.float.children]) if (c !== light) this.float.remove(c);
         // the float turns to face its travel (+z); a payload modelled facing another way is turned inside it
         const turn = new THREE.Group(); turn.rotation.y = m.payload ? m.payloadYaw ?? 0 : 0; turn.add(mm);
-        this.float.add(turn);
+        this.float.add(turn); this.floatLocal();
       });
     }
     // ---------------- props (GLB when available, stand-in otherwise)
@@ -364,7 +378,8 @@ export class MapScene {
   }
 
   update(time: number, point: { owner: string | null; capture: number; capTeam: string | null; contested: boolean }, viewerTeam: string,
-    packs?: { readyAt: number }[], push?: { pos: { x: number; y: number; z: number }; owner: string | null; contested: boolean; d: number } | null) {
+    packs?: { readyAt: number }[], push?: { pos: { x: number; y: number; z: number }; owner: string | null; contested: boolean; d: number } | null,
+    cam?: THREE.Vector3) {
     this.pUniforms.t.value = time;
     this.cloudU.t.value = time;
     // health packs: bob and spin while ready; dim, with a ring filling back up, while they respawn
@@ -382,6 +397,12 @@ export class MapScene {
       f.position.set(push.pos.x, push.pos.y + 0.35 + Math.sin(time * 1.8) * 0.08, push.pos.z);
       const dx = f.position.x - prev.x, dz = f.position.z - prev.z;
       if (dx * dx + dz * dz > 1e-5) f.rotation.y = Math.atan2(dx, dz);
+      // the camera inside the float (a pusher walking into it): its body goes, so the view isn't a black wall
+      if (cam && this.floatBox) {
+        f.updateMatrixWorld();
+        const inside = this.floatBox.containsPoint(f.worldToLocal(_camLocal.copy(cam)));      // one box test a frame
+        for (const c of f.children) if (!(c as THREE.Light).isLight) c.visible = !inside;
+      }
     }
     for (const p of this.pads) { const a = p.getObjectByName('arrow')!; a.position.y = 1.1 + Math.sin(time * 4) * 0.25; p.rotation.y = time * 0.5; }
     if (this.map.id === 'training' || this.map.objective === 'push') return;   // (push maps carry the float, not a point)
