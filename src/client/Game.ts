@@ -533,6 +533,7 @@ export class Game {
     };
     v.onBodyFall = (_act, at, speed) => { if (this.match) sfx.play('bodyfall', { x: at.x, y: at.y, z: at.z }, Math.min(1, 0.35 + speed / 10)); };
     // a heavy strike's impact frame: the striker's own camera kicks, anyone near feels the shake
+    v.onRebornSolid = act => { this.fx?.onEvent({ t: 'fx', kind: 'rebirthring', pos: { ...act.center }, actor: act } as Parameters<Fx['onEvent']>[0], this.match?.world.time ?? 0, this.camPos); };
     v.onImpact = act => { if (!this.fx) return; const me = this.match?.player; const near = this.camPos.distanceTo(new THREE.Vector3(act.pos.x, act.pos.y, act.pos.z)); this.fx.shake = Math.max(this.fx.shake, act === me ? 0.3 : 0.18 / (1 + near / 6)); if (act === me && this.fp) this.fp.kick(0.9); };
     this.views.set(a.id, v);
     this.scene.add(v.group);

@@ -7,6 +7,7 @@ import type { Actor } from '../game/Actor';
 import { WeaponFx } from './WeaponFx';
 import { FULL } from '../edition';
 import { fangPos } from '../game/abilities';
+import { soulLingers, REBIRTH_COLOR } from '../game/rebirth';
 import { buildFang } from './TomoeProps';
 import { thrownProp } from './HeldProps';
 import { CharacterView } from './CharacterView';
@@ -113,6 +114,8 @@ export class Fx {
   flameMeshes = new Map<number, THREE.Mesh>();
   /** Tomoe's Crescent Fang while it's out of her hand (stuck in a wall, riding an enemy, flying home), per owner id */
   fangMeshes = new Map<number, THREE.Group>();
+  /** the souls of the fallen a living Mirei could still call back: an orb at the spot of death, a pillar of light */
+  soulMeshes = new Map<number, THREE.Group>();
   flash: THREE.PointLight;
   flashUntil = 0;
   shake = 0;
@@ -409,6 +412,25 @@ export class Fx {
       case 'susanooslash': { const R = e.r ?? 5.5; this.ring(p, R, '#8ad8ff', now, 0.35); this.ring(p, R * 0.6, '#ffffff', now, 0.22); this.light(p, '#8ad8ff', 30, now); P.emit(p, n(24), new THREE.Color('#bfe8ff'), { speed: 9, life: 0.4, size: 0.3, spread: 2 }); break; }
       // ...and its end (and Enra's effigy's): the hologram breaks into motes and a last flicker of light
       case 'susanoofade': case 'effigyfade': P.emit({ x: p.x, y: p.y + 2.5, z: p.z }, n(50), c, { speed: 2.5, life: 1.1, size: 0.45, up: 2.5, spread: 2.2 }); this.light(p, e.color ?? '#8ad8ff', 40, now, 0.4); break;
+      // Mirei's Stellar Rebirth (docs/research/resurrect_study.md): her call - golden wing-shards float up across the
+      // whole perimeter for the cast, a ring rolls out, and a bloom of light lifts from every soul (syncSouls flares them)
+      case 'rebirthcast': {
+        const R = e.r ?? 15;
+        this.ring(p, R, REBIRTH_COLOR, now, 1.0); this.ring(p, R * 0.4, '#ffffff', now, 0.5);
+        this.light({ x: p.x, y: p.y + 1.5, z: p.z }, REBIRTH_COLOR, 60, now, 0.6);
+        this.add(new THREE.Object3D(), 'shards', now, 1.0, { actor: e.actor, r: R });
+        break;
+      }
+      // ...a teammate called back: the bloom and the ring at their soul, a pillar of light while they rise
+      case 'rebirth': {
+        this.ring(p, 2.2, '#ffffff', now, 0.4); this.ring(p, 3.2, REBIRTH_COLOR, now, 0.7);
+        this.beam({ x: p.x, y: p.y - 1, z: p.z }, { x: p.x, y: p.y + 9, z: p.z }, REBIRTH_COLOR, now, 1.4, 0.5);
+        this.light(p, REBIRTH_COLOR, 50, now, 0.5);
+        P.emit(p, n(40), new THREE.Color(REBIRTH_COLOR), { speed: 2.5, life: 1.2, size: 0.35, up: 3, spread: 1 });
+        break;
+      }
+      // ...and the guard's end: they turn solid
+      case 'rebirthring': this.ring(p, 2.4, REBIRTH_COLOR, now, 0.45); P.emit(p, n(16), new THREE.Color('#ffffff'), { speed: 4, life: 0.4, size: 0.25, spread: 0.8 }); break;
       case 'bossbeam': if (e.to) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.45); this.beam(p, e.to, '#ffffff', now, 0.07, 0.15); P.emit(e.to, n(3), c, { speed: 4, life: 0.3, size: 0.5 }); } break;
       default: P.emit(p, n(10), c, { speed: 3, life: 0.4, size: 0.25 });
     }
@@ -453,6 +475,14 @@ export class Fx {
       else if (t.kind === 'beam' || t.kind === 'fade' || t.kind === 'fadegeo') { if (mat) mat.opacity = 0.9 * (1 - k); }
       else if (t.kind === 'shatter') { t.obj.scale.set(Math.min(1, k * 2.6), Math.min(1, k * 2.6), 1); if (mat) mat.opacity = 0.75 * (1 - k * k); }
       else if (t.kind === 'tether' && t.actor && t.target) { this.orient(t.obj, t.actor.center, t.target.center, t.r ?? 0.03); if (mat) mat.opacity = 0.7 + 0.3 * Math.sin(now * 20); t.obj.visible = t.actor.alive && t.target.alive; }
+      else if (t.kind === 'shards' && t.actor) {
+        // Stellar Rebirth's golden wing-shards, rising all over the perimeter (thickest near her)
+        const a = t.actor, R = t.r ?? 15;
+        for (let k = 0; k < 6; k++) {
+          const ang = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R * 0.8;
+          this.parts.emit({ x: a.pos.x + Math.cos(ang) * d, y: a.pos.y + 0.3 + Math.random() * 1.5, z: a.pos.z + Math.sin(ang) * d }, 1, new THREE.Color(REBIRTH_COLOR), { speed: 0.4, life: 1.3, size: 0.3, up: 2.4, spread: 0.2 });
+        }
+      }
       else if (t.kind === 'trail' && t.actor) {
         // a speed trail off the waist, small: a chase camera follows a dashing hero (Tomoe's Warpath, the Groove) a few
         // metres behind at head height, straight through whatever the trail leaves - chest-high 0.4 m puffs washed the
@@ -468,11 +498,37 @@ export class Fx {
       return true;
     });
     this.syncProjectiles(w.projs, now);
+    this.syncSouls(w, now);
     this.syncFangs(w, now);
     this.syncZones(w.zones, now);
     this.chains?.update(w, now);
     this.syncBeams(w, now);
     this.statusFx(w, now, dt);
+  }
+
+  /** the souls of the fallen (Overwatch's launch-era Resurrect): a soft golden orb where a teammate fell with a faint
+   *  pillar above it, for as long as a living Mirei could still call them back; everyone sees them */
+  private syncSouls(w: World, now: number) {
+    const seen = new Set<number>();
+    for (const a of w.actors) {
+      if (!soulLingers(w, a)) continue;
+      seen.add(a.id);
+      let m = this.soulMeshes.get(a.id);
+      if (!m) {
+        m = new THREE.Group();
+        const col = new THREE.Color(REBIRTH_COLOR);
+        const orb = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color('#ffffff'), 0.5) })); orb.scale.setScalar(0.22); orb.name = 'orb';
+        const glow = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); glow.scale.setScalar(0.6); glow.name = 'glow';
+        const pillar = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        pillar.rotation.x = -Math.PI / 2; pillar.scale.set(0.35, 0.35, 6); pillar.name = 'pillar';
+        m.add(orb, glow, pillar);
+        this.group.add(m); this.soulMeshes.set(a.id, m);
+      }
+      m.position.set(a.pos.x, a.pos.y + 0.55 + Math.sin(now * 2 + a.id) * 0.06, a.pos.z);
+      const g = m.getObjectByName('glow')!; g.scale.setScalar(0.55 + 0.1 * Math.sin(now * 4 + a.id));
+      if (Math.random() < 0.25) this.parts.emit(m.position, 1, new THREE.Color(REBIRTH_COLOR), { speed: 0.3, life: 0.9, size: 0.14, up: 0.8, spread: 0.3 });
+    }
+    for (const [id, m] of this.soulMeshes) if (!seen.has(id)) { this.group.remove(m); this.soulMeshes.delete(id); }
   }
 
   private syncProjectiles(projs: Proj[], now: number) {

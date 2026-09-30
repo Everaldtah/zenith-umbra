@@ -227,6 +227,10 @@ export class CharacterView {
   noSmear = false;
   private downYaw: number | null = null;
   private tideMarked = false;
+  /** called back from the dead ('reborn'): the golden translucent figure until the guard ends, then solid with a ring */
+  private reborn = false;
+  private rebornSnap: { m: THREE.MeshStandardMaterial; color: number; emissive: number; ei: number; tr: boolean; op: number; dw: boolean }[] = [];
+  onRebornSolid?: (a: Actor) => void;
   /** a hologram (a summoned effigy, HeroDef.holo): tinted, emissive and translucent, rising in and fading out */
   private get holo() { return this.actor.def.holo; }
   private spinA = [0, 0];
@@ -657,7 +661,9 @@ export class CharacterView {
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time) || a.has('deflect', time), climb: a.has('wallclimb', time),
       deflect: this.deflectState(time),
-      skyward: a.def.id === 'susanoo' && (a.sv.phase ?? 0) === 0, charge: a.charge, beam: a.beamOn || a.flameOn,
+      skyward: a.def.id === 'susanoo' && (a.sv.phase ?? 0) === 0,
+      rebirth: a.def.id === 'mirei' && a.sv.rebirthAt !== undefined && time - a.sv.rebirthAt < 2.4 ? time - a.sv.rebirthAt : undefined,
+      rising: a.has('rising', time) && a.sv.rebornAt !== undefined ? time - a.sv.rebornAt : undefined, charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
@@ -776,11 +782,31 @@ export class CharacterView {
     const stealth = a.has('stealth', time);
     const seen = viewer.sees(a);
     const alpha = stealth ? (a.team === viewer.team ? 0.35 : seen ? 0.25 : 0.04) : 1;
-    if (stealth !== this.stealthed && !this.holo) {
+    if (stealth !== this.stealthed && !this.holo && !this.reborn) {
       this.stealthed = stealth;
       for (const m of this.mats) { m.transparent = stealth; m.depthWrite = !stealth; m.needsUpdate = true; }
     }
     if (stealth && !this.holo) for (const m of this.mats) m.opacity = alpha;
+    // a teammate Mirei called back: a golden translucent figure for the guard, then solid (Overwatch's Resurrect)
+    const reborn = a.has('reborn', time) && !this.holo;
+    if (reborn !== this.reborn) {
+      this.reborn = reborn;
+      if (reborn) {
+        this.rebornSnap = [];
+        const gold = new THREE.Color('#ffe9a8');
+        for (const mt of this.mats) {
+          const m = mt as THREE.MeshStandardMaterial;
+          if (!m.isMeshStandardMaterial) continue;
+          this.rebornSnap.push({ m, color: m.color.getHex(), emissive: m.emissive.getHex(), ei: m.emissiveIntensity, tr: m.transparent, op: m.opacity, dw: m.depthWrite });
+          m.color.copy(gold); m.emissive.copy(gold); m.emissiveIntensity = 0.7; m.transparent = true; m.opacity = 0.6; m.depthWrite = true; m.needsUpdate = true;
+        }
+      } else {
+        for (const r of this.rebornSnap) { r.m.color.setHex(r.color); r.m.emissive.setHex(r.emissive); r.m.emissiveIntensity = r.ei; r.m.transparent = r.tr; r.m.opacity = r.op; r.m.depthWrite = r.dw; r.m.needsUpdate = true; }
+        this.rebornSnap = [];
+        this.onRebornSolid?.(a);
+      }
+    }
+    if (reborn) this.rim.value = 1.4 + 0.4 * Math.sin(time * 6);
     if (this.holo) {
       // rising out of the ground over the rise window, then a slow pulse of the glow
       const rise = a.sv.riseUntil !== undefined && time < a.sv.riseUntil ? Math.max(0, (time - (a.sv.riseAt ?? time)) / Math.max(0.01, a.sv.riseUntil - (a.sv.riseAt ?? time))) : 1;
@@ -790,7 +816,7 @@ export class CharacterView {
       this.rim.value = 1.6 + 0.6 * Math.sin(time * 4);
     }
     const marked = a.has('revealed', time) || a.has('marked', time);
-    if (!this.holo) this.rim.value = a.team === viewer.team ? 0.25 : (marked ? 1.6 : 0.7);
+    if (!this.holo && !reborn) this.rim.value = a.team === viewer.team ? 0.25 : (marked ? 1.6 : 0.7);
     // cut by the Crescent Warpath ('tidemark'): the hero glows blue while weakened - for both teams
     const tided = a.has('tidemark', time);
     if (tided !== this.tideMarked) { this.tideMarked = tided; this.rimColor.set(tided ? TIDE_BLUE : a.team === viewer.team ? UI_COLORS.ally : UI_COLORS.enemy); }

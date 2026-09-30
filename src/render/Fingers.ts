@@ -144,6 +144,8 @@ export function gripsFor(a: Actor, t: number, o: { drawW?: number; fp?: boolean 
     else if (shot && atk < ARROW_GONE[1] + 0.05) R = 'pinch';
     else if (!o.fp && (o.drawW ?? 1) < 0.3 && !a.charging) R = 'relaxed';
   }
+  // Mirei calling the fallen back: both palms open to the souls
+  if (id === 'mirei' && a.sv.rebirthAt !== undefined && t - a.sv.rebirthAt < 2.2) { L = 'open'; R = 'open'; }
   // Tomoe's Fang out of her hand: the throwing hand stays open until the catch
   if (id === 'tomoe' && (a.sv.fang ?? 0) > 0) L = 'open';
   // casts: casters open their palms (both), everyone's free hand opens for the gesture

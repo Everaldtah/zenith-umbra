@@ -401,6 +401,10 @@ export class FirstPersonArms {
     this.view.updateGuns(dt, t);
     if (this.style.gunScale) for (const g of this.view.guns) g.group.scale.setScalar(this.style.gunScale);
     if (this.view.backAxe) this.view.backAxe.visible = false;          // slung on her back: never in the viewmodel
+    // Mirei's Stellar Rebirth (Mercy's Resurrect, first person): the weapon hand comes up open-palmed and pushes upward
+    // over a second, then drops back - a procedural moment over her clips
+    const rb = a.def.id === 'mirei' && a.sv.rebirthAt !== undefined ? t - a.sv.rebirthAt : 9;
+    if (rb < 1.3) { this.proc(t, newAttack); return; }
     // ---- 1. authored clips (Overwatch-style: gameplay owns the clock - see assetgen/blender/fp_choreo.py)
     if (this.mixer) {
       const kind = a.anim.attackKind;
@@ -588,6 +592,14 @@ export class FirstPersonArms {
         L = [0.26 * Math.cos(ph + Math.PI), -0.24 + 0.03 * Math.sin(ph * 2 + 1), 0.4 + 0.14 * Math.sin(ph + Math.PI)];
         axe = 'spin'; spinPh = ph; src = 'warpath';
       }
+    }
+    // Stellar Rebirth: the right hand rises open through the middle of the view to the top of the frame, the left drops
+    if (a.def.id === 'mirei' && a.sv.rebirthAt !== undefined && t - a.sv.rebirthAt < 1.3) {
+      const u = t - a.sv.rebirthAt, lo: V = [0.06, -0.14, 0.4], hi: V = [0.05, 0.2, 0.34];
+      R = u < 0.3 ? lerp(S.R, lo, smooth(u / 0.3)) : u < 1.0 ? lerp(lo, hi, smooth((u - 0.3) / 0.7)) : lerp(hi, S.R, smooth((u - 1.0) / 0.3));
+      L = lerp(S.L ?? S.R, [-0.3, -0.34, 0.3], smooth(Math.min(1, u / 0.25)) * (u < 1.0 ? 1 : Math.max(0, 1 - (u - 1.0) / 0.3)));
+      wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.3, 0, 0));
+      src = 'rebirth';
     }
     // hit flinch
     const hit = t - a.anim.hitAt;

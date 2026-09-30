@@ -107,6 +107,8 @@ export interface AnimState {
   tide?: { age: number };   // Tomoe's Crescent Warpath: seconds into the dash (her axe and her Fang wheel round her)
   deflect?: { age: number; x: number; y: number; z: number };   // a shot just turned on the blade: its age and where it came from (model space)
   skyward?: boolean;        // Raijin's Susanoo calling the thunder: planted, both arms raised to the sky
+  rebirth?: number;         // Mirei singing the fallen back: seconds since the cast (the pose below)
+  rising?: number;          // a hero just called back: seconds since they rose (a crouch coming up to standing)
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
   knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
   skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
@@ -1029,7 +1031,7 @@ export class Animator {
     const AW = this.ang, angel = !!s.angel;
     const inSwoop = angel && (s.swoop ?? -1) >= 0;
     const tw = (k: 'swoop' | 'sup' | 'glide' | 'flare' | 'hover' | 'sling', on: boolean, rate: number) => { AW[k] += ((on ? 1 : 0) - AW[k]) * Math.min(1, dt * rate); };
-    tw('swoop', inSwoop, 14); tw('flare', angel && (s.swoopFlare ?? 9) < 0.35, 16);
+    tw('swoop', inSwoop, 14); tw('flare', angel && ((s.swoopFlare ?? 9) < 0.35 || (s.rebirth !== undefined && s.rebirth > 0.85 && s.rebirth < 2.2)), 16);
     tw('sup', angel && !!s.superjump && s.vel.y > 1.5, 9); tw('sling', angel && !!s.slingshot && !s.grounded && !inSwoop, 9);
     tw('glide', angel && !!s.gliding && !inSwoop, 6); tw('hover', angel && s.flying && !inSwoop, 6);
     const idleW = (1 - this.moveBlend) * (1 - this.airBlend);
@@ -1263,6 +1265,8 @@ export class Animator {
     const blendD = (D: THREE.Quaternion, q: THREE.Quaternion | null, w: number) => { if (q && w > 0) D.slerp(q, w); return D; };
     // the slam's landing: down into a deep squat within two frames, then back up
     if (this.slamDip > 0.01) hipsOff.y -= (this.slamDip > 0.85 ? (1 - this.slamDip) / 0.15 : this.slamDip / 0.85) * 0.14 * this.height;
+    // called back from the dead: up from a crouch to standing over the first 0.4 s
+    if (s.rising !== undefined && s.rising < 0.4) { const u = s.rising / 0.4; hipsOff.y -= (1 - u * u * (3 - 2 * u)) * 0.34 * this.height; }
     // getting up off the floor: through a crouch, not like a plank on a hinge
     if (this.down > 0.01 && kd <= 0.32) hipsOff.y -= Math.sin(this.down * Math.PI) * 0.13 * this.height;
     blendD(Dh, cq('hips'), wLegs);
@@ -1306,7 +1310,8 @@ export class Animator {
     // and looks back up out of a swoop
     const look = Math.sin(s.time * 0.37) * 0.12 * (1 - this.moveBlend) * (1 - Math.min(1, this.atk * 3));
     const headFollow = PERF ? (this.headF.x - this.flinch) * -this.hitZ * 1.1 : 0;
-    const headP = -lagPitch * 0.9 - carriage * 0.8 + (PERF ? this.landDip * 2.5 : 0) + headFollow - this.tilt.pitch * 0.55 - upright * 1.3;
+    const rebornTilt = s.rebirth !== undefined && s.rebirth < 2.4 ? -0.45 * Math.min(1, Math.max(0, (s.rebirth - 0.6) / 0.4)) * (s.rebirth < 1.9 ? 1 : Math.max(0, 1 - (s.rebirth - 1.9) / 0.5)) : 0;
+    const headP = -lagPitch * 0.9 - carriage * 0.8 + (PERF ? this.landDip * 2.5 : 0) + headFollow - this.tilt.pitch * 0.55 - upright * 1.3 + rebornTilt;
     const Dhd = Dn.clone().multiply(rot(Y, look - twist * 0.5 - (hTw + pTw) * 0.85 - lagYaw * 0.95)).multiply(rot(X, aimP * 0.3 + this.recoil * 0.3 + Math.sin(s.time * 0.7) * 0.02 + headP));
     blendD(Dhd, withAdd(cq('head'), aimP + this.recoil * 0.3 + fP + headP, -lagYaw * 0.95, 0), wTorso);
     // head stabilisation (Overwatch keeps the eyes level with the aim while the body leans into the run): whatever pitch
@@ -1401,6 +1406,19 @@ export class Animator {
         }
         over = { hand, w: wh };
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
+      } else if (s.rebirth !== undefined && s.rebirth < 2.4) {
+        // Stellar Rebirth (Mercy's launch-era Resurrect, docs/research/resurrect_study.md): the left hand reaches out
+        // and down, palm up, toward the souls; then sweeps up over her head as the weapon hand rises too; both arms
+        // held in a V for a second, then they settle
+        const r = s.rebirth, Lr = l1 + l2, k = (a: number, b: number) => Math.min(1, Math.max(0, (r - a) / (b - a)));
+        const ez = (u: number) => u * u * (3 - 2 * u);
+        const V = (x: number, y: number, z: number) => shoulder.clone().add(new THREE.Vector3(side * x, y, z).multiplyScalar(Lr).applyQuaternion(Dc));
+        const down = i === 0 ? V(0.55, -0.62, 0.62) : V(0.3, -0.75, 0.3), up = V(i === 0 ? 0.5 : 0.62, 0.86, 0.1);
+        const hand = r < 0.4 ? relaxed.clone().multiplyScalar(Lr).add(shoulder).lerp(down, ez(k(0, 0.4)))
+          : r < 0.85 ? down.clone().lerp(up, ez(k(0.4, 0.85)))
+          : r < 1.9 ? up.clone().add(new THREE.Vector3(0, Math.sin(s.time * 2.2 + i) * 0.02 * Lr, 0))
+          : up.clone().lerp(relaxed.clone().multiplyScalar(Lr).add(shoulder), ez(k(1.9, 2.4)));
+        over = { hand, w: 1, pole: new THREE.Vector3(side * 0.9, r > 0.6 ? 0.3 : -0.6, 0.4) };
       } else if (s.skyward) {
         // both arms up to the sky, palms open, a slow sway (the Storm Sovereign's first half)
         over = { hand: shoulder.clone().add(new THREE.Vector3(side * (0.45 + 0.04 * Math.sin(s.time * 1.3)), 0.92, 0.12).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: 1, pole: new THREE.Vector3(side * 0.9, 0.1, 0.5) };
