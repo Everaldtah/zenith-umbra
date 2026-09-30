@@ -408,7 +408,8 @@ export class Bot {
         // COUNTER: seal the Shade Fang (the AI knows roughly where he lurks even when veiled)
         if (kage && rdy('seal') && dist3(kage.pos, a.pos) < 18 && (kage.has('stealth', t) || dist3(kage.pos, a.pos) < 10)) { this.castAt('a2', { ...kage.pos }); break; }
         if (tg && rdy('seal') && near(tg.pos, 7, foes).length >= 2 && d < 20) { this.castAt('a2', { ...tg.pos }); break; }
-        if (ultReady && lowAllies.length >= 2) { this.castAt('ult'); break; }
+        // Divine Seal Storm: a fight around him (two or more foes inside its reach), or him being dived
+        if (ultReady && (near(a.pos, 15, foes).length >= 2 || (tg && d < 9 && t - a.lastDamagedAt < 0.8 && a.health / a.maxHp < 0.7))) { this.castAt('ult'); break; }
         if (rdy('spiritstep') && a.health / a.maxHp < 0.4 && tg && d < 8) this.castAt('a1');
         break;
       }

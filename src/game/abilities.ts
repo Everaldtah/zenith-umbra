@@ -250,6 +250,16 @@ const I: Record<string, Impl> = {
     w.fx('sealcast', p, { r: 7, color: '#ffe28a' }); w.sfx('seal', p, a);
     return true;
   },
+  sealstorm(w, a) {
+    // Divine Seal Storm (after Senbonzakura Kageyoshi): for SEALSTORM_SECS the seals swarm - a shield of them on him
+    // (SEALSTORM_SHIELD, re-formed every SEALSTORM_REFORM s once spent) and the rest burst on every enemy within
+    // SEALSTORM_R he can see, every SEALSTORM_TICK s (tickAbilities below)
+    const t = w.time;
+    a.set('sealstorm', t, SEALSTORM_SECS); a.sv.stormStart = t; a.sv.stormNext = t + 0.6; a.sv.stormReform = t + SEALSTORM_REFORM;
+    sealShield(w, a, SEALSTORM_SHIELD, SEALSTORM_SECS);
+    w.fx('sealstorm', a.center, { r: SEALSTORM_R, color: '#ffe28a', actor: a, dur: SEALSTORM_SECS }); w.sfx('sanctuary', a.pos, a); w.sfx('ultcall', a.center, a);
+    return true;
+  },
   sanctuary(w, a) {
     zone(w, a, 'sanctuary', { ...a.pos }, 10, 5);
     w.fx('sanctuarycast', a.pos, { r: 10, color: '#ffe28a' }); w.sfx('sanctuary', a.pos, a);
@@ -942,8 +952,40 @@ function onProj(w: World, p: Proj, at: V3, hit: Actor | null) {
 }
 
 // ------------------------------------------------------------------ per-step upkeep for zones and dashes
+/** Divine Seal Storm: the window, the shield of seals on him and how often it re-forms, the hunting seals' reach and beat */
+export const SEALSTORM_SECS = 15, SEALSTORM_SHIELD = 300, SEALSTORM_REFORM = 4, SEALSTORM_R = 18, SEALSTORM_TICK = 0.5, SEALSTORM_DMG = 14;
+
+/** the seals close around him: a shield of them (one at a time - a fresh one replaces what is left) */
+function sealShield(w: World, a: Actor, amt: number, secs: number) {
+  a.shields = a.shields.filter(s => s.kind !== 'sealshield');
+  a.shields.push({ amt, until: w.time + secs, kind: 'sealshield', src: a });
+  w.fx('sealshield', a.center, { actor: a, color: '#ffe28a' });
+}
+
 export function tickAbilities(w: World, dt: number) {
   const t = w.time;
+  // Kaien - Divine Seal Storm: the hunting seals, and the shield re-forming
+  for (const a of w.actors) {
+    if (!a.alive || !a.has('sealstorm', t)) continue;
+    if (t >= (a.sv.stormReform ?? 0)) {
+      a.sv.stormReform = t + SEALSTORM_REFORM;
+      if (!a.shields.some(s => s.kind === 'sealshield' && s.amt > 0)) sealShield(w, a, SEALSTORM_SHIELD * 0.5, (a.sv.stormStart ?? t) + SEALSTORM_SECS - t);
+    }
+    if (t < (a.sv.stormNext ?? 0)) continue;
+    a.sv.stormNext = t + SEALSTORM_TICK;
+    let n = 0;
+    for (const x of w.enemies(a)) {
+      if (!x.alive || x.isSummon || x.def.id === 'bot_dummy' || x.has('phased', t)) continue;
+      if (dist3(x.pos, a.pos) > SEALSTORM_R + x.radius || !w.level.lineOfSight(a.eye, x.center)) continue;
+      const dealt = w.damage(a, x, SEALSTORM_DMG, { kind: 'ability', ability: 'sealstorm' });
+      if (dealt <= 0) continue;
+      n++; a.stats.sealstormDmg = (a.stats.sealstormDmg ?? 0) + dealt;
+      // a stream of seals from him to the target, bursting on it (the render draws the swarm's path from this)
+      w.fx('sealstrike', a.center, { to: x.center, color: '#ffe28a', actor: a });
+      w.fx('sealburst', x.center, { color: '#ffd27a' });
+    }
+    if (n && t >= (a.sv.stormSfx ?? 0)) { a.sv.stormSfx = t + 0.8; w.sfx('talisman', a.center, a); }
+  }
   for (const z of w.zones) {
     if (t < z.next) continue;
     z.next = t + 0.25;
