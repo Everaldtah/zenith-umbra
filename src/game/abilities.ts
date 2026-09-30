@@ -7,6 +7,7 @@ import { ignite, wound } from './weapons';
 import { raisePuppets } from './puppets';
 import { stellarRebirth } from './rebirth';
 import { raiseEffigy } from './effigy';
+import { raiseSusanoo } from './susanoo';
 
 /** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
 export const DRAGONBLADE_SECS = 15;
@@ -269,7 +270,16 @@ const I: Record<string, Impl> = {
     w.fx('parrystance', a.center, { color: '#8ad8ff', actor: a, dur: 1.2 }); w.sfx('parrystance', a.center, a);
     return true;
   },
+  susanoo(w, a) {
+    // Storm Sovereign: the thunder-god giant of himself rises where he stands (susanoo.ts)
+    raiseSusanoo(w, a);
+    w.fx('ultflash', a.center, { color: '#8ad8ff', actor: a }); w.fx('susanoocast', a.center, { r: 12, color: '#8ad8ff', actor: a, dur: 10 });
+    w.sfx('ultcall', a.center, a); w.sfx('thunderclap', a.center, a);
+    w.emit({ t: 'msg', text: 'RAIJIN \u00b7 STORM SOVEREIGN', color: a.def.color });
+    return true;
+  },
   judgment(w, a) {
+    // (the web edition's Judgment)
     a.set('judgment', w.time, 6);
     a.cd.flashstep = 0;
     w.fx('ultflash', a.center, { color: '#8ad8ff', actor: a }); w.sfx('ultcall', a.center, a); w.sfx('thunderclap', a.center, a);

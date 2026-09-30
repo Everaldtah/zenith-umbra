@@ -25,6 +25,7 @@ const PLAN: Record<string, Plan> = {
   rebirth: { secs: 6, dead: 1.5 },
   sanctuary: { secs: 6 },
   judgment: { secs: 7, fight: 2.2 },
+  susanoo: { secs: 11, wide: 0.6, tough: 2.5 },
   hundredsuns: { secs: 4.5 },
   singularity: { secs: 4.5, flat: true },
   requiem: { secs: 4.5 },

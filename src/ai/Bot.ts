@@ -7,6 +7,7 @@ import { dist3, type World } from '../game/World';
 import { LEASHED, STOMP_CORE, STOMP_H, STOMP_R } from '../game/abilities';
 import type { Nav } from './Nav';
 import { soulsOf } from '../game/rebirth';
+import { skyOpen } from '../game/susanoo';
 
 // modulo, not a subtract loop: a runaway angle (1e20 / Infinity) would otherwise spin forever and freeze the sim
 const wrap = (a: number) => {
@@ -419,7 +420,11 @@ export class Bot {
         const land = tg ? { x: a.pos.x + (tg.pos.x - a.pos.x) / d * 12, z: a.pos.z + (tg.pos.z - a.pos.z) / d * 12 } : null;
         const safe = land && w.level.groundAt(land.x, land.z, a.pos.y + 1) > a.pos.y - 3 && w.level.groundAt((a.pos.x + land.x) / 2, (a.pos.z + land.z) / 2, a.pos.y + 1) > a.pos.y - 3;
         if (tg && safe && rdy('flashstep') && d > 5 && d < 13 && vis(tg) && !a.has('sealed', t)) { this.castAt('a1', tg.center); a.input.mz = 1; a.input.mx = 0; break; }
-        if (ultReady && tg && d < 8 && a.health / a.maxHp > 0.45) this.castAt('ult');
+        if (a.def.ult.id === 'susanoo') {
+          // Storm Sovereign: three enemies under open sky within its reach (two if one is a tank), and not from the brink
+          const under = near(a.pos, 10, foes).filter(x => skyOpen(w, x));
+          if (ultReady && (under.length >= 3 || (under.length >= 2 && under.some(x => x.def.role === 'tank'))) && a.health / a.maxHp > 0.3) this.castAt('ult');
+        } else if (ultReady && tg && d < 8 && a.health / a.maxHp > 0.45) this.castAt('ult');
         break;
       }
       case 'hayate': {

@@ -7,6 +7,7 @@ import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
 import { castAbility, stompLeap, tickAbilities, TIDE_HOLD, TIDE_MARK_AMP } from './abilities';
 import { PUPPET_DEF, dropPuppets, tickPuppets } from './puppets';
+import { SUSANOO_DEF, dismissSusanoo, tickSusanoo } from './susanoo';
 import { updateWeapons } from './weapons';
 import { Stadium } from './stadium';
 import { FULL } from '../edition';
@@ -89,7 +90,7 @@ export class World {
   /** health packs: position, size, and when each is back */
   packs: { x: number; y: number; z: number; big: boolean; readyAt: number }[] = [];
   /** campaign hooks: enemy/boss definitions and the encounter director */
-  extraDefs: Record<string, HeroDef> = { puppet: PUPPET_DEF };
+  extraDefs: Record<string, HeroDef> = { puppet: PUPPET_DEF, susanoo: SUSANOO_DEF };
   /** the match's path finder, when it has one (summoned armies route around walls with it) */
   nav: { find(from: V3, to: V3, maxIter?: number): V3[] | null } | null = null;
   /** per-tick scratch values */
@@ -146,6 +147,7 @@ export class World {
 
   respawn(a: Actor, first = false) {
     if (!first && !a.isSummon && a.sv.puppetsCast !== undefined) dropPuppets(this, a);
+    if (!first && !a.isSummon && a.sv.susanooCast !== undefined) dismissSusanoo(this, a);
     const [sx, sz] = a.spawn;
     const i = this.actors.filter(o => o.team === a.team).indexOf(a);
     const ang = i * 1.3;
@@ -331,7 +333,8 @@ export class World {
       m.set(src.id, t);
       // shooting a summoned puppet, or a puppet's own claws, never feeds an ultimate or the damage column
       if (!tgt.isSummon) src.dmgDone += dealt;
-      if (!tgt.isSummon && o.ability !== 'puppet') src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
+      // (a summon's damage - the puppets', the Susanoo's - never feeds its master's next ultimate)
+      if (!tgt.isSummon && o.ability !== 'puppet' && o.ability !== 'susanoo') src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
       // Gantetsu - Roar of the Crowd: critical hits turn half their damage into temporary health (max 150)
@@ -621,7 +624,7 @@ export class World {
     this.separate();
     this.projs = this.projs.filter(p => this.stepProj(p, dt));
     tickAbilities(this, dt);
-    tickPuppets(this);
+    tickPuppets(this); tickSusanoo(this);
     this.zones = this.zones.filter(z => z.until > t);
     this.updatePacks();
     if (this.director) this.director.update(dt);

@@ -120,7 +120,7 @@ export class PuppetSwarm {
     const { m, q, p, s, e, c } = this;
     let n = 0, ns = 0, nr = 0;
     for (const a of w.actors) {
-      if (!a.isSummon || n >= MAX) continue;
+      if (!a.isSummon || a.def.id !== 'puppet' || n >= MAX) continue;
       const fell = a.alive ? -1 : time - (a.sv.fellAt ?? a.deathAt);
       if (!a.alive && (fell > GONE_AFTER || a.deathAt < -50)) continue;
       if (a.alive && !sees(a)) continue;
