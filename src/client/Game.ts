@@ -33,7 +33,7 @@ const SUMMON_MODEL: Record<string, string> = { effigy: 'enra_susanoo', susanoo: 
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
-import { loadManifest, heroModel, riggedModel, hasModel, hasProp } from '../render/Assets';
+import { loadManifest, heroModel, riggedModel, hasModel, hasProp, propModel } from '../render/Assets';
 import { DRAGON_MODEL } from '../render/SpiritDragon';
 import { FX_KINDS, compileFor, loadsIdle, nextFrame, showProgress, sleep, texturesOf, uploadTextures, warmObject } from './Preload';
 import { animLibrary } from '../render/ClipLibrary';
@@ -42,7 +42,7 @@ import { Input, KEYS } from './Input';
 import { Hud } from './Hud';
 import { AiLab } from './AiLab';
 import { PRESETS, IS_DESKTOP, quality, type Settings } from './Settings';
-import { UI_COLORS } from '../render/CharacterView';
+import { UI_COLORS, GIANT_SWORD } from '../render/CharacterView';
 
 /** Image Sharpening (Settings > Video): a light unsharp mask after tone mapping */
 const SHARPEN = {
@@ -376,6 +376,8 @@ export class Game {
     for (const a of w.actors) { const sm = SUMMON_MODEL[a.def.ult.id]; if (sm && hasModel(sm)) later.add(sm); }
     const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
     const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
+    // ...and the greatsword the effigy swings
+    if (w.actors.some(a => a.def.ult.id === 'effigy') && hasProp(GIANT_SWORD.enra_effigy)) laterLoads.push(propModel(GIANT_SWORD.enra_effigy).then(m => { if (m) warmGroup.add(m); }));
     if (this.swarm) laterLoads.push(this.swarm.ready);
     // thrown props (Hayate's shuriken): fitted now and drawn parked with the rest, so the first throw compiles nothing
     for (const a of w.actors) for (const wd of [a.def.primary, a.def.secondary]) {

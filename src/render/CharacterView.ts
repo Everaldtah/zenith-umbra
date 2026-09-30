@@ -3,10 +3,10 @@
 import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { Animator, REAP_SECS, REAP_STOP, type AnimState } from './Animator';
-import { hasModel, heroModel, loadManifest, modelInfo, type EyeInfo } from './Assets';
+import { hasModel, hasProp, heroModel, loadManifest, modelInfo, propModel, type EyeInfo } from './Assets';
 import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
-import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
+import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, fitGreatsword, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
 import { HELD, buildHeld, heldVisible, ARROW_GONE, CARD_GONE } from './HeldProps';
 import { buildChainLoop, updateChainLoop, type ChainLoop } from './ChainBlades';
@@ -18,12 +18,16 @@ const BRIGHT_SUITS = new Set(['mirei']);
 const _jp = new THREE.Vector3(), _m3 = new THREE.Matrix3(), _sv = new THREE.Vector3();
 const _kq = new THREE.Quaternion(), _kv = new THREE.Vector3();
 /** Tomoe's Crescent Warpath: turns of the body over the flight, and the glow of the heroes it cut through */
+/** the greatsword a summoned giant swings (on the hammer path, its sweeps on the summon's own cadence - GIANT_SWING) */
+export const GIANT_SWORD: Record<string, string> = { enra_effigy: 'prop_enra_susanoo_sword' };
+const GIANT_SWING: Record<string, number> = { enra_effigy: EFFIGY_HIT.every };
 /** the glow of the heroes Tomoe's Crescent Warpath cut through */
 const TIDE_BLUE = '#3fa9ff';
 /** speed (m/s) above which fast moves smear (Davis GDC17: stretch the mesh along its motion - automated smear frames) */
 const SMEAR_FROM = 12;
 import { skinsFor, type Skin } from '../data/skins';
 import { FULL } from '../edition';
+import { EFFIGY_HIT } from '../game/effigy';
 
 const rimChunk = `
   float zuRim = pow(1.0 - clamp(abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0), 2.5);
@@ -503,6 +507,9 @@ export class CharacterView {
     const mid = this.modelIdFor(this.skin);
     const m = await heroModel(mid, this.hd);
     if (!m || seq !== this.loadSeq) return;                  // a newer load (skin change) superseded this one
+    // a giant's greatsword comes in with the body (so the hologram look and the shader warm-up cover it)
+    const sword = GIANT_SWORD[id] && hasProp(GIANT_SWORD[id]) ? await propModel(GIANT_SWORD[id]) : null;
+    if (seq !== this.loadSeq) return;
     if (this.real) {
       // swapping models (a model skin): drop the old body's props before the new one takes them over
       this.hammer?.group.parent?.remove(this.hammer.group); this.hammer = null;
@@ -536,6 +543,12 @@ export class CharacterView {
     // hero with held blades - Enra's Hellfire Chains - swings those instead, HeldProps / Animator)
     if (this.actor.def.primary.sweep && anim.ok && !HELD[id]) {
       this.hammer = buildHammer(anim.height);
+      m.add(this.hammer.group);
+      anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
+    }
+    // a summoned giant's greatsword (Enra's Susanoo): two-handed on the hammer path, swung on the effigy's sweep tick
+    if (sword && anim.ok) {
+      this.hammer = fitGreatsword(sword, anim.height);
       m.add(this.hammer.group);
       anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
     }
@@ -666,7 +679,7 @@ export class CharacterView {
       rising: a.has('rising', time) && a.sv.rebornAt !== undefined ? time - a.sv.rebornAt : undefined, charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
-      hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
+      hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide, swingSecs: GIANT_SWING[a.def.id],
       move: a.forced?.kind === 'dawncharge' ? 'dawncharge' : an.castId === 'shatter' && time - an.castAt < 0.8 ? 'shatter'
         : a.forced?.kind === 'tide' ? 'tide' : an.castId === 'reaping' && time - an.castAt < REAP_SECS + REAP_STOP ? 'reaping' : a.flying && a.def.jets ? 'jets' : '',
       angel: a.def.id === 'mirei', gliding: a.has('angelglide', time),
@@ -867,7 +880,7 @@ export class CharacterView {
     this.smear(time);
     this.updateGuns(dt, time);
     const an = a.anim;
-    if (this.hammer && a.def.id !== 'tomoe') {
+    if (this.hammer && a.def.id !== 'tomoe' && !this.hammer.sword) {
       // rocket thruster: roars through the swing, the sun cores flare on impact
       const age = time - an.attackAt, on = an.attackKind === 'primary' && age > 0.12 && age < 0.45;   // fires on the strike, not the wind-up
       const f = this.hammer.flame;

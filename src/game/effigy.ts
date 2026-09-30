@@ -16,6 +16,9 @@ export const EFFIGY_R = 12, EFFIGY_H = 4;
 export const EFFIGY_HIT = { dmg: 45, every: 0.9, first: 0.8 };
 /** rising out of the ground: this long before the first sweep and before it moves */
 export const EFFIGY_RISE = 0.6;
+/** the swing begins this long before its hit lands: the render's sweep (Animator hammerPose, EFFIGY_HIT.every long)
+ *  crosses the front a third of the way through, so the blade is ON the enemies when the damage ticks */
+export const EFFIGY_SWING_LEAD = 0.33 * EFFIGY_HIT.every;
 /** it stands this far behind Enra (in the direction he faces, negative) and closes on that spot at this speed */
 const BEHIND = 2.2, FOLLOW = 9;
 
@@ -33,6 +36,8 @@ export const EFFIGY_DEF: HeroDef = {
 
 class EffigyBrain {
   nextHit = 0;
+  /** the swing toward nextHit has begun */
+  swung = false;
   constructor(public w: World, public a: Actor) {}
 
   think(_dt: number) {
@@ -55,8 +60,13 @@ class EffigyBrain {
     }
     // far behind (Enra dashed off, or it got stuck): it simply appears at his back
     if (d > 14) { a.pos = { x: want.x, y: o.pos.y, z: want.z }; a.vel = { x: 0, y: 0, z: 0 }; }
+    // the swing winds up ahead of its hit
+    if (!this.swung && t >= this.nextHit - EFFIGY_SWING_LEAD) {
+      this.swung = true;
+      a.anim.attackAt = t; a.anim.attackKind = 'primary'; a.anim.attackSide = -(a.anim.attackSide || -1);
+    }
     if (t < this.nextHit) return;
-    this.nextHit = t + EFFIGY_HIT.every;
+    this.nextHit = t + EFFIGY_HIT.every; this.swung = false;
     // the sweep: everyone inside the perimeter it can see
     const eye = { x: a.pos.x, y: a.pos.y + a.height * 0.6, z: a.pos.z };
     let n = 0;
@@ -72,7 +82,6 @@ class EffigyBrain {
         x.forced = { vx: kx / kl * 6, vy: 0, vz: kz / kl * 6, until: t + 0.15, kind: 'knock' };
       }
     }
-    a.anim.attackAt = t; a.anim.attackKind = 'primary'; a.anim.attackSide = -(a.anim.attackSide || -1);
     w.fx('effigyswing', a.center, { color: '#ff2a2a', actor: a, r: EFFIGY_R });
     w.sfx(n ? 'punch' : 'whiff', a.center, a);
   }
@@ -114,7 +123,7 @@ export function raiseEffigy(w: World, a: Actor, secs = EFFIGY_SECS): Actor {
   e.alive = true; e.respawnAt = 0; e.deathAt = -99; e.lastDamagedAt = t;
   e.sv.riseAt = t; e.sv.riseUntil = t + EFFIGY_RISE; e.sv.until = t + secs;
   e.set('phased', t, 0.3); e.set('spawnprot', t, EFFIGY_RISE);
-  const b = e.controller as EffigyBrain; b.nextHit = t + EFFIGY_RISE + EFFIGY_HIT.first;
+  const b = e.controller as EffigyBrain; b.nextHit = t + EFFIGY_RISE + EFFIGY_HIT.first; b.swung = false;
   a.set('effigy', t, secs);
   return e;
 }

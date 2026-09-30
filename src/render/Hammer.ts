@@ -5,7 +5,26 @@ import * as THREE from 'three';
 import { hasProp, loadManifest, propModel } from './Assets';
 import { fitProp } from './TomoeProps';
 
-export interface HammerProp { group: THREE.Group; len: number; flame: THREE.Mesh; core: THREE.MeshStandardMaterial }
+export interface HammerProp { group: THREE.Group; len: number; flame: THREE.Mesh; core: THREE.MeshStandardMaterial; sword?: boolean }
+
+/** a summoned giant's greatsword (Enra's Susanoo: system32-82's prop_enra_susanoo_sword, an oni great-cleaver with an
+ *  iron ring pommel, a red-corded grip and ember cracks down the blade). The prop is exported lying along X - the ring
+ *  on -X, the tip on +X, the jagged edge on -Y, the grip's cord centred SWORD_GRIP of the way up its width - and is stood
+ *  in the hammer's frame: pommel at the origin, blade up +Y, the edge on +X so it leads the sweep (Animator.gripT), at
+ *  `fullLen` of the giant's height (4.6 m on the 6.15 m Susanoo). The animator swings it on the hammer path. */
+const SWORD_GRIP = 0.27;
+export function fitGreatsword(m: THREE.Object3D, modelHeight: number, fullLen = 0.75): HammerProp {
+  const L = modelHeight, box = new THREE.Box3().setFromObject(m);
+  const s = fullLen * L / Math.max(1e-6, box.max.x - box.min.x);
+  m.scale.setScalar(s);
+  m.rotation.z = Math.PI / 2;                                   // prop +X -> +Y (up the blade), prop -Y (the edge) -> +X
+  m.position.set((box.min.y + SWORD_GRIP * (box.max.y - box.min.y)) * s, -box.min.x * s, 0);
+  m.traverse(o => { const me = o as THREE.Mesh; if (me.isMesh) me.castShadow = true; });
+  const g = new THREE.Group(); g.add(m);
+  // (no rocket: the flame and the core are placeholders the hammer's flare logic never touches - HammerProp.sword)
+  const flame = new THREE.Mesh(); flame.visible = false;
+  return { group: g, len: 0.62 * L, flame, core: new THREE.MeshStandardMaterial(), sword: true };
+}
 
 export function buildHammer(modelHeight: number): HammerProp {
   const L = modelHeight, len = 0.62 * L;

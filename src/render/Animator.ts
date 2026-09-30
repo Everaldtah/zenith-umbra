@@ -86,6 +86,7 @@ export interface AnimState {
   hammer?: boolean;         // two-handed hammer (Tenkai-Oh): arms follow the hammer's authored swing path
   move?: string;            // an ability pose in progress: 'dawncharge' | 'shatter' | 'jets' | 'reaping' | 'tide' (Tomoe's axe)
   swingSide?: number;       // +1 sweeps right-to-left, -1 left-to-right (swings alternate)
+  swingSecs?: number;       // a hammer swing's length when it isn't Reinhardt's SWING_TIME (a giant's sweep cadence)
   angel?: boolean;          // Mirei: angelic combat-medic flight (upright hover, swept-back dash, glide)
   gliding?: boolean;        // slow-fall glide with the wings spread
   dead?: boolean;           // clip layer: play a death clip (CharacterView only keeps animating the dead if one exists)
@@ -992,7 +993,7 @@ export class Animator {
     const reapHit = s.move === 'reaping' && s.castAge >= REAP_HIT * REAP_SECS && this.lastCastAge < REAP_HIT * REAP_SECS;
     this.lastCastAge = s.move === 'reaping' ? s.castAge : -1;
     if (reapHit) { this.sq.v -= 1.4 * PS.squash; this.impact = 1; } else this.impact = 0;
-    const hs = s.hammer ? hammerPose(swinging ? s.attackAge / SWING_TIME : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05 && s.move !== 'shatter', s.move ?? '', cp) : null;
+    const hs = s.hammer ? hammerPose(swinging ? s.attackAge / (s.swingSecs ?? SWING_TIME) : 9, s.swingSide ?? 1, s.barrier, this.cast > 0.05 && s.move !== 'shatter', s.move ?? '', cp) : null;
     const charging = s.move === 'dawncharge';
     const hTw = hs ? Math.max(-1.1, Math.min(1.1, hs.th * 0.6)) * hs.w : 0;
     const pTw = -0.45 * Math.max(0, this.punchExt) * this.punchW;
