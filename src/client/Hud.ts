@@ -1,8 +1,22 @@
 // In-match HUD (DOM overlay): health, abilities, ult, ammo, objective, kill feed, counter callouts, damage numbers,
 // enemy health bars, scoreboard.
 import * as THREE from 'three';
-import { bindsFor, keyShort, type Action, type Settings } from './Settings';
+import { bindsFor, keyShort, type Action, type Reticle, type Settings } from './Settings';
 import { drawReticle } from './SettingsUI';
+
+/** the default reticle per weapon kind (Overwatch 2's stock look, sized for a 1080p HUD: thin lines, a dark outline, a
+ *  dot; a ring the size of the weapon's reach). Melee's ring is the cleave at close range; a beam's the lock-on
+ *  cone; zoomed sights (Yuzu's Hawk Eye) collapse to the dot. */
+export function reticleFor(kind: string, zoom = false): Reticle {
+  const base: Reticle = { type: 'circle+crosshairs', color: '#ffffff', thickness: 2, length: 7, gap: 6, opacity: 0.92, outline: 0.8, dot: 4, dotOpacity: 1, accuracy: false };
+  if (zoom) return { ...base, type: 'dot', dot: 4, gap: 0, length: 0 };
+  if (kind === 'melee') return { ...base, type: 'circle', gap: 14, length: 0 };
+  if (kind === 'beam') return { ...base, type: 'circle', gap: 26, length: 0, dot: 3 };
+  if (kind === 'charge') return { ...base, gap: 8, length: 8 };                 // the bows: a wider ring for the arc
+  if (kind === 'projectile') return { ...base, gap: 5, length: 8 };
+  return base;
+}
+
 import { isAbility, type AbilityDef } from '../data/heroes';
 import type { Actor } from '../game/Actor';
 import type { GameEvent, World } from '../game/World';
@@ -66,17 +80,28 @@ export class Hud {
     this.drawReticle();
   }
 
-  /** a custom reticle replaces the per-weapon one (Settings > Controls > Reticle) */
+  /** the reticle: the player's custom design (Settings > Controls > Reticle), or the default - an Overwatch-style
+   *  circle-and-crosshairs with a centre dot, thin lines with a strong dark outline so it reads on any backdrop, in the
+   *  same place in first and third person; per weapon: melee / beam heroes get the circle alone (a reach, not a point),
+   *  shotguns a wider ring (the spread), a zoomed sight a dot */
   private drawReticle() {
     const R = this.opt?.controls.reticle;
-    if (!R || R.type === 'default') { if (this.cross.classList.contains('custom')) { this.cross.innerHTML = ''; this.cross.className = 'cross ' + (this.lastKind || 'hitscan'); } return; }
+    const custom = !!R && R.type !== 'default';
+    const kind = this.lastKind || 'hitscan', zoom = this.zoomed;
+    const key = custom ? JSON.stringify(R) : `${kind}:${zoom}`;
+    if (key === this.reticleKey) return;
+    this.reticleKey = key;
+    const D = custom ? R! : reticleFor(kind, zoom);
     this.cross.className = 'cross custom';
-    const size = Math.ceil((R.gap + R.length) * 2 + R.thickness * 2 + R.dot + 12), c = document.createElement('canvas');
-    c.width = c.height = size;
-    drawReticle(c.getContext('2d')!, size / 2, size / 2, R, 1);
+    const dpr = Math.min(3, devicePixelRatio || 1);
+    const size = Math.ceil((D.gap + D.length) * 2 + D.thickness * 2 + D.dot + 12), c = document.createElement('canvas');
+    c.width = c.height = Math.ceil(size * dpr); c.style.width = c.style.height = size + 'px';
+    drawReticle(c.getContext('2d')!, c.width / 2, c.height / 2, D, dpr);
     this.cross.innerHTML = ''; this.cross.append(c);
   }
   private lastKind = '';
+  private zoomed = false;
+  private reticleKey = '';
 
   /** the ability bar shows the keys the player actually bound (their hero's own set first) */
   private label(k: string, hero: string) {
@@ -116,7 +141,7 @@ export class Hud {
     this.portrait.innerHTML = `<img src="${BASE}img/portrait_${a.def.id}.webp" onerror="this.style.display='none'"><div><b>${a.def.name}</b><span>${a.def.title}${a.def.pilot ? ` · pilot ${a.def.pilot.name}` : ''}</span></div>`;
     this.portrait.style.setProperty('--c', a.def.color);
     this.lastKind = a.def.primary.kind;
-    if (!this.cross.classList.contains('custom')) this.cross.className = 'cross ' + a.def.primary.kind;
+    this.drawReticle();
   }
 
   update(w: World, me: Actor | null, cam: THREE.Camera, now: number, fps: number, showBoard: boolean, spectating: string) {
@@ -200,7 +225,7 @@ export class Hud {
       this.banner.style.display = me.alive ? 'none' : '';
       if (!me.alive) this.banner.innerHTML = `<b>ELIMINATED</b><span>Respawn in ${Math.max(0, me.respawnAt - t).toFixed(1)}s</span>`;
       this.cross.style.display = me.alive ? '' : 'none';
-      this.cross.classList.toggle('zoom', !!me.sv.zoom);
+      if (this.zoomed !== !!me.sv.zoom) { this.zoomed = !!me.sv.zoom; this.drawReticle(); }
       this.root.classList.toggle('spectate', false);
     } else {
       this.root.classList.toggle('spectate', true);

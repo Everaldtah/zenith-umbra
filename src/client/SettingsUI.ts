@@ -315,9 +315,9 @@ const ASIDE: Record<string, string> = {
 
 /** draw an Overwatch-style custom reticle (canvas 2D); `k` scales the pixel sizes for previews */
 export function drawReticle(g: CanvasRenderingContext2D, x: number, y: number, R: Settings['controls']['reticle'], k = 1) {
-  const t = R.thickness * k, len = R.length * k, gap = R.gap * k, col = R.color;
+  const t = R.thickness * k, len = R.length * k, gap = R.gap * k, col = R.color, o = Math.max(1, k);      // outline width (px)
   const bar = (x0: number, y0: number, w: number, h: number) => {
-    if (R.outline > 0) { g.fillStyle = `rgba(0,0,0,${R.outline * R.opacity})`; g.fillRect(x0 - 1, y0 - 1, w + 2, h + 2); }
+    if (R.outline > 0) { g.fillStyle = `rgba(0,0,0,${R.outline * R.opacity})`; g.fillRect(x0 - o, y0 - o, w + 2 * o, h + 2 * o); }
     g.globalAlpha = R.opacity; g.fillStyle = col; g.fillRect(x0, y0, w, h); g.globalAlpha = 1;
   };
   if (R.type === 'crosshairs' || R.type === 'circle+crosshairs' || R.type === 'default') {
@@ -327,12 +327,12 @@ export function drawReticle(g: CanvasRenderingContext2D, x: number, y: number, R
   if (R.type === 'circle' || R.type === 'circle+crosshairs') {
     const r = Math.max(4 * k, gap + (R.type === 'circle' ? len * 0.6 : 0));
     g.lineWidth = t;
-    if (R.outline > 0) { g.strokeStyle = `rgba(0,0,0,${R.outline * R.opacity})`; g.lineWidth = t + 2; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.lineWidth = t; }
+    if (R.outline > 0) { g.strokeStyle = `rgba(0,0,0,${R.outline * R.opacity})`; g.lineWidth = t + 2 * o; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.lineWidth = t; }
     g.globalAlpha = R.opacity; g.strokeStyle = col; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
   }
   if (R.dot > 0) {
     const d = R.dot * k * 0.5;
-    if (R.outline > 0) { g.fillStyle = `rgba(0,0,0,${R.outline * R.dotOpacity})`; g.beginPath(); g.arc(x, y, d + 1, 0, Math.PI * 2); g.fill(); }
+    if (R.outline > 0) { g.fillStyle = `rgba(0,0,0,${R.outline * R.dotOpacity})`; g.beginPath(); g.arc(x, y, d + o, 0, Math.PI * 2); g.fill(); }
     g.globalAlpha = R.dotOpacity; g.fillStyle = col; g.beginPath(); g.arc(x, y, d, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
   }
 }
