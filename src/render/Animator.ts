@@ -106,6 +106,7 @@ export interface AnimState {
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
   tide?: { age: number };   // Tomoe's Crescent Warpath: seconds into the dash (her axe and her Fang wheel round her)
   deflect?: { age: number; x: number; y: number; z: number };   // a shot just turned on the blade: its age and where it came from (model space)
+  skyward?: boolean;        // Raijin's Susanoo calling the thunder: planted, both arms raised to the sky
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
   knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
   skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
@@ -1397,6 +1398,9 @@ export class Animator {
         }
         over = { hand, w: wh };
         if (i === 1) { this.gripG.copy(G); this.gripH.copy(H); this.gripT.set(Math.cos(hs.th), 0, -Math.sin(hs.th)).multiplyScalar(hs.side); }
+      } else if (s.skyward) {
+        // both arms up to the sky, palms open, a slow sway (the Storm Sovereign's first half)
+        over = { hand: shoulder.clone().add(new THREE.Vector3(side * (0.45 + 0.04 * Math.sin(s.time * 1.3)), 0.92, 0.12).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: 1, pole: new THREE.Vector3(side * 0.9, 0.1, 0.5) };
       } else if (i === 1 && s.move === 'tide') {
         // Crescent Warpath: the right arm up as the hub the weapons wheel round (Junker Queen's Rampage); the left swings
         // with the run

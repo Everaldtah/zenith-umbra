@@ -378,9 +378,51 @@ export class Fx {
         this.shake = Math.max(this.shake, 0.7 / (1 + near / 12));
         break;
       }
+      // Raijin's Storm Sovereign: the giant's arrival - a column of light from the sky, a ring, a crack of thunder
+      case 'susanoocast': {
+        const top = { x: p.x, y: p.y + 40, z: p.z };
+        this.beam(top, p, '#ffffff', now, 0.6, 0.35); this.beam(top, p, '#8ad8ff', now, 1.6, 0.5);
+        this.ring(p, e.r ?? 12, '#8ad8ff', now, 0.7); this.ring(p, (e.r ?? 12) * 0.5, '#ffffff', now, 0.4);
+        this.light(p, '#bfe8ff', 90, now, 0.35);
+        P.emit({ x: p.x, y: p.y + 1, z: p.z }, n(60), new THREE.Color('#bfe8ff'), { speed: 8, life: 0.9, size: 0.4, up: 6, spread: 3 });
+        this.shake = Math.max(this.shake, 0.5 / (1 + near / 15));
+        break;
+      }
+      // ...the thunder: a bolt from the heavens onto one enemy - a white core with blue branches, a ground burst, an
+      // afterglow that hangs for half a second
+      case 'skybolt': {
+        const top = { x: p.x + (Math.random() - 0.5) * 3, y: p.y + 36, z: p.z + (Math.random() - 0.5) * 3 };
+        this.bolt(top, p, '#ffffff', now, 0.14, 0.22);
+        this.bolt(top, p, '#8ad8ff', now, 0.4, 0.5);
+        for (let k = 0; k < 3; k++) {
+          const s = 0.35 + Math.random() * 0.4, mid = { x: top.x + (p.x - top.x) * s, y: top.y + (p.y - top.y) * s, z: top.z + (p.z - top.z) * s };
+          this.zigzag(mid, { x: mid.x + (Math.random() - 0.5) * 6, y: mid.y - 2 - Math.random() * 5, z: mid.z + (Math.random() - 0.5) * 6 }, '#8ad8ff', now);
+        }
+        this.ring(p, 2.6, '#ffffff', now, 0.3); this.ring(p, 4, '#8ad8ff', now, 0.5);
+        this.light({ x: p.x, y: p.y + 2, z: p.z }, '#dff4ff', 80, now, 0.5);
+        P.emit({ x: p.x, y: p.y + 0.3, z: p.z }, n(30), new THREE.Color('#bfe8ff'), { speed: 7, life: 0.5, size: 0.28, up: 4, spread: 1.2 });
+        P.emit({ x: p.x, y: p.y + 1, z: p.z }, n(14), new THREE.Color('#ffffff'), { speed: 1.5, life: 0.5, size: 0.6, spread: 0.6 });
+        this.shake = Math.max(this.shake, 0.35 / (1 + near / 10));
+        break;
+      }
+      // ...the giant's blade: a wide arc of storm light round it
+      case 'susanooslash': { const R = e.r ?? 5.5; this.ring(p, R, '#8ad8ff', now, 0.35); this.ring(p, R * 0.6, '#ffffff', now, 0.22); this.light(p, '#8ad8ff', 30, now); P.emit(p, n(24), new THREE.Color('#bfe8ff'), { speed: 9, life: 0.4, size: 0.3, spread: 2 }); break; }
+      // ...and its end (and Enra's effigy's): the hologram breaks into motes and a last flicker of light
+      case 'susanoofade': case 'effigyfade': P.emit({ x: p.x, y: p.y + 2.5, z: p.z }, n(50), c, { speed: 2.5, life: 1.1, size: 0.45, up: 2.5, spread: 2.2 }); this.light(p, e.color ?? '#8ad8ff', 40, now, 0.4); break;
       case 'bossbeam': if (e.to) { this.beam(p, e.to, e.color ?? '#fff', now, 0.07, 0.45); this.beam(p, e.to, '#ffffff', now, 0.07, 0.15); P.emit(e.to, n(3), c, { speed: 4, life: 0.3, size: 0.5 }); } break;
       default: P.emit(p, n(10), c, { speed: 3, life: 0.4, size: 0.25 });
     }
+  }
+
+  /** a lightning bolt a -> b: a jagged tube with wider kinks than zigzag's, its own thickness and life */
+  private bolt(a: V3, b: V3, color: string, now: number, radius: number, dur: number) {
+    const pts: THREE.Vector3[] = [], segs = 12;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs, j = i === 0 || i === segs ? 0 : 1.6 * Math.sin(t * Math.PI);
+      pts.push(new THREE.Vector3(a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j, a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j * 0.4, a.z + (b.z - a.z) * t + (Math.random() - 0.5) * j));
+    }
+    const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, radius, 5, false);
+    this.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), 'fadegeo', now, dur);
   }
 
   private zigzag(a: V3, b: V3, color: string, now: number) {

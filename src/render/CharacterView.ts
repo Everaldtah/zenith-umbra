@@ -272,6 +272,9 @@ export class CharacterView {
       this.group.add(this.barrierMesh);
     }
     this.fitMannequin();
+    // a summoned hologram waits for its own model rather than showing the mannequin for a frame (a program compiled for
+    // nothing, mid-match)
+    if (this.holo) this.model.visible = false;
     this.loadReal();
   }
 
@@ -504,9 +507,6 @@ export class CharacterView {
     this.fingers = FULL ? Fingers.build(m) : null;          // (the web demo keeps its plain hands)
     this.scaleFit = s;
     this.real = true;
-    // mid-match arrivals (a hero swap, a pilot ejecting, a new wave): textures uploaded and shaders compiled before the
-    // body shows, so it never pops in half-ready or hitches the frame it first draws (Preload.ts)
-    if (CharacterView.warm) { wrap.visible = false; void CharacterView.warm(wrap).finally(() => { if (this.model === wrap) wrap.visible = true; }); }
     this.hookStep();
     this.attachClips();
     // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path
@@ -547,6 +547,10 @@ export class CharacterView {
     }
     // materials: keep the concept colours, add rim + a hint of emission for readability in dark maps
     this.collectMats();
+    // mid-match arrivals (a hero swap, a pilot ejecting, a new wave, a summoned giant): textures uploaded and shaders
+    // compiled before the body shows, so it never pops in half-ready or hitches the frame it first draws (Preload.ts) -
+    // after the materials are set up, so the programs compiled are the ones drawn (a hologram's translucent variant)
+    if (CharacterView.warm) { wrap.visible = false; void CharacterView.warm(wrap).finally(() => { if (this.model === wrap) wrap.visible = true; }); }
     // physics: the body colliders the hair / cloth solver pushes against, measured from this mesh by the rigger;
     // blinking: lids over the painted eyes the rigger found on the face
     const info = modelInfo(mid);
@@ -632,7 +636,8 @@ export class CharacterView {
       grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time) || a.has('deflect', time), climb: a.has('wallclimb', time),
-      deflect: this.deflectState(time), charge: a.charge, beam: a.beamOn || a.flameOn,
+      deflect: this.deflectState(time),
+      skyward: a.def.id === 'susanoo' && (a.sv.phase ?? 0) === 0, charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,
@@ -654,7 +659,7 @@ export class CharacterView {
 
   private ragdollable() {
     const a = this.actor, b = this.anim.bones;
-    return FULL && this.anim.ok && a.def.frame !== 'mech' && a.def.frame !== 'drone' && !a.isBoss
+    return FULL && this.anim.ok && a.def.frame !== 'mech' && a.def.frame !== 'drone' && !a.isBoss && !this.holo   // (a hologram fades, it doesn't fall)
       && ['hips', 'chest', 'head', 'upperarm_L', 'forearm_L', 'hand_L', 'upperarm_R', 'forearm_R', 'hand_R', 'thigh_L', 'shin_L', 'foot_L', 'thigh_R', 'shin_R', 'foot_R']
         .every(n => b[n as keyof typeof b]);
   }
@@ -715,6 +720,14 @@ export class CharacterView {
     driveFingers(this.fingers, a, time, dt, { drawW: this.anim.drawW });
     // death: a ragdoll thrown by the killing blow (desktop), else a death clip when the library has one (the body
     // crumples, then sinks), else tip over and sink
+    if (!a.alive && this.holo) {
+      // a summon dismissed: the hologram fades out where it stands
+      const k = Math.min(1, (time - a.deathAt) / 0.45);
+      for (const m of this.mats) m.opacity = 0.82 * (1 - k);
+      this.group.visible = k < 1;
+      this.rim.value = 0;
+      return;
+    }
     if (!a.alive && this.deathRagdoll(dt, time)) return;
     if (a.alive && (this.ragdoll || this.ragdollDone)) this.endRagdoll();
     if (!a.alive && this.anim.clipDeath) {
@@ -728,14 +741,6 @@ export class CharacterView {
       this.anim.update({ ...this.animState(dt, time), vel: new THREE.Vector3(), dead: true, deathAge: age, grounded: true, flying: false });
       this.lids?.update(time, a.anim.hitAt, true);
       this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, true);
-      return;
-    }
-    if (!a.alive && this.holo) {
-      // a summon dismissed: the hologram fades out where it stands
-      const k = Math.min(1, (time - a.deathAt) / 0.45);
-      for (const m of this.mats) m.opacity = 0.82 * (1 - k);
-      this.group.visible = k < 1;
-      this.rim.value = 0;
       return;
     }
     if (!a.alive) {
