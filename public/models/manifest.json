@@ -1372,6 +1372,9 @@
   },
   "prop_enra_blade": {
    "height": 1
+  },
+  "prop_kaien_seal": {
+   "height": 1
   }
  },
  "textures": [
