@@ -105,6 +105,7 @@ export interface AnimState {
   dual?: { fireL: number; fireR: number };   // twin chainguns: seconds since each gun last fired
   rush?: boolean;           // Gantetsu's Tachiai Rush (head down, shoulders in, guns tucked)
   twirl?: number;           // Tomoe's Crescent Warpath: the angle (radians) her axe and her Fang have spun in her hands
+  deflect?: { age: number; x: number; y: number; z: number };   // a shot just turned on the blade: its age and where it came from (model space)
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
   knockdown?: number;       // knocked flat on the ground: seconds left (the last ~0.3 s is the get-up); 0 = standing
   skate?: boolean;          // Hibiki: mag-skates - a gliding skate stride instead of a run
@@ -1416,6 +1417,13 @@ export class Animator {
         const hand = i === 1
           ? shoulder.clone().add(new THREE.Vector3(side * 0.55 * Lr + Math.cos(t) * 0.06 * Lr, -0.12 * Lr + Math.sin(t) * 0.06 * Lr, 0.62 * Lr).applyQuaternion(Dc))
           : shoulder.clone().add(new THREE.Vector3(-side * 0.1 * Lr, -0.42 * Lr, 0.5 * Lr).applyQuaternion(Dc));
+        // every shot turned on the blade: the blade hand snaps out toward where it came from and back (Genji's deflect
+        // meets each projectile with its own flick), the off hand braces the other way
+        const df = s.deflect;
+        if (df && df.age < 0.16) {
+          const k = Math.sin(Math.min(1, df.age / 0.16) * Math.PI), out = new THREE.Vector3(df.x, df.y, df.z).normalize();
+          hand.addScaledVector(out, (i === 1 ? 0.28 : -0.08) * Lr * k);
+        }
         over = { hand, w: this.guardW, pole: new THREE.Vector3(side * 0.9, -0.5, -0.3) };
       } else if (s.dual) {
         // twin chainguns held at the hips, barrels along the aim; each gun kicks back on its own rounds and chatters while

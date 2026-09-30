@@ -8,6 +8,8 @@ import { WeaponFx } from './WeaponFx';
 import { FULL } from '../edition';
 import { fangPos } from '../game/abilities';
 import { buildFang } from './TomoeProps';
+import { thrownProp } from './HeldProps';
+import { CharacterView } from './CharacterView';
 import { SpiritDragons } from './SpiritDragon';
 import { ChainCage } from './ChainCage';
 
@@ -238,6 +240,8 @@ export class Fx {
       case 'dragoncut': if (e.to) this.dragons?.streak(p, e.to, now); break;
       case 'lightning': if (e.to) { this.zigzag(p, e.to, '#8ad8ff', now); } break;
       case 'parry': this.ring(p, 1.8, '#8ad8ff', now, 0.3, false); P.emit(p, n(16), c, { speed: 8, life: 0.2, size: 0.15 }); this.light(p, '#8ad8ff', 30, now); break;
+      // a shot turned on Hayate's blade (Mirror Water): a burst of sparks back the way it came, a blue flash
+      case 'deflect': P.emit(p, n(14), c, { speed: 9, life: 0.22, size: 0.12, dir: e.n, spread: 0.35 }); P.emit(p, n(6), new THREE.Color('#ffffff'), { speed: 3, life: 0.12, size: 0.2 }); this.light(p, '#8ad8ff', 22, now, 0.12); break;
       case 'decoy': P.emit(p, n(40), c, { speed: 4, life: 0.8, size: 0.3 }); this.ring(p, 2, e.color ?? '#c77dff', now, 0.5, false); break;
       case 'undying': P.emit(p, n(20), new THREE.Color('#ffe28a'), { speed: 3, life: 0.6, size: 0.3, up: 2 }); break;
       case 'death': P.emit(p, n(50), c, { speed: 5, life: 1.2, size: 0.3, up: 2 }); break;
@@ -434,6 +438,12 @@ export class Fx {
         const blade = buildFang(1.25); blade.name = 'spin'; m.add(blade);
         this.group.add(m); this.projMeshes.set(p.id, m);
       }
+      // a thrown prop (Hayate's shuriken): the prop itself flies, flat along the flight, spinning about its own axis
+      if (!m && p.mesh) {
+        m = new THREE.Group();
+        const star = thrownProp(p.mesh, p.owner.def.height * p.owner.scale, CharacterView.warm ?? undefined); star.name = 'spin'; m.add(star);
+        this.group.add(m); this.projMeshes.set(p.id, m);
+      }
       if (!m) {
         m = new THREE.Group();
         const core = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color('#ffffff'), 0.5) }));
@@ -452,6 +462,7 @@ export class Fx {
       m.position.set(p.pos.x, p.pos.y, p.pos.z);
       if (p.fx === 'sonic') { const rg = m.getObjectByName('ring'); if (rg) rg.scale.setScalar(0.2 + 0.08 * Math.sin(now * 60 + p.id)); }
       if (p.fx === 'crescent') { const b = m.getObjectByName('spin'); if (b) b.rotation.x = -now * 26; }
+      else if (p.mesh) { const b = m.getObjectByName('spin'); if (b) b.rotation.y = now * (p.spin ?? 30); }
       const v = new THREE.Vector3(p.vel.x, p.vel.y, p.vel.z);
       if (v.lengthSq() > 0.01) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), v.normalize());
       if (Math.random() < 0.6) this.parts.emit(p.pos, 1, col, { speed: 0.5, life: 0.25, size: p.splash ? 0.3 : 0.14 });

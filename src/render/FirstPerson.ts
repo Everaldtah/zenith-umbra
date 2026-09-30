@@ -384,6 +384,15 @@ export class FirstPersonArms {
     const ak = this.aimK * this.aimK * (3 - 2 * this.aimK);
     this.view.group.position.set(-(this.eye.x + off.x) * k - bob[0] - 0.035 * ak, -(this.eye.y + off.y) * k + bob[1] + 0.035 * ak, -(this.eye.z + off.z) * k);
     this.view.group.rotation.set(this.swayY * 0.6, this.swayX * 0.8, 0);
+    // Mirror Water (Hayate's deflect): each shot turned on the blade flicks the whole viewmodel toward where it came
+    // from and rolls it that way, over both sources of motion (the guard itself is the authored fp_ability2 clip)
+    const dfa = t - a.anim.deflectAt;
+    if (dfa < 0.16 && a.has('deflect', t)) {
+      const k = Math.sin(Math.min(1, dfa / 0.16) * Math.PI), d = a.anim.deflectDir;
+      const dx = -d.x * Math.cos(a.yaw) + d.z * Math.sin(a.yaw), dy = d.y;       // view space: right, up
+      this.view.group.position.x += dx * 0.06 * k; this.view.group.position.y += dy * 0.04 * k;
+      this.view.group.rotation.z -= dx * 0.4 * k; this.view.group.rotation.x += dy * 0.25 * k;
+    }
     this.view.inner.scale.setScalar(1);
     this.view.updateGuns(dt, t);
     if (this.style.gunScale) for (const g of this.view.guns) g.group.scale.setScalar(this.style.gunScale);
@@ -401,6 +410,8 @@ export class FirstPersonArms {
       if (!ev && t - this.idleSince > INSPECT_AFTER && this.clips.has('fp_inspect') && !this.oneShot) { ev = 'fp_inspect'; this.idleSince = t; }
       if (ev && this.clips.has(ev) && (ev !== 'fp_hit' && ev !== 'fp_land' || !this.oneShot)) { this.oneShot = { name: ev, until: t + this.clips.get(ev)!.duration }; if (this.playing) this.playing = { ...this.playing, name: '' }; }
       if (this.oneShot && (t >= this.oneShot.until || (this.oneShot.name === 'fp_inspect' && busy))) this.oneShot = null;
+      // the deflect guard ends when the window does (E again ends it early): the blade comes down with it
+      if (this.oneShot?.name === 'fp_ability2' && a.def.id === 'hayate' && !a.has('deflect', t) && t - a.anim.castAt > 0.2) this.oneShot = null;
       let want = 'fp_idle', loop = true, rate = 1, scrub = -1;
       if ((a.beamOn || a.flameOn) && this.clips.has('fp_beam')) want = 'fp_beam';
       if (a.charging && this.clips.has('fp_draw')) { want = 'fp_draw'; loop = false; scrub = Math.min(1, Math.max(0, a.charge)); }

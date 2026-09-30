@@ -580,6 +580,14 @@ export class CharacterView {
   }
 
   /** model-space direction to whoever hit us last (x = the character's left, z = front) */
+  /** Hayate's Mirror Water: the last turned shot (age, and the way it came from in model space) */
+  private deflectState(time: number): { age: number; x: number; y: number; z: number } | undefined {
+    const a = this.actor, age = time - a.anim.deflectAt;
+    if (age > 0.3) return undefined;
+    const d = a.anim.deflectDir, cy = Math.cos(a.yaw), sy = Math.sin(a.yaw);
+    return { age, x: d.x * cy - d.z * sy, y: d.y, z: d.x * sy + d.z * cy };
+  }
+
   private hitDir(): [number, number] | undefined {
     const a = this.actor, b = a.lastHitBy;
     if (!b) return undefined;
@@ -604,7 +612,8 @@ export class CharacterView {
       // a swoop skimming the floor is still flight (no running gait at 20 m/s)
       grounded: a.grounded && !a.has('swoop', time), flying: a.flying || a.def.frame === 'drone', frame: a.def.frame,
       attackAge: time - an.attackAt, attackKind: an.attackKind, castAge: time - an.castAt, castId: an.castId, hitAge: time - an.hitAt,
-      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time), climb: a.has('wallclimb', time), charge: a.charge, beam: a.beamOn || a.flameOn,
+      landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time) || a.has('deflect', time), climb: a.has('wallclimb', time),
+      deflect: this.deflectState(time), charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),
       melee: a.def.primary.kind === 'melee' || (a.anim.attackKind === 'secondary' && 'kind' in a.def.secondary && a.def.secondary.kind === 'melee'),
       hammer: !!this.hammer && (a.def.id !== 'tomoe' || this.axeOut(time)), swingSide: an.attackSide,

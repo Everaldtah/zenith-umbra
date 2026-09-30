@@ -30,9 +30,8 @@ export const CARD_GONE: [number, number] = [0.04, 0.24];
 
 export interface HeldProp { group: THREE.Group; kind: Kind }
 
-/** Hayate's koi-scale shuriken: in his throwing hand whenever the nodachi is on his back (group.userData.swap) */
-function buildShuriken(L: number): THREE.Group {
-  const g = new THREE.Group();
+/** Hayate's koi-scale shuriken, lying flat (its plane XZ, the normal +Y): the procedural star */
+function shurikenMesh(L: number): THREE.Mesh {
   const s = new THREE.Shape(), r = 0.045 * L, ri = 0.012 * L;
   for (let k = 0; k < 8; k++) {
     const a = k / 8 * Math.PI * 2 + Math.PI / 8, rr = k % 2 ? ri : r;
@@ -43,9 +42,62 @@ function buildShuriken(L: number): THREE.Group {
   geo.translate(0, 0, -0.0015 * L);
   const steel = new THREE.MeshStandardMaterial({ color: '#dfe7e3', metalness: 0.85, roughness: 0.25, emissive: new THREE.Color('#4fe3c1'), emissiveIntensity: 0.25 });
   const m = new THREE.Mesh(geo, steel); m.castShadow = true;
-  // held edge-on between the fingers, the flat facing across the forearm (YZ plane), just past the fist
-  m.rotation.y = Math.PI / 2; m.position.set(0, 0.012 * L, 0.035 * L);
-  g.add(m);
+  m.rotation.x = -Math.PI / 2;
+  return m;
+}
+
+/** a Tripo prop laid flat: its thinnest axis turned to +Y, its widest extent scaled to 2 x `radius`, centred */
+function fitFlat(m: THREE.Object3D, radius: number): THREE.Object3D {
+  m.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const axes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+  const thin = [size.x, size.y, size.z].indexOf(Math.min(size.x, size.y, size.z));
+  const wrap = new THREE.Group(), inner = new THREE.Group();
+  inner.add(m); m.position.sub(c);
+  inner.quaternion.setFromUnitVectors(axes[thin], new THREE.Vector3(0, 1, 0));
+  inner.scale.setScalar(2 * radius / Math.max(1e-6, Math.max(size.x, size.y, size.z)));
+  wrap.add(inner);
+  return wrap;
+}
+
+/** thrown props (Hayate's shuriken, HeldProps' nodachi swap and every shuriken in flight): one fitted Tripo template per
+ *  prop id, cloned per use; the procedural star until it is loaded */
+const thrown = new Map<string, { tpl: THREE.Object3D | null; loading: Promise<void> | null }>();
+function thrownTemplate(id: string, L: number, warm?: (o: THREE.Object3D) => Promise<void>) {
+  let e = thrown.get(id);
+  if (!e) { e = { tpl: null, loading: null }; thrown.set(id, e); }
+  e.loading ??= (async () => {
+    await loadManifest();
+    if (!hasProp(id)) return;
+    const m = await propModel(id);
+    if (!m) return;
+    const f = fitFlat(m, 0.045 * L);
+    if (warm) await warm(f);
+    e!.tpl = f;
+  })();
+  return e;
+}
+/** a thrown prop lying flat (normal +Y), the procedural star at once and the Tripo prop in its place once loaded */
+export function thrownProp(id: string, L: number, warm?: (o: THREE.Object3D) => Promise<void>): THREE.Group {
+  const g = new THREE.Group();
+  const e = thrownTemplate(id, L, warm);
+  const use = () => { if (!e.tpl) return; g.clear(); g.add(e.tpl.clone(true)); };
+  if (e.tpl) use();
+  else { g.add(shurikenMesh(L)); void e.loading!.then(() => { if (g.parent) use(); }); }
+  return g;
+}
+/** the fitted thrown prop for the match preloader: a copy to upload and compile with the rest (null: no such prop) */
+export async function thrownPropReady(id: string, L: number): Promise<THREE.Object3D | null> {
+  const e = thrownTemplate(id, L);
+  await e.loading;
+  return e.tpl ? e.tpl.clone(true) : null;
+}
+
+/** Hayate's shuriken in his throwing hand whenever the nodachi is on his back (group.userData.swap): held edge-on
+ *  between the fingers, the flat facing across the forearm (its normal +X), just past the fist */
+function buildShuriken(L: number): THREE.Group {
+  const g = thrownProp('prop_hayate_shuriken', L);
+  g.rotation.z = -Math.PI / 2; g.position.set(0, 0.012 * L, 0.035 * L);
   return g;
 }
 
@@ -154,7 +206,7 @@ export const ARROW_GONE: [number, number] = [0.03, 0.42];
 export function heldVisible(heroId: string, side: 0 | 1, a: { has(s: string, t: number): boolean; anim: { castId?: string; castAt: number; attackAt: number; attackKind?: string } }, t: number) {
   if (heroId !== 'hayate' || side !== 1) return true;
   const cast = t - a.anim.castAt, atk = t - a.anim.attackAt;
-  return a.has('dragonblade', t) || a.has('parry', t) || a.has('phased', t) && a.anim.castId === 'dragongate'
+  return a.has('dragonblade', t) || a.has('parry', t) || a.has('deflect', t) || a.has('phased', t) && a.anim.castId === 'dragongate'
     || a.anim.castId === 'currentdash' && cast < 0.45 || a.anim.castId === 'dragongate' && cast < 1.4
     || (a.anim.attackKind === 'punch' || a.anim.attackKind === 'secondary' && a.has('phased', t)) && atk < 0.5;
 }

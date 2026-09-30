@@ -26,11 +26,12 @@ import type { Actor } from '../game/Actor';
 import { MapScene } from '../render/MapScene';
 import { CharacterView } from '../render/CharacterView';
 import { PuppetSwarm } from '../render/PuppetSwarm';
+import { thrownPropReady } from '../render/HeldProps';
 import { FirstPersonArms, FP_STYLE } from '../render/FirstPerson';
 import { Armory } from './Armory';
 import { equippedSkin } from '../data/skins';
 import { Fx } from '../render/Fx';
-import { loadManifest, heroModel, riggedModel, hasModel } from '../render/Assets';
+import { loadManifest, heroModel, riggedModel, hasModel, hasProp } from '../render/Assets';
 import { DRAGON_MODEL } from '../render/SpiritDragon';
 import { FX_KINDS, compileFor, loadsIdle, nextFrame, showProgress, sleep, texturesOf, uploadTextures, warmObject } from './Preload';
 import { animLibrary } from '../render/ClipLibrary';
@@ -372,6 +373,11 @@ export class Game {
     const warmGroup = new THREE.Group(); warmGroup.position.set(0, -400, 0);
     const laterLoads: Promise<void>[] = [...later].filter(id => hasModel(id)).map(id => heroModel(id).then(m => { if (m) warmGroup.add(m); }));
     if (this.swarm) laterLoads.push(this.swarm.ready);
+    // thrown props (Hayate's shuriken): fitted now and drawn parked with the rest, so the first throw compiles nothing
+    for (const a of w.actors) for (const wd of [a.def.primary, a.def.secondary]) {
+      const mesh = (wd as { mesh?: string }).mesh;
+      if (mesh && hasProp(mesh)) laterLoads.push(thrownPropReady(mesh, a.def.height * a.scale).then(m => { if (m) warmGroup.add(m); }));
+    }
     for (const [hero, id] of Object.entries(DRAGON_MODEL)) if (FULL && w.actors.some(a => a.def.id === hero)) laterLoads.push(riggedModel(id).then(m => { if (m) warmGroup.add(m); }));
     const views = () => [...this.views.values()];
     const needs = (v: CharacterView) => hasModel(v.actor.def.id);
@@ -657,7 +663,7 @@ export class Game {
     this.fx.fpActor = wantFp ? me : null;
     this.swarm?.update(w, w.time, viewer.team, viewer.sees);
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
-    this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null);
+    this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null, this.camera.position);   // (the float hides while the camera is inside it)
     this.updateCamera(dt, me);
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     if (FULL && !this.paused) this.sound.frame(w, me, this.camera, dt);

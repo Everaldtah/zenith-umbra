@@ -134,7 +134,7 @@ export function gripsFor(a: Actor, t: number, o: { drawW?: number; fp?: boolean 
   if (R === 'trigger') sqR = Math.max(0, 1 - (t - an.fireR) / 0.09);
   if (L === 'trigger') sqL = Math.max(0, 1 - (t - (id === 'gantetsu' ? an.fireL : an.fireR)) / 0.09);
   // Hayate: the koi shuriken pinched while the nodachi is sheathed (HeldProps.heldVisible)
-  if (id === 'hayate' && !(a.has('dragonblade', t) || a.has('parry', t) || an.castId === 'currentdash' && cast < 0.45 || an.castId === 'dragongate' && cast < 1.4
+  if (id === 'hayate' && !(a.has('dragonblade', t) || a.has('parry', t) || a.has('deflect', t) || an.castId === 'currentdash' && cast < 0.45 || an.castId === 'dragongate' && cast < 1.4
     || (an.attackKind === 'punch' || an.attackKind === 'secondary') && atk < 0.5)) R = 'pinch';
   // archers: hook on the string; the loose flicks the fingers open, the reach to the quiver pinches the next arrow
   if (id === 'yuzu' || id === 'seiran') {
