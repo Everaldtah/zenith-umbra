@@ -500,8 +500,10 @@ export class Bot {
           const stuck = w.actors.find(x => x.id === a.sv.fangTgt);
           if (stuck && (stuck.flying || (since > 0.5 && dist3(stuck.pos, a.pos) > 5) || since > 2.5)) { this.castAt('alt'); break; }
         } else if (st === 2 && since > 0.8) { this.castAt('alt'); break; }
-        // Tide of Blades: a crowd in the lane ahead, or a wounded target to run down
-        if (ultReady && tg && vis(tg) && d < 16 && Math.abs(tg.pos.y - a.pos.y) < 1.5 && (near(tg.pos, 5, foes).length >= 2 || tg.health / tg.maxHp < 0.4)) { this.castAt('ult', tg.center); break; }
+        // Crescent Warpath: fly through a crowd (the mark is worth most with the team there to use it), or run down a
+        // wounded target; never from so close that the flight carries her far past the fight and out of it
+        if (ultReady && tg && vis(tg) && d > 3 && d < 16 && Math.abs(tg.pos.y - a.pos.y) < 2.5
+          && (near(tg.pos, 5, foes).length >= 2 || tg.health / tg.maxHp < 0.4 || (near(tg.pos, 14, allies).length >= 2 && near(tg.pos, 6, foes).length >= 1 && d > 8))) { this.castAt('ult', tg.center); break; }
         // Horagai War Call: under fire, or the team diving in together
         if (rdy('warcall') && ((t - a.lastDamagedAt < 0.6 && a.health / a.maxHp < 0.7) || (tg && d < 12 && near(a.pos, 15, allies).length >= 3))) { this.castAt('a1'); break; }
         // Crescent Reaping: everyone inside axe reach

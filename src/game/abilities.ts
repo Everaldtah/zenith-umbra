@@ -15,7 +15,7 @@ let ZID = 1;
 type Impl = (w: World, a: Actor) => boolean;
 
 const CC = ['stun', 'root', 'silence', 'grounded', 'tethered'];
-const DEBUFF = ['brand', 'bleed', 'wound', 'antiheal', 'slow', 'vuln', ...CC];
+const DEBUFF = ['brand', 'bleed', 'wound', 'antiheal', 'slow', 'vuln', 'tidemark', ...CC];
 
 function ccBlocked(w: World, x: Actor) { return x.has('ccimmune', w.time) || x.has('linked', w.time) || x.has('tachiai', w.time); }
 function applyCC(w: World, src: Actor, x: Actor, kind: string, dur: number): boolean {
@@ -659,16 +659,23 @@ const I: Record<string, Impl> = {
     return true;
   },
   tide(w, a) {
-    // an unstoppable 20m charge; everyone in the lane is cut, wounded and starved of healing
+    // Crescent Warpath: she leaves the ground and flies the lane in one arc, axe and Fang wheeling around her, straight
+    // through every body in the way; whoever she passes is cut, wounded, starved of healing and MARKED (tidemark)
     const t = w.time, d = flatDir(a);
+    const dist = tideReach(w, a, d), dur = Math.max(TIDE_MIN_SECS, dist / TIDE_SPEED);
     (a as any)._tideHit = new Set<number>();
-    a.forced = { vx: d.x * TIDE_SPEED, vy: 0, vz: d.z * TIDE_SPEED, until: t + TIDE_LEN / TIDE_SPEED, kind: 'tide', onEnd: () => {
+    a.sv.tideT0 = t; a.sv.tideDur = dur; a.sv.tideApex = Math.max(1.2, TIDE_APEX * Math.sqrt(dist / TIDE_LEN));
+    a.sv.tideX = a.pos.x; a.sv.tideZ = a.pos.z; a.sv.tideStuck = 0;
+    a.forced = { vx: d.x * dist / dur, vy: 4 * a.sv.tideApex / dur, vz: d.z * dist / dur, until: t + dur, kind: 'tide', ignoreGravity: true, onEnd: () => {
+      // (the end of the arc, a click, a wall: wherever it ends, she comes down there)
+      a.clear('tideult'); a.set('ccimmune', w.time, 0.15);
       a.cd.reaping = 0;
       if (a.sv.fang) fangHome(w, a); else a.cd.crescent = 0;
       w.fx('slam', a.pos, { r: 3, color: a.def.glow, actor: a }); w.sfx('slam', a.pos, a);
     } };
-    a.set('ccimmune', t, TIDE_LEN / TIDE_SPEED + 0.15); a.set('tideult', t, TIDE_LEN / TIDE_SPEED + 0.05);
-    w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur: TIDE_LEN / TIDE_SPEED });
+    a.grounded = false; a.lastGroundedAt = -9; a.anim.jumpAt = t;
+    a.set('ccimmune', t, dur + 0.15); a.set('tideult', t, dur + 0.05);
+    w.fx('ultflash', a.center, { color: a.def.glow, actor: a }); w.fx('chargetrail', a.center, { actor: a, color: a.def.glow, dur });
     w.sfx('ultcall', a.center, a); w.sfx('charge', a.center, a); w.sfx('roar', a.center, a);
     w.emit({ t: 'msg', text: 'TOMOE · CRESCENT WARPATH', color: a.def.color });
     return true;
@@ -686,7 +693,29 @@ const I: Record<string, Impl> = {
 
 // Tomoe's numbers
 export const FANG_DMG = 55, FANG_WOUND = 30, FANG_SPEED = 42, FANG_RANGE = 30, FANG_BACK = 46, FANG_STICK = 6;
-export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42, TIDE_LEN = 20, TIDE_SPEED = 17;
+export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42;
+/** Crescent Warpath: the flight (m, m/s, the top of the arc in m), the lane under the wheeling blades (half-width, m) */
+export const TIDE_LEN = 20, TIDE_SPEED = 20, TIDE_APEX = 3, TIDE_HALF = 2.5, TIDE_MIN_SECS = 0.35;
+/** ... the cut, the wound, the healing it denies (s) */
+export const TIDE_CUT = 40, TIDE_WOUND = 90, TIDE_ANTIHEAL = 4.5;
+/** ... the mark it leaves: seconds, damage taken from anyone (x), the colour of the glow */
+export const TIDE_MARK = 10, TIDE_MARK_AMP = 1.25, TIDE_MARK_COLOR = '#4aa8ff';
+/** ... a click ends the flight, once it has been under way this long (s) */
+export const TIDE_HOLD = 0.15;
+/** ... a landing needs footing no further below her than this (m) */
+const TIDE_DROP = 6;
+
+/** how far Crescent Warpath carries her along d: TIDE_LEN, pulled in to the last spot inside the arena with footing under it */
+export function tideReach(w: World, a: Actor, d: V3): number {
+  const [X, Z] = w.level.size;
+  let reach = 0;
+  for (let s = 1; s <= TIDE_LEN; s++) {
+    const x = a.pos.x + d.x * s, z = a.pos.z + d.z * s;
+    if (Math.abs(x) > X - a.radius || Math.abs(z) > Z - a.radius) break;
+    if (w.level.groundAt(x, z, a.pos.y + TIDE_APEX + 1, a.radius) > a.pos.y - TIDE_DROP) reach = s;
+  }
+  return reach;
+}
 /** Twin Koi Torrent's double helix: the giant twin dragons (render/SpiritDragon.ts) and their bites share it - radius (m), turn (rad/m) */
 export const TWIN_R = 2.2, TWIN_W = 0.3;
 
@@ -1083,16 +1112,31 @@ export function tickAbilities(w: World, dt: number) {
         w.level.collide(pin.pos, pin.radius, pin.height);
       }
     } else if (a.forced.kind === 'tide') {
-      // Crescent Warpath: a 3.5m-wide lane of steel - each enemy in it is cut once
+      // Crescent Warpath: each enemy under the wheel of blades is passed through once - cut, wounded, marked
       const hit: Set<number> = (a as any)._tideHit ?? ((a as any)._tideHit = new Set<number>());
       const f = norm({ x: a.forced.vx, y: 0, z: a.forced.vz });
+      const flying = a.sv.tideT0 !== undefined && !!a.forced.ignoreGravity;     // (the Hero Viewer holds the pose without a flight)
+      if (flying) {
+        // the arc: up over the first half, down over the second
+        const s = (t - a.sv.tideT0) / a.sv.tideDur;
+        a.forced.vy = 4 * a.sv.tideApex * (1 - 2 * s) / a.sv.tideDur;
+        // stopped by a wall (or the rope of a Grand Dohyo), or down early on higher ground: it ends there
+        const want = Math.hypot(a.forced.vx, a.forced.vz) * dt, went = Math.hypot(a.pos.x - a.sv.tideX, a.pos.z - a.sv.tideZ);
+        a.sv.tideStuck = want > 0.01 && went < want * 0.25 ? a.sv.tideStuck + 1 : 0;
+        a.sv.tideX = a.pos.x; a.sv.tideZ = a.pos.z;
+        if (a.sv.tideStuck >= 3 || (a.grounded && s > 0.5)) a.forced.until = t;
+      }
       for (const x of w.enemies(a)) {
-        if (hit.has(x.id)) continue;
+        if (hit.has(x.id) || x.has('phased', t)) continue;
         const v = { x: x.pos.x - a.pos.x, z: x.pos.z - a.pos.z }, along = v.x * f.x + v.z * f.z, lat = Math.abs(v.x * -f.z + v.z * f.x);
-        if (along < -a.radius - x.radius || along > a.radius + x.radius + 1.4 || lat > 1.75 + x.radius || Math.abs(x.pos.y - a.pos.y) > 2.6) continue;
+        if (along < -a.radius - x.radius - 0.5 || along > a.radius + x.radius + 1.4 || lat > TIDE_HALF + x.radius) continue;
+        // (she is up to TIDE_APEX above the floor they stand on)
+        if (x.pos.y + x.height < a.pos.y - TIDE_APEX - 1.5 || x.pos.y > a.pos.y + a.height + 1) continue;
+        if (flying && !w.level.lineOfSight(a.center, x.center)) continue;
         hit.add(x.id);
-        w.damage(a, x, 40, { kind: 'ability' }); wound(w, a, x, 90); x.set('antiheal', t, 4.5, undefined, a);
-        w.fx('slash', x.center, { color: a.def.glow }); w.sfx('reaping', x.center, a);
+        x.set('tidemark', t, TIDE_MARK, undefined, a);
+        w.damage(a, x, TIDE_CUT, { kind: 'ability' }); wound(w, a, x, TIDE_WOUND); x.set('antiheal', t, TIDE_ANTIHEAL, undefined, a);
+        w.fx('slash', x.center, { color: a.def.glow }); w.fx('tidemark', x.center, { color: TIDE_MARK_COLOR, actor: x, dur: TIDE_MARK }); w.sfx('reaping', x.center, a);
         a.stats.tide = (a.stats.tide ?? 0) + 1;
       }
     } else if (a.forced.kind === 'abysscharge') {

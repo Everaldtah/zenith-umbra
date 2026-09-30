@@ -5,7 +5,7 @@ import type { Actor, Input } from '../game/Actor';
 import type { Coop } from './Coop';
 import { HERO, PILOT_BY_ID } from '../data/heroes';
 
-const ST = ['stun', 'root', 'silence', 'grounded', 'antiheal', 'brand', 'bleed', 'tethered', 'linked', 'ccimmune', 'stealth', 'revealed', 'sealed', 'undying', 'dmgamp', 'vuln', 'judgment', 'asura', 'lifesteal', 'parry', 'phased', 'spawnprot', 'hot', 'marked', 'glide', 'speed', 'slow'];
+const ST = ['stun', 'root', 'silence', 'grounded', 'antiheal', 'brand', 'bleed', 'tethered', 'linked', 'ccimmune', 'stealth', 'revealed', 'sealed', 'undying', 'dmgamp', 'vuln', 'tidemark', 'judgment', 'asura', 'lifesteal', 'parry', 'phased', 'spawnprot', 'hot', 'marked', 'glide', 'speed', 'slow'];
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 function packEvent(e: GameEvent): any {

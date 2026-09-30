@@ -31,7 +31,7 @@ const PLAN: Record<string, Plan> = {
   asura: { secs: 8.5, fight: 5 },
   dohyo: { secs: 7, near: 3, fight: 2.5 },
   bassdrop: { secs: 5 },
-  tide: { secs: 3.6, flat: true },
+  tide: { secs: 6, flat: true, wide: 1 },
   dragongate: { secs: 10, fight: 2.6 },
   twinkoi: { secs: 5, flat: true, wide: 1 },
 };

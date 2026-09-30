@@ -5,7 +5,7 @@ import { mapFor, type MapDef } from '../data/maps';
 import { Level, STEP, type V3 } from '../engine/Physics';
 import { Actor } from './Actor';
 import { ROBOTS } from '../data/robots';
-import { castAbility, stompLeap, tickAbilities } from './abilities';
+import { castAbility, stompLeap, tickAbilities, TIDE_HOLD, TIDE_MARK_AMP } from './abilities';
 import { PUPPET_DEF, dropPuppets, tickPuppets } from './puppets';
 import { updateWeapons } from './weapons';
 import { Stadium } from './stadium';
@@ -270,6 +270,7 @@ export class World {
     if (src?.has('dmgamp', t)) dmg *= 1.3;
     if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
+    else if (tgt.has('tidemark', t)) dmg *= TIDE_MARK_AMP;      // Tomoe's mark: hurt more by anyone (it doesn't stack on the Puppeteer's)
     if (tgt.has('taiko', t)) { tgt.mitigated += dmg * 0.4; dmg *= 0.6; }
     if (src?.has('ambush', t) && o.kind !== 'dot') { dmg += 50; src.clear('ambush'); }
     // Hex: Stitched Decoy eats one huge hit
@@ -711,6 +712,8 @@ export class World {
     const stunned = a.has('stun', t);
     if (!stunned && !a.has('phased', t)) {
       updateWeapons(this, a, dt);
+      // Crescent Warpath: a click drops her out of the flight where she is
+      if (a.forced?.kind === 'tide' && (this.pressed(a, 'fire') || this.pressed(a, 'alt')) && t - (a.sv.tideT0 ?? t) > TIDE_HOLD) a.forced.until = t;
       const silenced = a.has('silence', t);
       if (!silenced) {
         if (a.forced?.kind === 'dawncharge' && this.pressed(a, 'a1') && t - (a.sv.chargeStart ?? 0) > 0.3) a.forced.until = t;
@@ -1178,7 +1181,8 @@ export class World {
   }
 
   private separate() {
-    const list = this.actors.filter(a => a.alive && !a.has('phased', this.time));
+    // (Tomoe in her Crescent Warpath passes through bodies like a ghost)
+    const list = this.actors.filter(a => a.alive && !a.has('phased', this.time) && a.forced?.kind !== 'tide');
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const a = list[i], b = list[j];
       if (a.pos.y > b.pos.y + b.height || b.pos.y > a.pos.y + a.height) continue;
