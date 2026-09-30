@@ -118,7 +118,7 @@ export const HEROES: HeroDef[] = [
     secondary: { kind: 'projectile', damage: 60, rate: 1.25, range: 40, speed: 40, heal: true, sfx: 'blessing', fx: 'talisman' },
     ability1: { id: 'spiritstep', name: 'Spirit Step', key: 'SHIFT', cooldown: 8, desc: 'Vanish into a scatter of paper and reappear 10m ahead.' },
     ability2: { id: 'seal', name: 'Warding Seal', key: 'E', cooldown: 14, desc: 'Inscribe a 7m seal for 6s: enemies inside are revealed, cannot stealth, teleport or dash, and burn 15/s. Allies heal 20/s.', counter: "Pins Kagemaru: no Veil of Night, no Shadow Step." },
-    ult: { id: 'sealstorm', name: 'Divine Seal Storm', key: 'Q', cooldown: 0, charge: 2200, desc: '15s: ten thousand golden seals storm around you - a shield of them on you (300, re-formed every 4s) while the rest hunt every enemy within 18m in sight, bursting for 14 every half second.' },
+    ult: { id: 'sealstorm', name: 'Divine Seal Storm', key: 'Q', cooldown: 0, charge: 2200, desc: '15s: ten thousand golden seals storm around you - a shield of them on you (300, re-formed every 4s), the rest hunt every enemy within 18m in sight (14 every half second) and mend every ally within 18m (22/s).' },
     passive: { name: 'Prayer Beads', desc: 'Healing an ally also heals Kaien for 25% of the amount.' },
     lore: 'Kaien kept the gate of the Amatsu Sky Shrine alone for nine years. When a wolf-masked shadow slipped past him and set the shrine\'s sacred tree ablaze, he left the mountain for the first time - with ten thousand talismans and one name.',
     inspiration: 'Onmyoji exorcist and shrine-guardian anime.',

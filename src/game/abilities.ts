@@ -954,6 +954,8 @@ function onProj(w: World, p: Proj, at: V3, hit: Actor | null) {
 // ------------------------------------------------------------------ per-step upkeep for zones and dashes
 /** Divine Seal Storm: the window, the shield of seals on him and how often it re-forms, the hunting seals' reach and beat */
 export const SEALSTORM_SECS = 15, SEALSTORM_SHIELD = 300, SEALSTORM_REFORM = 4, SEALSTORM_R = 18, SEALSTORM_TICK = 0.5, SEALSTORM_DMG = 14;
+/** ...and the mending seals: every ally within reach he can see, healed this much a beat (22 a second) */
+export const SEALSTORM_HEAL = 11;
 
 /** the seals close around him: a shield of them (one at a time - a fresh one replaces what is left) */
 function sealShield(w: World, a: Actor, amt: number, secs: number) {
@@ -983,6 +985,12 @@ export function tickAbilities(w: World, dt: number) {
       // a stream of seals from him to the target, bursting on it (the render draws the swarm's path from this)
       w.fx('sealstrike', a.center, { to: x.center, color: '#ffe28a', actor: a });
       w.fx('sealburst', x.center, { color: '#ffd27a' });
+    }
+    // the mending seals: allies in reach are healed each beat (Prayer Beads gives him his share as ever)
+    for (const x of w.allies(a)) {
+      if (x === a || !x.alive || x.isSummon || dist3(x.pos, a.pos) > SEALSTORM_R || !w.level.lineOfSight(a.eye, x.center)) continue;
+      const got = w.heal(a, x, SEALSTORM_HEAL);
+      if (got > 0) { a.stats.sealstormHeal = (a.stats.sealstormHeal ?? 0) + got; w.fx('sealmend', x.center, { actor: x, color: '#9dffb0' }); }
     }
     if (n && t >= (a.sv.stormSfx ?? 0)) { a.sv.stormSfx = t + 0.8; w.sfx('talisman', a.center, a); }
   }

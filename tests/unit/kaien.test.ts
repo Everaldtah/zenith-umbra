@@ -1,7 +1,7 @@
 // Kaien's Divine Seal Storm (after Senbonzakura Kageyoshi): 15 s of golden seals - a shield of them on him that re-forms,
 // the rest bursting on every enemy in reach he can see, every half second.
 import { World } from '../../src/game/World';
-import { castAbility, SEALSTORM_SECS, SEALSTORM_SHIELD, SEALSTORM_R, SEALSTORM_DMG, SEALSTORM_REFORM } from '../../src/game/abilities';
+import { castAbility, SEALSTORM_SECS, SEALSTORM_SHIELD, SEALSTORM_R, SEALSTORM_DMG, SEALSTORM_REFORM, SEALSTORM_HEAL } from '../../src/game/abilities';
 import type { Actor } from '../../src/game/Actor';
 
 const DT = 1 / 60;
@@ -62,5 +62,15 @@ describe('Divine Seal Storm', () => {
     const h2 = e.health;
     run(w, 1.2, () => e.set('phased', w.time, 0.3));
     expect(e.health).toBe(h2);
+  });
+  it('mends every ally in reach he can see, credited to him', () => {
+    const w = arena(), k = place(w, 'kaien', 'zenith', 0, 4, 0), al = place(w, 'raijin', 'zenith', 4, 8), farAl = place(w, 'yuzu', 'zenith', 0, 26);
+    al.hp = 50; farAl.hp = 50;
+    k.ult = k.def.ult.charge; castAbility(w, k, 'sealstorm', 'ult');
+    run(w, 3);
+    expect(al.hp).toBeGreaterThan(50 + SEALSTORM_HEAL * 4);              // about six beats
+    expect(farAl.hp).toBe(50);                                            // 22 m: out of reach
+    expect(k.stats.sealstormHeal).toBeGreaterThan(0);
+    expect(k.healDone).toBeGreaterThan(0);                                // feeds his ult economy like any heal
   });
 });
