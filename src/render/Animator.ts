@@ -47,11 +47,14 @@ const DYN: Record<DynKind, Dyn> = {
 const DYN_CLASS: Record<string, { stiff: number; drag: number; maxA: number; inertT: number }> = {
   heavy: { stiff: 1.25, drag: 1.2, maxA: 0.85, inertT: 0.9 }, light: { stiff: 0.85, drag: 0.9, maxA: 1.1, inertT: 1.05 },
 };
-const HERO_CLASS: Record<string, string> = { gantetsu: 'heavy', tomoe: 'heavy', enra: 'heavy', gorgoth: 'heavy', vorn: 'heavy', qelvaris: 'heavy', mirei: 'light', nocturne: 'light', yuzu: 'light' };
+const HERO_CLASS: Record<string, string> = { gantetsu: 'heavy', tomoe: 'heavy', enra: 'heavy', gorgoth: 'heavy', vorn: 'heavy', qelvaris: 'heavy', mirei: 'light', nocturne: 'light', yuzu: 'light', susanoo: 'heavy', enra_effigy: 'heavy' };
 const HERO_DYN: Record<string, Partial<Record<DynKind, Partial<Dyn>>>> = {
   hibiki: { tuft: { inertT: 0.5, inertR: 0.5 } }, hibiki_armor: { tuft: { inertT: 0.5, inertR: 0.5 } },   // dreads at groove speed
   nocturne: { skirt: { simW: 0.6 } },                    // the ragged gown hem reads better with less sim
   kaien: { sleeve: { maxA: 0.65 } }, seiran: { sleeve: { maxA: 0.65 } },
+  // Raijin's Susanoo (5.4 m): the robe hangs from the chest as the cape chain (tripo_rig --drape) - slow and damped at
+  // that scale, held near its hanging line, so it never swings up past the shoulders when the giant raises its arms
+  susanoo: { cape: { drag: [0.12, 0.15], maxA: 0.55, inertT: 0.3, inertR: 0.3, simW: 0.7 }, skirt: { drag: [0.11, 0.13], maxA: 0.45, inertT: 0.35 } },
 };
 /** character-relative particle speed limit (m/s): dashes stay readable and strands can't tunnel through the body */
 const DYN_VMAX = 9;

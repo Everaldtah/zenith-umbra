@@ -39,6 +39,14 @@ ap.add_argument("--wings", action="store_true"); ap.add_argument("--chains", act
 ap.add_argument("--hair", action="store_true"); ap.add_argument("--crown", action="store_true"); ap.add_argument("--sleeves", action="store_true")
 ap.add_argument("--hair-rgb", default=""); ap.add_argument("--hair-tol", type=float, default=0.16); ap.add_argument("--scarf", action="store_true")
 ap.add_argument("--no-cape", action="store_true", help="--chains without the cape / coat-tail chain (a heavy hero's own back reads as one)")
+# --drape: a robe / cloak thrown over the shoulders (a himation, a coat over the back): the auto-rig binds the hanging
+# sheet to the upper arm it hangs beside, so it rose with the arm and covered the face (Raijin's Susanoo calling the
+# thunder). Robe-coloured vertices on the arm bones beyond the arm's own radius go to the chest and hang from the cape
+# chain instead; --drape-tol is the colour distance to the robe (sampled on the skirt)
+ap.add_argument("--drape", action="store_true"); ap.add_argument("--drape-tol", type=float, default=0.16)
+# --held-blade: the generation holds a blade in a fist, hanging on down the hand's line (Raijin's Susanoo): the auto-rig
+# bound its lower half to the leg beside it and the skirt panels would have taken the tip; it goes whole to the hand
+ap.add_argument("--held-blade", action="store_true")
 a = ap.parse_args(argv)
 T0 = time.time()
 LOG = {"id": os.path.basename(a.out)[:-4]}
@@ -516,9 +524,25 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
         chains.append(prefix)
         return True
 
-    # skirts / robes / coat tails: below the hips, clear of both legs and the hanging hands
+    # skirts / robes / coat tails: below the hips, clear of both legs and the hanging hands - and never what a hand
+    # holds (a sword modelled in the fist reaches down past the hem: bound to a panel it flopped like cloth)
     leg_r = H * 0.07
-    cloth = (co[:, 2] < hz - H * 0.06) & (co[:, 2] > H * 0.05) & (legd > leg_r) & (armd > H * 0.11)
+    handw = sum(Wt[:, oi[f"{b}_{s}"]] for b in ("hand", "forearm") for s in ("L", "R"))
+    cloth = (co[:, 2] < hz - H * 0.06) & (co[:, 2] > H * 0.05) & (legd > leg_r) & (armd > H * 0.11) & (handw < 0.25)
+    if a.held_blade and cloth.sum() > 200:
+        # a blade held down along a leg reaches well outside the skirt's hem (Raijin's Susanoo): what hangs beyond the
+        # skirt's own radius from the hips isn't cloth - it goes whole to the nearer hand (the auto-rig had bound its
+        # lower half to the hips / leg beside it, and a panel would have taken the tip)
+        rad = np.hypot(co[:, 0] - hx, co[:, 1] - hy)
+        rmed = float(np.median(rad[cloth]))                     # (a blade can be a fifth of the candidates: the median holds)
+        far = cloth & (rad > rmed * 1.6)
+        LOG["held_blade"] = [round(rmed / H, 3), [round(float(np.percentile(rad[cloth], q)) / H, 3) for q in (75, 90, 95)], int(far.sum())]
+        if far.sum() >= 40:
+            dh = {sd: seg_dist(bones[f"hand_{sd}"][0], bones[f"hand_{sd}"][1]) for sd in ("L", "R")}
+            sd = "L" if dh["L"][far].mean() < dh["R"][far].mean() else "R"
+            Wt[far] = 0; Wt[far, oi[f"hand_{sd}"]] = 1
+            cloth &= ~far
+            LOG[f"held_blade_{sd}"] = int(far.sum())
     # trousers, not a skirt: the seat and crotch between the thighs, at the body's own depth. A skirt panel hangs in front
     # of or behind the legs; baggy hakama / trousers sit far enough from the leg bones to pass the test above, and bound
     # to a skirt chain they stay behind when the legs split and tear into long loops (Gantetsu's run)
@@ -541,6 +565,25 @@ if (a.chains or a.hair or a.crown or a.sleeves) and not a.mech:
     # a cape / long coat back hanging from the shoulders
     cape = (co[:, 1] > back_plane + H * 0.02) & (co[:, 2] < neck_z - H * 0.05) & (co[:, 2] > hz - H * 0.3) & (np.abs(co[:, 0]) < sh_x * 1.1)
     cape &= ~crotch                                             # a coat tail hangs behind the seat, never between the legs
+    # the drape (--drape): the robe hanging off the shoulders and beside the upper arms, taken off the arm bones
+    if a.drape and cloth.sum() > 100:
+        alb_d = vertex_albedo(body); ok_d = np.isfinite(alb_d).all(1)
+        ref_d = np.median(alb_d[cloth & ok_d], 0)
+        c0 = np.nan_to_num(alb_d); l0 = c0.mean(1, keepdims=True); lr = ref_d.mean()
+        dist_d = np.sqrt((((c0 - l0) - (ref_d - lr)) ** 2).sum(1) * 2.0 + ((l0[:, 0] - lr) ** 2) * 0.35)
+        robe = ok_d & (dist_d < a.drape_tol)
+        draped = np.zeros(len(co), bool)
+        for sd in ("L", "R"):
+            ua, fa, hd_ = bones[f"upperarm_{sd}"][0], bones[f"forearm_{sd}"][0], bones[f"hand_{sd}"][0]
+            d_arm = np.minimum(seg_dist(ua, fa), seg_dist(fa, hd_))
+            arm_r = max(COLL.get(f"forearm_{sd}", H * 0.03), COLL.get(f"upperarm_{sd}", H * 0.035))
+            armb = [f"shoulder_{sd}", f"upperarm_{sd}", f"forearm_{sd}"]
+            armw = sum(Wt[:, oi[b]] for b in armb)
+            d = robe & (armw > 0.2) & (d_arm > arm_r * 1.15) & (Wt[:, oi[f"hand_{sd}"]] < 0.2) & (co[:, 2] < ua.z + H * 0.03)
+            for b in armb: Wt[d, oi["chest"]] += Wt[d, oi[b]]; Wt[d, oi[b]] = 0
+            draped |= d
+        LOG["drape_rgb"] = [round(float(x), 3) for x in ref_d]; LOG["drape_verts"] = int(draped.sum())
+        cape |= draped & (co[:, 2] < neck_z - H * 0.05) & (co[:, 2] > hz - H * 0.3) & ~crotch
     if a.chains and not a.no_cape and not a.wings and cape.sum() > 150: chain("cape_B", cape, "chest")
     # ---- hair (and scarves): colour-matched to the hair on the scalp and grown out from the head through the mesh, so
     # the upper back, a quiver strap or a chest plate can never join a hair chain (the old geometric masks did)

@@ -1183,16 +1183,16 @@
    "source": "tripo",
    "colliders": {
     "hips": 0.37132,
-    "spine": 0.49324,
-    "chest": 0.27676,
+    "spine": 0.49068,
+    "chest": 0.54368,
     "neck": 0.25185,
     "head": 0.29901,
-    "upperarm_L": 0.26209,
-    "upperarm_R": 0.24198,
+    "upperarm_L": 0.23073,
+    "upperarm_R": 0.21765,
     "forearm_L": 0.11557,
     "forearm_R": 0.1329,
     "thigh_L": 0.40694,
-    "thigh_R": 0.43212,
+    "thigh_R": 0.42974,
     "shin_L": 0.14215,
     "shin_R": 0.14576
    }

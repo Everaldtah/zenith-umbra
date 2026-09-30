@@ -493,6 +493,7 @@ export class CharacterView {
       if (!m.isMeshStandardMaterial) continue;
       m.color.copy(c).lerp(new THREE.Color('#ffffff'), 0.3);
       m.emissive.copy(c); m.emissiveIntensity = 0.85; m.roughness = 0.6; m.metalness = 0;
+      m.emissiveMap = null; m.metalnessMap = null;                  // (a prop's ember map would black the glow out: the greatsword)
       m.transparent = true; m.opacity = 0.82; m.depthWrite = true; m.needsUpdate = true;
     }
     this.rimColor.copy(c).lerp(new THREE.Color('#ffffff'), 0.4);

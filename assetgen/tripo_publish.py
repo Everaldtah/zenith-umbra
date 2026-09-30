@@ -45,7 +45,9 @@ TRIPO = {
     'seiran': (1.84, ['--chains', '--hair']), 'hibiki_armor': (1.82, ['--crown']),
     'qelvaris': (2.3, ['--chains']), 'minion_lancer': (2.0, []), 'minion_sentinel': (2.2, ['--mech']),
     # the summoned ultimates' giant forms (Enra's Crimson Effigy, Raijin's Susanoo): 3x their hero, drawn as holograms
-    'enra_susanoo': (6.15, []), 'raijin_susanoo': (5.4, []),
+    # (--chains: the robe / cape hangs from the chest as a simulated chain - skinned to the arms it rode up over the face
+    #  whenever the giant raised them, Raijin's thunder call)
+    'enra_susanoo': (6.15, []), 'raijin_susanoo': (5.4, ['--chains', '--drape', '--held-blade']),
     'bot_dummy': (1.9, []), 'bot_sentry': (1.7, ['--mech']),
     'boss_ironmaw': (14, ['--mech']), 'boss_leviathan': (16, ['--mech']), 'boss_reaper': (16, ['--mech']), 'boss_genesis': (18, ['--mech']),
 }
