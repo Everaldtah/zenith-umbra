@@ -4,7 +4,9 @@
 //   STRIP=1: after the first hero, switch with the Ult Viewer's portrait strip instead of going back to the Hero Viewer
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
-const [url = 'http://localhost:5199/play.html', idsArg = ''] = process.argv.slice(2);
+let [url = 'http://localhost:5199/play.html', idsArg = ''] = process.argv.slice(2);
+// the desktop edition's ults (heroes.ts FULL ? ... : ...) need the dev server told it's the desktop, or the web ult loads
+if (!/platform=/.test(url)) url += (url.includes('?') ? '&' : '?') + 'platform=desktop';
 const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
 const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--window-size=1600,900', '--autoplay-policy=no-user-gesture-required'], defaultViewport: { width: 1600, height: 900 } });
 setTimeout(() => { console.log('TIMEOUT'); process.exit(2); }, 30 * 60 * 1000);
