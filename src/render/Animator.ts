@@ -180,6 +180,9 @@ const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAx
 // wind up behind the shoulder, sweep flat through the front with the weight rolling onto the lead foot, follow through
 // past the other shoulder, settle back into the guard (hammer upright in front, head by the right shoulder).
 export const SWING_TIME = 0.96;          // Reinhardt: 0.96s per swing
+// Enra's Hellfire Chains (Kratos' light swing from the frame counts in docs/research/kratos_blades_study.md): 0.15 s
+// wind-up, 0.25 s arc, recover to 0.62 s (the sim's 1.6 swings a second); the throw 0.25 s out, a beat taut, 0.3 s back
+export const CB_WIND = 0.15, CB_ARC = 0.25, CB_SWING = 0.62, CB_THROW = 0.6;
 // th: yaw of the haft around the body (0 = straight ahead, + = toward the left side), ph: haft elevation,
 // d: grip distance from the shoulder centre in ARM LENGTHS (1 = arms locked straight), gy: grip height above the
 // shoulders in body heights. Reference (Reinhardt): both hands together at the bottom of the haft, arms straight out
@@ -1411,6 +1414,30 @@ export class Animator {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
+      } else if (carry?.chains && s.attackKind === 'primary' && s.attackAge < CB_SWING && i === ((s.swingSide ?? 1) > 0 ? 1 : 0)) {
+        // Hellfire Chains, a light swing (Kratos' Blades of Chaos, docs/research/kratos_blades_study.md): the swinging
+        // hand alternates with the sweep side; it winds back to its own side, whips through a wide flat arc across the
+        // front at the chain's full length (the arm straight, the blade leading), and recovers low across the body
+        const t = s.attackAge, Lr = l1 + l2, ez = (u: number) => u * u * (3 - 2 * u);
+        const at = (phi: number, r: number, y: number) => shoulder.clone().add(new THREE.Vector3(Math.sin(phi) * r, y, Math.cos(phi) * r).multiplyScalar(Lr).applyQuaternion(Dc));
+        const phi0 = side * 1.9, phi1 = -side * 1.25;
+        let hand: THREE.Vector3, w = 1;
+        if (t < CB_WIND) { const u = ez(t / CB_WIND); hand = at(phi0, 0.55 + 0.3 * u, 0.02 + 0.13 * u); w = u; }
+        else if (t < CB_WIND + CB_ARC) { const u = ez((t - CB_WIND) / CB_ARC); hand = at(phi0 + (phi1 - phi0) * u, 0.97, 0.15 - 0.3 * u); }
+        else { const u = ez((t - CB_WIND - CB_ARC) / (CB_SWING - CB_WIND - CB_ARC)); hand = at(phi1 + (-side * 0.5 - phi1) * u, 0.97 - 0.4 * u, -0.15 - 0.2 * u); w = 1 - u; }
+        over = { hand, w, pole: new THREE.Vector3(side * 0.8, -0.3, -0.3) };
+      } else if (carry?.chains && i === 1 && s.attackKind === 'secondary' && s.attackAge < CB_THROW) {
+        // ...and the Chain Throw: the right blade drawn back over the shoulder, shot straight out along the aim to the
+        // chain's full length (6-7 m out in 0.25 s), held taut a beat, and yanked back
+        const t = s.attackAge, Lr = l1 + l2, ez = (u: number) => u * u * (3 - 2 * u);
+        const back = shoulder.clone().add(new THREE.Vector3(side * 0.3, 0.55, -0.35).multiplyScalar(Lr).applyQuaternion(Dc));
+        const out = shoulder.clone().addScaledVector(aimDir, Lr * 0.99); out.x += -side * 0.08 * Lr;
+        let hand: THREE.Vector3, w = 1;
+        if (t < 0.08) { const u = ez(t / 0.08); hand = back; w = u; }
+        else if (t < 0.25) hand = back.clone().lerp(out, ez((t - 0.08) / 0.17));
+        else if (t < 0.34) hand = out;
+        else { const u = ez((t - 0.34) / (CB_THROW - 0.34)); hand = out; w = 1 - u; }
+        over = { hand, w, pole: new THREE.Vector3(side * 0.6, 0.4, -0.2) };
       } else if (s.climb) {
         // up the wall hand over hand: each hand reaches high on the wall in turn, pulls down past the shoulder
         const Lr = l1 + l2, ph = s.time * 7 + (i === 0 ? 0 : Math.PI);

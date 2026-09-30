@@ -11,10 +11,11 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
-import { reapPhase, REAP_SECS, REAP_STOP } from './Animator';
+import { reapPhase, REAP_SECS, REAP_STOP, CB_SWING } from './Animator';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BASE } from './Assets';
 import { driveFingers } from './Fingers';
+import { HELD } from './HeldProps';
 
 type V = [number, number, number];     // view space metres: right, up, forward (from the eye)
 type Grip = 'rifle' | 'pistol' | 'katana' | 'bow' | 'caster' | 'kunai' | 'fists' | 'hammer' | 'shotgun' | 'dual';
@@ -407,6 +408,14 @@ export class FirstPersonArms {
       if (busy || !this.equipped) this.idleSince = t;
       // one-shots run their full clip (a new event restarts / replaces them); swings alternate between two authored cuts
       const fire = this.swings % 2 === 0 && this.clips.has('fp_fire2') ? 'fp_fire2' : 'fp_fire';
+      // chain blades (Enra): the fists clips are punches - a swing or a throw is the procedural whip / throw instead
+      // (proc below), the clips resuming at the idle when it's done
+      if (HELD[a.def.id]?.chains && (kind === 'primary' || kind === 'secondary') && t - a.anim.attackAt < CB_SWING) {
+        this.oneShot = null;
+        this.proc(t, newAttack);
+        driveFingers(this.view.fingers, a, t, dt, { fp: true });
+        return;
+      }
       let ev = newCast ? (a.anim.castId === a.def.ult.id ? 'fp_ult' : a.anim.castId === a.def.ability2.id ? 'fp_ability2' : 'fp_ability1')
         : newAttack ? (kind === 'punch' ? 'fp_melee' : kind === 'secondary' ? 'fp_alt' : fire) : newHit ? 'fp_hit' : newLand ? 'fp_land' : '';
       if (!this.equipped) { this.equipped = true; if (this.clips.has('fp_equip')) ev = 'fp_equip'; }
@@ -432,7 +441,9 @@ export class FirstPersonArms {
         // held weapons (Raijin's katana, the bows, Hayate's nodachi) follow the clip's hands; bows canted in
         // (Hanzo's hold: the bow rolled nearly flat, upper limb to the right, tilted so that limb recedes into the view)
         an.bowCant = this.style.grip === 'bow' ? -1.35 + 0.45 * this.aimK : 0; an.bowTilt = this.style.grip === 'bow' ? 0.35 - 0.15 * this.aimK : 0;
-        an.placeGunsFromBones();
+        // chain blades (Enra): the fists clip holds the forearms up like a boxer's, which would stand the blades on end -
+        // they point at the reticle instead, the chains trailing back out of the bottom of the frame
+        an.placeGunsFromBones(HELD[a.def.id]?.chains ? new THREE.Vector3(0, 0, 14 / Math.max(1e-6, this.view.scaleFit)).add(this.eye) : undefined);
         driveFingers(this.view.fingers, a, t, dt, { fp: true });
         this.source = `clip:${want}`;
         return;
@@ -472,6 +483,23 @@ export class FirstPersonArms {
       const tgt: V = [-0.03, -0.1, 0.36 + 0.3 * ext];
       if (L && S.grip !== 'hammer') L = lerp(L, tgt, Math.min(1, Math.max(0, ext + 0.4))); else R = lerp(R, [0.05, -0.1, 0.36 + 0.3 * ext], 0.8);
       src = 'melee';
+    } else if (melee && a.def.id === 'enra' && atk < 0.62) {
+      // Hellfire Chains (docs/research/kratos_blades_study.md): the swinging hand alternates - wound back to its own
+      // edge of the frame, whipped across the whole view on the chain, recovered low across the body; the throw shoots
+      // the right blade from the bracer straight out to the reticle, holds it taut a beat and yanks it back
+      if (kind === 'secondary') {
+        const back: V = [0.3, 0.08, 0.22], out: V = [0.02, -0.06, 0.98];
+        R = atk < 0.08 ? lerp(S.R, back, smooth(atk / 0.08)) : atk < 0.25 ? lerp(back, out, smooth((atk - 0.08) / 0.17)) : atk < 0.34 ? out : lerp(out, S.R, smooth((atk - 0.34) / 0.28));
+        wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.2, 0, 0));
+        src = 'throw';
+      } else {
+        const dir = this.swings % 2 ? -1 : 1, base = dir > 0 ? S.R : (S.L ?? S.R);
+        const own: V = [0.44 * dir, 0.04, 0.26], far: V = [-0.4 * dir, -0.2, 0.5];
+        const h = atk < 0.12 ? lerp(base, own, smooth(atk / 0.12)) : atk < 0.38 ? lerp(own, far, smooth((atk - 0.12) / 0.26)) : lerp(far, base, smooth((atk - 0.38) / 0.24));
+        const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.4, 0, dir * 0.6));
+        if (dir > 0) { R = h; wristR = wq; } else { L = h; wristL = wq; }
+        src = 'slash';
+      }
     } else if (melee && atk < 0.6) {
       // blade / fist swings alternate direction through the combo
       const dir = this.swings % 2 ? -1 : 1, u = smooth(atk / 0.35);

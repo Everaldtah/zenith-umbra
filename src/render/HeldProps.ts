@@ -11,10 +11,19 @@ import { fitProp } from './TomoeProps';
 
 type Kind = 'blade' | 'bow' | 'arrow' | 'card';
 interface Item { id: string; kind: Kind; size: number; color: string; glow: string; pitch?: number }
-export interface HeldSpec { L?: Item; R?: Item }
+/** chains: a blade on a chain in each fist (Enra) - the animator whips the swinging arm through its arc and shoots the
+ *  throw arm straight out; CharacterView hangs a chain loop from each bracer to its pommel (ChainBlades) */
+export interface HeldSpec { L?: Item; R?: Item; chains?: boolean }
 
 export const HELD: Record<string, HeldSpec> = {
   raijin: { R: { id: 'prop_raijin_katana', kind: 'blade', size: 0.56, color: '#cfd6e2', glow: '#7fc8ff', pitch: -0.55 } },
+  // Enra's Hellfire Chains (docs/research/kratos_blades_study.md): a hooked oni-fang cleaver in EACH fist, 0.75 m on a
+  // 2.05 m oni, on a chain from the bracer (ChainBlades draws the chain); never the two-handed hammer
+  enra: {
+    chains: true,
+    L: { id: 'prop_enra_blade', kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
+    R: { id: 'prop_enra_blade', kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
+  },
   hayate: { R: { id: 'prop_hayate_nodachi', kind: 'blade', size: 0.62, color: '#e8efe9', glow: '#4fe3c1', pitch: -0.5 } },
   // the archers also hold the next arrow in the string hand (nocked on the string, drawn to the jaw, loosed, then a new
   // one drawn from the quiver over the right shoulder - Hanzo's cycle)

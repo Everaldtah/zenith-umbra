@@ -9,6 +9,7 @@ import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
 import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
 import { HELD, buildHeld, heldVisible, ARROW_GONE, CARD_GONE } from './HeldProps';
+import { buildChainLoop, updateChainLoop, type ChainLoop } from './ChainBlades';
 import { Fingers, driveFingers } from './Fingers';
 import { Ragdoll } from './Ragdoll';
 import type { Level } from '../engine/Physics';
@@ -312,10 +313,13 @@ export class CharacterView {
   skates: SkateProp[] = [];
   /** the hero holds a HeldProps blade / bow (anim.guns) */
   private heldHero = false;
+  /** Enra's chains, one loop per held blade (HeldSpec.chains): from the bracer to the pommel, in the guns' root */
+  private chainLoops: ChainLoop[] = [];
   private attachGuns(anim: Animator, root: THREE.Object3D) {
     for (const g of this.guns) g.group.parent?.remove(g.group);
     for (const s of this.skates) s.group.parent?.remove(s.group);
-    this.guns = []; this.skates = []; anim.feet = null; this.heldHero = false; anim.gunUpright = [false, false];
+    for (const c of this.chainLoops) c.group.parent?.remove(c.group);
+    this.guns = []; this.skates = []; this.chainLoops = []; anim.feet = null; this.heldHero = false; anim.gunUpright = [false, false];
     if (this.actor.def.id === 'tomoe' && anim.ok) {
       // Tomoe: the Crownfire Scattergun on the right forearm, the Crescent Fang in the left fist
       const fang = buildFang(anim.height), gun = buildScattergun(anim.height);
@@ -346,6 +350,9 @@ export class CharacterView {
       anim.gunUpright = [held.L?.kind === 'bow', held.R?.kind === 'bow'];
       anim.arrowSlot = [held.L?.kind === 'arrow', held.R?.kind === 'arrow'];
       this.heldHero = true;
+      if (held.chains) {
+        this.chainLoops = [held.L, held.R].map(it => { const c = buildChainLoop(anim.height); c.group.visible = !!it; root.add(c.group); return c; });
+      }
       return;
     }
     if (!this.actor.def.dualGuns || !anim.ok) { anim.guns = null; return; }
@@ -396,6 +403,18 @@ export class CharacterView {
         else hide[i] = !vis;
       }
       this.anim.gunHide = hide;
+      // the chains: from a bracer a third of the way up the forearm to the pommel just behind the fist (the held blade's
+      // frame: origin in the fist, +Z along the forearm), the loop hanging a fifth of his height at rest
+      for (let i = 0; i < this.chainLoops.length; i++) {
+        const c = this.chainLoops[i], g = this.guns[i]?.group, it = i === 0 ? HELD[a.def.id]?.L : HELD[a.def.id]?.R;
+        if (!g || !it) { c.group.visible = false; continue; }
+        c.group.visible = g.visible && !hide[i];
+        if (!c.group.visible) { c.prev = null; continue; }
+        const L = this.anim.height, len = it.size * L;
+        const bracer = new THREE.Vector3(0, 0.012 * L, -0.17 * L).applyQuaternion(g.quaternion).add(g.position);
+        const pommel = new THREE.Vector3(0, 0, -0.12 * len).applyQuaternion(g.quaternion).add(g.position);
+        updateChainLoop(c, bracer, pommel, 0.19 * L, dt);
+      }
       return;
     }
     if (a.def.id === 'tomoe') {
@@ -509,8 +528,9 @@ export class CharacterView {
     this.real = true;
     this.hookStep();
     this.attachClips();
-    // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path
-    if (this.actor.def.primary.sweep && anim.ok) {
+    // two-handed hammer heroes carry a real weapon: a model-space prop the animator poses along the swing path (a sweep
+    // hero with held blades - Enra's Hellfire Chains - swings those instead, HeldProps / Animator)
+    if (this.actor.def.primary.sweep && anim.ok && !HELD[id]) {
       this.hammer = buildHammer(anim.height);
       m.add(this.hammer.group);
       anim.prop = this.hammer.group; anim.hammerLen = this.hammer.len;
