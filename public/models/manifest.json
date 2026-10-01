@@ -1378,6 +1378,12 @@
   },
   "prop_enra_susanoo_sword": {
    "height": 1
+  },
+  "prop_enra_chainblade": {
+   "height": 1
+  },
+  "prop_enra_bracer": {
+   "height": 1
   }
  },
  "textures": [

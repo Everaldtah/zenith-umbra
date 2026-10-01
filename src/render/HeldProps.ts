@@ -11,7 +11,8 @@ import { fitProp } from './TomoeProps';
 
 type Kind = 'blade' | 'bow' | 'arrow' | 'card';
 /** alt: an older published prop to fall back on while the manifest lacks `id` */
-interface Item { id: string; kind: Kind; size: number; color: string; glow: string; pitch?: number; alt?: string }
+/** flip: the fit's bulk heuristic put the grip forward (a broad hooked cleaver with a thin ring pommel) - turn it round */
+interface Item { id: string; kind: Kind; size: number; color: string; glow: string; pitch?: number; alt?: string; flip?: boolean }
 /** chains: a blade on a chain in each fist (Enra) - the animator whips the swinging arm through its arc and flings the
  *  blade out on its chain (gunOrbit / chainExt), the throw arm shoots it straight out; CharacterView pays the chain out
  *  from each bracer to its pommel, joins the two over his shoulders, burns the blades (ChainBlades). bracer: a Tripo
@@ -25,8 +26,8 @@ export const HELD: Record<string, HeldSpec> = {
   // (prop_enra_chainblade, Tripo; the older prop_enra_blade until it's published); chain-wrapped bracers on the forearms
   enra: {
     chains: true, bracer: 'prop_enra_bracer',
-    L: { id: 'prop_enra_chainblade', alt: 'prop_enra_blade', kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
-    R: { id: 'prop_enra_chainblade', alt: 'prop_enra_blade', kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
+    L: { id: 'prop_enra_chainblade', alt: 'prop_enra_blade', flip: true, kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
+    R: { id: 'prop_enra_chainblade', alt: 'prop_enra_blade', flip: true, kind: 'blade', size: 0.37, color: '#3a2a2c', glow: '#ff5a1f', pitch: -0.2 },
   },
   hayate: { R: { id: 'prop_hayate_nodachi', kind: 'blade', size: 0.62, color: '#e8efe9', glow: '#4fe3c1', pitch: -0.5 } },
   // the archers also hold the next arrow in the string hand (nocked on the string, drawn to the jaw, loosed, then a new
@@ -203,7 +204,9 @@ export function buildHeld(modelHeight: number, it: Item): HeldProp {
     // grip sits in the fist, a bow is stood up across the forearm (long axis on Y) with its middle in the fist
     const fitted = fitProp(m, 'blade', len);
     const wrap = new THREE.Group(); wrap.add(fitted);
-    if (it.kind === 'blade') fitted.position.z += len * 0.38;
+    // (the fallback prop fits the right way round on its own)
+    if (it.flip && id === it.id) { const inner = new THREE.Group(); inner.add(fitted); inner.rotation.y = Math.PI; fitted.position.set(0, 0, 0); wrap.add(inner); if (it.kind === 'blade') inner.position.z += len * 0.38; }
+    else if (it.kind === 'blade') fitted.position.z += len * 0.38;
     // the card: fitted like a blade (length on +Z, width on +Y), rolled flat so its face is up, out past the fingertips
     else if (it.kind === 'card') { fitted.position.z += len * 0.5; wrap.rotation.z = Math.PI / 2; wrap.position.y = 0.02 * L; }   // up at the fingers
     else wrap.rotation.x = -Math.PI / 2;
