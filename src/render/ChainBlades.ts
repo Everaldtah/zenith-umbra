@@ -187,13 +187,13 @@ export function yokeCurve(way: THREE.Vector3[], out: THREE.Vector3[] = []): THRE
 }
 
 // ---------------------------------------------------------------- the fire
-export interface Flame { group: THREE.Group; mats: THREE.MeshBasicMaterial[]; tex: THREE.CanvasTexture; k: number }
+export interface Flame { group: THREE.Group; mats: THREE.MeshBasicMaterial[]; tex: THREE.Texture; k: number }
 
-let flameTex: THREE.CanvasTexture | null = null;
-function fireTexture(): THREE.CanvasTexture {
+let flameTex: THREE.Texture | null = null;
+// (a DataTexture, not a canvas: the view is built in node too - the animation sim tests - where there is no document)
+function fireTexture(): THREE.Texture {
   if (flameTex) return flameTex;
-  const w = 64, h = 256, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  const g = cv.getContext('2d')!, img = g.createImageData(w, h), d = img.data;
+  const w = 64, h = 256, d = new Uint8Array(w * h * 4);
   // tongues of flame: bright at the root (v = 0, the edge of the blade), ragged and fading toward the tip; a few
   // sine-stacked licks so it reads as fire and not a glow bar
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -204,8 +204,8 @@ function fireTexture(): THREE.CanvasTexture {
     const i = (y * w + x) * 4;
     d[i] = 255; d[i + 1] = Math.round(120 + 135 * core * core); d[i + 2] = Math.round(30 + 90 * core * core * core); d[i + 3] = Math.round(a * 255);
   }
-  g.putImageData(img, 0, 0);
-  flameTex = new THREE.CanvasTexture(cv);
+  flameTex = new THREE.DataTexture(d, w, h, THREE.RGBAFormat);
+  flameTex.flipY = true; flameTex.needsUpdate = true;
   flameTex.wrapS = THREE.RepeatWrapping; flameTex.wrapT = THREE.ClampToEdgeWrapping;
   flameTex.colorSpace = THREE.SRGBColorSpace;
   return flameTex;
