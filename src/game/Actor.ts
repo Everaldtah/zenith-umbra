@@ -13,7 +13,7 @@ export interface Input {
 }
 export const emptyInput = (): Input => ({ mx: 0, mz: 0, jump: false, jumpHeld: false, descend: false, fire: false, alt: false, a1: false, a2: false, ult: false, reload: false, melee: false, swoop: false, yaw: 0, pitch: 0 });
 
-export interface Forced { vx: number; vy: number; vz: number; until: number; kind: string; ignoreGravity?: boolean; onEnd?: () => void; }
+export interface Forced { vx: number; vy: number; vz: number; until: number; kind: string; ignoreGravity?: boolean; onEnd?: () => void; scaled?: boolean; }
 export interface Shield { amt: number; until: number; kind: string; src?: Actor; }
 
 let NEXT = 1;

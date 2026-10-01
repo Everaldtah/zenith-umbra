@@ -9,6 +9,7 @@ import { castAbility, stompLeap, tickAbilities, TIDE_HOLD, TIDE_MARK_AMP } from 
 import { PUPPET_DEF, dropPuppets, tickPuppets } from './puppets';
 import { SUSANOO_DEF, dismissSusanoo, tickSusanoo } from './susanoo';
 import { updateWeapons } from './weapons';
+import { isSub, MOVE_ABILITY, REGEN_RATE, REGEN_DELAY, ONI_REGEN_DELAY, TANK_ULT_GEN, VS_TANK_ULT, OVERHEALTH_ULT, HEALCUT, HEALCUT_SECS, MITIGATION_CAP, STALWART_KNOCK, STALWART_SLOW, BRUISER_CRIT, BRUISER_SPEED, FLANKER_PACK, SHARPSHOOTER_CD, RECON_REVEAL, MEDIC_SELF, TACTICIAN_BANK, TACTICIAN_RATE } from './roles';
 import { Stadium } from './stadium';
 import { FULL } from '../edition';
 
@@ -42,6 +43,8 @@ export const FLOAT_SPEED = 1.2;
 export const PUSH_TIME = 300;
 /** health packs */
 export const PACK = { small: { hp: 75, respawn: 10 }, big: { hp: 250, respawn: 15 } };
+/** Gantetsu's Taiko Heartbeat: damage taken x(1 - TAIKO_DR) (Mauga's Cardiac Overdrive: 30%) */
+export const TAIKO_DR = 0.3;
 
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
@@ -294,7 +297,10 @@ export class World {
     if (src?.has('titan', t)) dmg *= 1.25;
     if (tgt.has('vuln', t)) dmg *= 1.3;
     else if (tgt.has('tidemark', t)) dmg *= TIDE_MARK_AMP;      // Tomoe's mark: hurt more by anyone (it doesn't stack on the Puppeteer's)
-    if (tgt.has('taiko', t)) { tgt.mitigated += dmg * 0.4; dmg *= 0.6; }
+    const taiko = tgt.has('taiko', t);
+    if (taiko) { tgt.mitigated += dmg * TAIKO_DR; dmg *= 1 - TAIKO_DR; }
+    // bruiser tanks shrug off a quarter of every critical hit
+    if (o.crit && isSub(tgt, 'bruiser')) { tgt.mitigated += dmg * (1 - BRUISER_CRIT); dmg *= BRUISER_CRIT; }
     if (src?.has('ambush', t) && o.kind !== 'dot') { dmg += 50; src.clear('ambush'); }
     // Hex: Stitched Decoy eats one huge hit
     if (tgt.def.id === 'hex' && dmg > 90 && tgt.ready('decoy', t)) {
@@ -303,20 +309,23 @@ export class World {
       if (src?.def.id === 'yuzu') this.emit({ t: 'counter', actor: tgt, target: src, text: 'Stitched Decoy eats the Dawnshot' });
       return 0;
     }
-    let dealt = 0;
-    // shields first
+    let dealt = 0, shielded = 0;
+    // shields first (temporary health: it feeds the attacker's ultimate at half rate)
     const sm = o.shieldMult ?? 1;
     for (const s of tgt.shields) {
       if (dmg <= 0) break;
       const take = Math.min(s.amt, dmg * sm);
-      s.amt -= take; dmg -= take / sm; dealt += take;
+      s.amt -= take; dmg -= take / sm; dealt += take; shielded += take;
       (s.src ?? tgt).mitigated += take;
       if (s.amt <= 0 && sm > 1 && s.kind === 'wish' && src?.def.id === 'gorgoth') this.emit({ t: 'counter', actor: src, target: tgt, text: 'Null Lance shatters Wish Barrier' });
     }
     tgt.shields = tgt.shields.filter(s => s.amt > 0.5);
     if (dmg > 0 && tgt.armor > 0) {
-      // wounds bleed straight through armor (Tomoe's counter to Gantetsu's plating)
-      const eff = o.wound ? dmg : Math.max(dmg * 0.7, Math.min(dmg, dmg - 5));
+      // armor takes 30% off every hit (Overwatch since Season 9 - the old rule only took 5 off anything over 17, so the big
+      // hits armor is meant to blunt went through almost whole); wounds bleed straight through it (Tomoe's counter to
+      // Gantetsu's plating); armor and Taiko together never take more than MITIGATION_CAP off a hit (OW's 50% cap)
+      const armorMult = o.wound ? 1 : Math.max(0.7, (1 - MITIGATION_CAP) / (taiko ? 1 - TAIKO_DR : 1));
+      const eff = dmg * armorMult;
       const take = Math.min(tgt.armor, eff);
       tgt.armor -= take; dealt += take; dmg -= take / (eff / dmg);
     }
@@ -336,7 +345,13 @@ export class World {
       // shooting a summoned puppet, or a puppet's own claws, never feeds an ultimate or the damage column
       if (!tgt.isSummon) src.dmgDone += dealt;
       // (a summon's damage - the puppets', the Susanoo's, the effigy's - never feeds its master's next ultimate)
-      if (!tgt.isSummon && !SUMMON_ABILITIES.has(o.ability ?? '')) src.ult = Math.min(src.def.ult.charge, src.ult + dealt * (1 + src.mods.ultgain));
+      // ...nor a tank's full share: damage into a tank charges 40% slower, damage into temporary health half as much
+      if (!tgt.isSummon && !SUMMON_ABILITIES.has(o.ability ?? '')) this.gainUlt(src, (dealt - shielded + shielded * OVERHEALTH_ULT) * (tgt.def.role === 'tank' ? VS_TANK_ULT : 1));
+      // the damage role: whoever they hit heals 15% less for 2 s (so focus fire sticks through a healer)
+      if (src.def.role === 'dps' && !tgt.isSummon) tgt.set('healcut', t, HEALCUT_SECS, undefined, src);
+      // sharpshooters: a critical hit refunds some of the movement ability; recon: a hurt target is revealed
+      if (o.crit && isSub(src, 'sharpshooter')) { const id = MOVE_ABILITY[src.def.id]; if (id && (src.cd[id] ?? 0) > t) src.cd[id] = Math.max(t, src.cd[id] - dealt * SHARPSHOOTER_CD); }
+      if (isSub(src, 'recon') && tgt.alive && tgt.health < tgt.maxHp * 0.5) tgt.set('revealed', t, RECON_REVEAL);
       if (src.def.id === 'yuzu') tgt.set('marked', t, 3);
       if (src.def.id === 'gorgoth') src.armor = Math.min(src.maxArmor, src.armor + dealt * 0.05);
       // Gantetsu - Roar of the Crowd: critical hits turn half their damage into temporary health (max 150)
@@ -380,6 +395,7 @@ export class World {
     if (!tgt.alive || amount <= 0 || tgt.team !== src.team) return 0;
     let amt = amount * (1 + src.mods.healing);
     if (tgt.has('antiheal', this.time)) amt *= 0.2;
+    if (tgt.has('healcut', this.time)) amt *= 1 - HEALCUT;          // hit by a damage hero in the last 2 s
     const room = tgt.def.hp - tgt.hp;
     let h = Math.min(room, amt);
     tgt.hp += Math.max(0, h);
@@ -387,12 +403,25 @@ export class World {
     if (this.stadium && amt > h && tgt.armor < tgt.maxArmor) { const ar = Math.min(tgt.maxArmor - tgt.armor, amt - Math.max(0, h)); tgt.armor += ar; h = Math.max(0, h) + ar; }
     if (h <= 0) return 0;
     if (src !== tgt) {
-      src.healDone += h; src.ult = Math.min(src.def.ult.charge, src.ult + h * (1 + src.mods.ultgain));
-      if (src.def.id === 'kaien' && src.hp < src.def.hp) src.hp = Math.min(src.def.hp, src.hp + h * 0.25);
+      src.healDone += h; this.gainUlt(src, h * (tgt.def.role === 'tank' ? VS_TANK_ULT : 1));
+      // medics (Kaien's Prayer Beads, Mirei, Nocturne): healing others heals them
+      if (isSub(src, 'medic') && src.hp < src.def.hp) src.hp = Math.min(src.def.hp, src.hp + h * MEDIC_SELF);
     }
     if (src !== tgt) { tgt.sv.healedBy = src.id; tgt.sv.healedAt = this.time; }
     if (!quiet || h > 20) this.emit({ t: 'dmg', src, tgt, amt: h, crit: false, heal: true, pos: tgt.center });
     return h;
+  }
+
+  /**
+   * Ultimate charge from damage or healing (the passive trickle is in updateActor): a tank's own output charges 40%
+   * slower (OW Feb 2026), a tactician banks what comes past full - a quarter of the next ultimate, at 75% rate.
+   */
+  gainUlt(a: Actor, amt: number) {
+    if (amt <= 0 || !a.alive) return;
+    const cost = a.def.ult.charge;
+    let g = amt * (1 + a.mods.ultgain) * (a.def.role === 'tank' && a.def === a.baseDef ? TANK_ULT_GEN : 1);
+    if (isSub(a, 'tactician')) { if (a.ult >= cost) g *= TACTICIAN_RATE; a.ult = Math.min(cost * (1 + TACTICIAN_BANK), a.ult + g); }
+    else a.ult = Math.min(cost, a.ult + g);
   }
 
   shield(tgt: Actor, amt: number, dur: number, kind: string, src?: Actor) {
@@ -646,7 +675,7 @@ export class World {
         if (a.health >= a.maxHp - 0.5 && !dot) continue;
         // a pack heals through healing reduction and burns away damage over time (as in Overwatch)
         const P = p.big ? PACK.big : PACK.small;
-        let left = P.hp;
+        let left = P.hp + (isSub(a, 'flanker') ? FLANKER_PACK : 0);       // flankers live off the packs
         const h = Math.min(left, a.def.hp - a.hp); a.hp += h; left -= h;
         const ar = Math.min(left, a.maxArmor - a.armor); a.armor += ar;
         for (const s of ['burning', 'brand', 'bleed', 'wound']) a.clear(s);
@@ -713,7 +742,13 @@ export class World {
     // Bass Drop's temporary health holds for a beat, then fades out over 6s
     { const s = a.shields.find(x => x.kind === 'bassdrop'); if (s && t - (a.sv.bassAt ?? 0) > 0.8) s.amt -= 750 / 6 * dt; }
     if (per('linked') && a.src.linked) this.heal(a.src.linked, a, 25 * dt, true);
-    if (a.def.id === 'enra' && t - a.lastDamagedAt > 3 && a.hp < a.def.hp) a.hp = Math.min(a.def.hp, a.hp + 12 * dt);
+    // everyone regenerates once the shooting stops (Overwatch's universal passive: 20 HP/s after 5 s), health first, then
+    // armor; Enra's Oni Blood starts at 2.5 s. (Robots and summons keep their own rules.)
+    if (!a.isRobot && !a.isSummon && !a.isBoss && a.lastDamagedAt >= 0 && t - a.lastDamagedAt > (a.def.id === 'enra' ? ONI_REGEN_DELAY : REGEN_DELAY)) {
+      const r = REGEN_RATE * dt, h = Math.max(0, Math.min(r, a.def.hp - a.hp));
+      a.hp += h;
+      if (r - h > 0 && a.armor < a.maxArmor) a.armor = Math.min(a.maxArmor, a.armor + (r - h));
+    }
     if (a.isRobot && !a.isSummon && t - a.lastDamagedAt > 4) a.hp = Math.min(a.def.hp, a.hp + 40 * dt);
     // the spawn room heals quickly (not the web build's legacy match)
     if (this.full && this.mode !== 'campaign' && t - a.lastDamagedAt > 1.5 && Math.hypot(a.pos.x - a.spawn[0], a.pos.z - a.spawn[1]) < 7) {
@@ -731,7 +766,7 @@ export class World {
       }
     }
     if (!a.alive) return;
-    a.ult = Math.min(a.def.ult.charge, a.ult + (a.def !== a.baseDef ? 20 : this.mode === 'aitest' ? 30 : 5) * dt);
+    a.ult = Math.max(a.ult, Math.min(a.def.ult.charge, a.ult + (a.def !== a.baseDef ? 20 : this.mode === 'aitest' ? 30 : 5) * dt));   // (never clamps a tactician's bank)
     if (a.barrier.max && !a.barrier.up && t > a.barrier.regenAt && t > a.barrier.brokenUntil) a.barrier.hp = Math.min(a.barrier.max, a.barrier.hp + 150 * dt);
     if (a.has('stealth', t) && (a.has('revealed', t) || a.has('sealed', t))) {
       a.clear('stealth');
@@ -772,6 +807,8 @@ export class World {
     if (a.isBoss && a.forced && (a.forced.kind === 'pull' || a.forced.kind === 'knock')) a.forced = null;
     // Tachiai Rush is unstoppable: shoves and pulls slide off it
     if (a.forced && a.has('tachiai', t) && (a.forced.kind === 'pull' || a.forced.kind === 'knock')) a.forced = null;
+    // stalwart tanks take 40% less knockback (the mechs are immune outright)
+    if (a.forced?.kind === 'knock' && !a.forced.scaled && isSub(a, 'stalwart')) { const f = a.forced; f.vx *= STALWART_KNOCK; f.vy *= STALWART_KNOCK; f.vz *= STALWART_KNOCK; f.scaled = true; }
     if (a.forced) {
       const f = a.forced;
       if (t >= f.until) { a.forced = null; f.onEnd?.(); a.vel.x *= 0.3; a.vel.z *= 0.3; if (f.ignoreGravity) a.vel.y = Math.min(a.vel.y, 0); }
@@ -779,8 +816,9 @@ export class World {
     }
     if (!a.forced) {
       let spd = d.speed * (1 + a.mods.speed);
-      if (a.has('slow', t)) spd *= 0.8;
+      if (a.has('slow', t)) spd *= 1 - 0.2 * (isSub(a, 'stalwart') ? STALWART_SLOW : 1);     // (stalwarts: slows 40% weaker)
       if (a.has('speed', t)) spd *= a.sv.speed ?? 1.25;
+      if (isSub(a, 'bruiser') && a.health < a.maxHp * 0.5) spd *= BRUISER_SPEED;              // bruisers run when hurt
       if (a.has('titan', t)) spd *= 1.2;
       if (a.has('judgment', t) || a.has('stealth', t)) spd *= 1.3;
       if (a.charging) spd *= 0.7;

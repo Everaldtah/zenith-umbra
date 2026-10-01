@@ -31,9 +31,9 @@ describe('Hibiki', () => {
     const h = place(w, 'hibiki', 'zenith', 0, 0), near = place(w, 'raijin', 'zenith', 6, 0), far = place(w, 'yuzu', 'zenith', 0, 20);
     near.hp = 100; far.hp = 100;
     run(w, 2);
-    expect(near.hp).toBeGreaterThan(100 + 16 * 2 * 0.8);
+    expect(near.hp).toBeGreaterThan(100 + 20 * 2 * 0.8);
     expect(far.hp).toBe(100);
-    // Max Volume on the heal track: ~52/s
+    // Max Volume on the heal track: ~56/s
     near.hp = 60; tap(w, h, 'a2'); run(w, 1);
     expect(near.hp - 60).toBeGreaterThan(40);
     // swap to Tempo Rush: allies in range speed up by 25% (60% amped)

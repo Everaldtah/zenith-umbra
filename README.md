@@ -9,6 +9,7 @@ One codebase, two editions (`src/edition.ts`):
 - **Full: Windows app** ([download](https://github.com/Everaldtah/zenith-umbra/releases/latest/download/ZenithUmbra-Setup.exe)). Includes:
   - **Quick Play**, **Competitive** and **AI Quick Match**. You and four AI teammates play an AI team on best-of-3 **Control** or **Mikoshi Rush**, an original push mode where you escort a festival float through the enemy gate.
   - **Role ranks**: Bronze → Champion with divisions 5 → 1. There are 5 placement matches, a hidden MMR, rank modifiers (win/loss streaks, expected, calibration, uphill/reversal, consolation) and 3 protected losses at the bottom of a division. **Career & Ranks** shows your record.
+  - **Overwatch-style role balance** (`docs/BALANCE_PATCH.md`): role passives (tanks build and give less ultimate, damage heroes cut healing on hit, everyone regenerates 20 HP/s after 5 s), sub-roles (Stalwart / Bruiser / Flanker / Sharpshooter / Medic / Tactician), 30% armor, half ult charge through temporary health, and ultimate costs in the Overwatch bands. The web demo shares the numbers.
   - The Overwatch 2-style **Tab screen**: E / A / D / DMG / H / MIT for everyone, plus your weapon accuracy, crit accuracy, objective time, streak, ults and hero stats.
   - **8 maps built from buildings**: interiors, upper floors and walkable roofs, two-door spawn rooms, and small / large **health packs** inside and outside. That's the 5 rebuilt arenas plus **Hanabi Harbor**, **Cloudstep Terraces** and **Kagura Avenue**.
   - **Gantetsu**, the Iron Yokozuna (tank, dual chainguns).
@@ -22,7 +23,7 @@ One codebase, two editions (`src/edition.ts`):
   - **Tomoe**, the Crescent Empress (tank): a white-and-gold battle queen with a scattergun, a throwing blade and a great axe. Her rival is Gantetsu.
     - **LMB** Crownfire Scattergun (10 pellets).
     - **RMB** Crescent Fang: throw a jagged blade that sticks in whatever it hits. Press RMB again to recall it. It drags a stuck enemy toward you (and pulls flyers out of the sky) and cuts everyone on its way back.
-    - **SHIFT** Horagai War Call: 200 temporary health for her, 100 for allies within 15m, +30% speed.
+    - **SHIFT** Horagai War Call: 150 temporary health for her, 75 for allies within 15m, +30% speed.
     - **E** Crescent Reaping: a wide axe cleave, with 1s off the cooldown per enemy cut.
     - **Q** Crescent Warpath: an unstoppable 20m charge that wounds and anti-heals everyone in the lane.
     - Passive **Blood Tide**: her wounds heal her for 150% of their damage. Wounds bleed straight through armor, which is her counter to Gantetsu.

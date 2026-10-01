@@ -1,6 +1,7 @@
 // Front-end screens: title, mode select, hero select (with rival/counter info), map select, settings, pause, results.
 import { HERO, TEAM_NAME, isAbility, rosterFor, type HeroDef } from '../data/heroes';
 import { mapsFor, mapFor } from '../data/maps';
+import { ROLE_PASSIVE, SUBROLE, REGEN_RATE, REGEN_DELAY } from '../game/roles';
 import { FULL, DOWNLOAD_URL } from '../edition';
 import { loadCareer, saveCareer, rankOf, applyCompetitive, applyQuickPlay, skillFor, lobbyRating, ROLE_OF, TIER_COLOR, PLACEMENTS, type RankRole, type RankChange } from '../game/ranks';
 import { BASE } from '../render/Assets';
@@ -258,6 +259,7 @@ export class Menu {
         ${ab('E', d.ability2.name, d.ability2.desc, d.ability2.counter)}
         ${ab('Q', d.ult.name + ' (ULT)', d.ult.desc)}
         ${ab('—', d.passive.name + ' (passive)', d.passive.desc)}
+        ${ab('◆', `${ROLE_PASSIVE[d.role].name} role${d.subrole ? ' · ' + SUBROLE[d.subrole].name : ''}`, `${ROLE_PASSIVE[d.role].desc}${d.subrole ? ' ' + SUBROLE[d.subrole].desc : ''} Everyone regenerates ${REGEN_RATE} HP/s after ${REGEN_DELAY}s without taking damage.`)}
         ${ab('C', 'Quick melee', 'A fast punch for 40 damage - every hero has one (0.9s cooldown).')}
         <p class="rival">RIVAL: <b style="color:${rival.color}">${rival.name}</b>, ${rival.title}. <em>${d.inspiration}</em></p>
       </div></div>`;

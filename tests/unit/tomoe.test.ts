@@ -34,7 +34,7 @@ describe('Tomoe', () => {
     const q = place(w, 'tomoe', 'zenith', 0, 0), foe = place(w, 'gantetsu', 'umbra', 0, 3);
     const before = foe.health;
     tap(w, q, 'fire'); run(w, 0.1);
-    expect(before - foe.health).toBeGreaterThan(45);
+    expect(before - foe.health).toBeGreaterThan(35);          // (his armor takes 30% off every pellet, the Bruiser sub-role a quarter off the headshot pellets)
     expect(q.ammo).toBe(5);
   });
 
@@ -92,12 +92,12 @@ describe('Tomoe', () => {
     expect(foe.wounds.length).toBe(0);
   });
 
-  it('Horagai War Call: 200 for her, 100 for allies within 15m, +30% speed; not beyond 15m', () => {
+  it('Horagai War Call: 150 for her, 75 for allies within 15m, +30% speed; not beyond 15m', () => {
     const w = arena();
     const q = place(w, 'tomoe', 'zenith', 0, 0), near = place(w, 'raijin', 'zenith', 5, 0), far = place(w, 'yuzu', 'zenith', 0, 22);
     tap(w, q, 'a1');
-    expect(q.shields.find(s => s.kind === 'warcall')?.amt).toBe(200);
-    expect(near.shields.find(s => s.kind === 'warcall')?.amt).toBe(100);
+    expect(q.shields.find(s => s.kind === 'warcall')?.amt).toBe(150);
+    expect(near.shields.find(s => s.kind === 'warcall')?.amt).toBe(75);
     expect(far.shields.some(s => s.kind === 'warcall')).toBe(false);
     expect(near.has('speed', w.time)).toBe(true); expect(near.sv.speed).toBeCloseTo(1.3, 2);
     run(w, 3.2);

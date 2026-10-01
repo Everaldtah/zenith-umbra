@@ -81,7 +81,8 @@ export function quickMelee(w: World, a: Actor) {
   if (n) w.fx('impact', { x: a.pos.x + a.forward().x * (a.radius + 0.9), y: a.pos.y + a.height * 0.6, z: a.pos.z + a.forward().z * (a.radius + 0.9) }, { color: a.def.glow });
 }
 
-export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'secondary', mult = 1, spreadMult = 1) {
+/** fallFrom: where hitscan damage starts falling off, as a fraction of the weapon's range (0.5 = Overwatch's usual half-way; both chainguns at once start sooner) */
+export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'secondary', mult = 1, spreadMult = 1, fallFrom = 0.5) {
   const t = w.time;
   const dual = !!a.def.dualGuns;
   // twin chainguns: each hand has its own fire cue (the animator kicks that gun), and neither is a "secondary swing"
@@ -119,7 +120,7 @@ export function fire(w: World, a: Actor, W: WeaponDef, slot: 'primary' | 'second
       a.shots++;
       if (ah) {
         a.hits++; if (ah.head) a.crits++;
-        const fall = end > W.range * 0.5 ? 1 - (end - W.range * 0.5) / W.range : 1;
+        const f0 = W.range * fallFrom, fall = end > f0 ? 1 - (end - f0) / W.range : 1;
         const h = hits.get(ah.actor) ?? { dmg: 0, head: false };
         h.dmg += W.damage * Math.max(0.3, fall) * (ah.head ? 1.5 : 1); h.head ||= ah.head;
         hits.set(ah.actor, h);
@@ -222,7 +223,8 @@ function dualGuns(w: World, a: Actor, dt: number) {
     a.sv[key] = Math.max(0, Math.min(1, (a.sv[key] ?? 0) + (on ? dt / 0.35 : -dt / 0.8)));
     if (!on || t < (slot === 'primary' ? a.nextShot : a.nextAlt)) continue;
     if ((slot === 'primary' ? a.ammo : a.sv.ammo2) <= 0 && !endless) { reload(); continue; }
-    fire(w, a, W, slot, 1, both ? 1.4 : 1);
+    // both triggers: a wider cone and the falloff from 10 m instead of 16 (OW Sep 2026: Mauga's both-gun spread 4 -> 5 deg, falloff from 10 m)
+    fire(w, a, W, slot, 1, both ? 1.7 : 1, both ? 0.3 : 0.5);
     // keep the cadence exact while the trigger is held; after a pause, count from now (no catch-up burst)
     const iv = 1 / (a.rate(W.rate) * (0.4 + 0.6 * a.sv[key])), prev = slot === 'primary' ? a.nextShot : a.nextAlt;
     const nx = t - prev > iv ? t + iv : prev + iv;

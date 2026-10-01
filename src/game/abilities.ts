@@ -8,10 +8,13 @@ import { raisePuppets } from './puppets';
 import { stellarRebirth } from './rebirth';
 import { raiseEffigy } from './effigy';
 import { raiseSusanoo } from './susanoo';
+import { isSub, TACTICIAN_BANK } from './roles';
 
 /** Hayate's Dragon Gate Blade: how long the nodachi stays drawn, and the blade he swings with it */
-export const DRAGONBLADE_SECS = 15;
+export const DRAGONBLADE_SECS = 8;
 export const DRAGONBLADE: WeaponDef = { kind: 'melee', name: 'Dragon Gate Blade', damage: 110, rate: 1.25, range: 5, sfx: 'katana', fx: 'slash' };
+/** Tenkai-Oh's Dawn Colossus Awakening: how long the giant stands, and the armor it brings (OW transformation ults run 6-10 s) */
+export const TITAN_SECS = 15, TITAN_ARMOR = 600;
 
 
 let ZID = 1;
@@ -133,7 +136,7 @@ const I: Record<string, Impl> = {
       const pin = w.actors.find(x => x.id === a.sv.pinned);
       if (pin && pin.alive) {
         const wall = a.sv.chargeWall === 1;
-        w.damage(a, pin, wall ? 250 : 80, { kind: 'ability' }); applyCC(w, a, pin, 'stun', wall ? 1.0 : 0.4);
+        w.damage(a, pin, wall ? 225 : 80, { kind: 'ability' }); applyCC(w, a, pin, 'stun', wall ? 1.0 : 0.4);
         w.fx('slam', pin.pos, { r: wall ? 3.5 : 2, color: '#ffd76a', actor: a }); w.sfx(wall ? 'slam' : 'punch', pin.pos, a);
       } else if (a.sv.chargeWall === 1) { w.fx('slam', a.pos, { r: 2.5, color: '#ffd76a', actor: a }); w.sfx('mechland', a.pos, a); }
       a.sv.pinned = 0; a.vel.x *= 0.2; a.vel.z *= 0.2;
@@ -162,7 +165,7 @@ const I: Record<string, Impl> = {
         if (x.flying || x.pos.y - g > 0.6 || Math.abs(x.pos.y - a.pos.y) > 3) continue;
         const dir = norm({ x: v.x, y: 0, z: v.z }), bh = w.barrierHit(a.team, { x: o.x, y: o.y + 0.5, z: o.z }, dir, Math.hypot(v.x, v.z));
         if (bh) { w.hitBarrier(bh.owner, 300, a, bh.owner.center); continue; }
-        w.damage(a, x, 90, { kind: 'ability' }); applyCC(w, a, x, 'stun', 1.6);
+        w.damage(a, x, 75, { kind: 'ability' }); if (applyCC(w, a, x, 'stun', 1.0)) x.set('knockdown', w.time, 1.0, undefined, a);
       }
       w.fx('shatter', o, { to: { x: o.x + d.x * len, y: o.y, z: o.z + d.z * len }, r: len, color: '#ffd76a', actor: a });
       w.sfx('slam', o, a); w.sfx('boom', o, a);
@@ -192,9 +195,9 @@ const I: Record<string, Impl> = {
   colossus(w, a) {
     // Dawn Colossus Awakening: a pillar of dawnlight, a hop while the frame grows (World scales it up), a landing stomp
     const t = w.time;
-    a.set('titan', t, 60);
+    a.set('titan', t, TITAN_SECS);
     a.set('ccimmune', t, 1.4);
-    a.maxArmor = a.def.armor + 800; a.armor = Math.min(a.maxArmor, a.armor + 800);
+    a.maxArmor = a.def.armor + TITAN_ARMOR; a.armor = Math.min(a.maxArmor, a.armor + TITAN_ARMOR);
     a.forced = { vx: 0, vy: 7, vz: 0, until: t + 0.45, kind: 'ascend' };
     w.sfx('ultcall', a.center, a); w.sfx('mechjump', a.pos, a);
     w.fx('ultflash', a.center, { color: '#ffd76a', actor: a }); w.fx('burst', a.center, { r: 5, color: '#ffd76a' });
@@ -440,9 +443,9 @@ const I: Record<string, Impl> = {
       const c = x.center, v = { x: c.x - e.x, y: c.y - e.y, z: c.z - e.z }, l = Math.hypot(v.x, v.y, v.z);
       if (l > 12 + x.radius || (v.x * d.x + v.y * d.y + v.z * d.z) / l < Math.cos(0.45)) continue;
       if (!w.level.lineOfSight(e, c)) continue;
-      if (!applyCC(w, a, x, 'silence', 1.5)) continue;
+      if (!applyCC(w, a, x, 'silence', 1.0)) continue;
       if (x.def.frame === 'flyer') {
-        x.set('grounded', w.time, 3, undefined, a); x.flying = false;
+        x.set('grounded', w.time, 2.5, undefined, a); x.flying = false;
         if (x.def.id === 'mirei') w.emit({ t: 'counter', actor: a, target: x, text: 'Silence Aria grounds the Starweaver' });
       }
       if (x.forced?.kind === 'flashstep') { interrupt(w, x, a); w.emit({ t: 'counter', actor: a, target: x, text: 'Silence Aria cuts the Flash Step' }); }
@@ -662,7 +665,7 @@ const I: Record<string, Impl> = {
     let n = 0;
     for (const x of w.allies(a)) {
       if (dist3(x.pos, a.pos) > WARCALL_R || (x !== a && !w.level.lineOfSight(a.eye, x.center))) continue;
-      w.shield(x, x === a ? 200 : 100, 3, 'warcall', a);
+      w.shield(x, x === a ? 150 : 75, 3, 'warcall', a);
       x.sv.speed = x.has('speed', t) ? Math.max(x.sv.speed ?? 1, 1.3) : 1.3; x.sv.speedFrom = a.id; x.set('speed', t, 3);
       x.set('warcall', t, 3);
       if (x !== a) { n++; w.fx('warcallally', x.center, { actor: x, color: a.def.glow }); }
@@ -738,9 +741,9 @@ export const WARCALL_R = 15, REAP_R = 5.5, REAP_HIT = 0.42;
  *  ground, the user's call), the lane under the wheeling blades (half-width, m) */
 export const TIDE_LEN = 20, TIDE_SPEED = 28, TIDE_APEX = 0, TIDE_HALF = 2.5, TIDE_MIN_SECS = 0.35;
 /** ... the cut, the wound, the healing it denies (s) */
-export const TIDE_CUT = 40, TIDE_WOUND = 90, TIDE_ANTIHEAL = 4.5;
+export const TIDE_CUT = 40, TIDE_WOUND = 90, TIDE_ANTIHEAL = 3.5;
 /** ... the mark it leaves: seconds, damage taken from anyone (x), the colour of the glow */
-export const TIDE_MARK = 10, TIDE_MARK_AMP = 1.25, TIDE_MARK_COLOR = '#4aa8ff';
+export const TIDE_MARK = 8, TIDE_MARK_AMP = 1.2, TIDE_MARK_COLOR = '#4aa8ff';
 /** ... a click ends the flight, once it has been under way this long (s) */
 export const TIDE_HOLD = 0.15;
 /** ... a landing needs footing no further below her than this (m) */
@@ -852,7 +855,7 @@ function leash(w: World, by: Actor, x: Actor) {
 
 /**
  * Shiko Stomp: the leap out of a Tachiai Rush lands. Everyone within 7m the shockwave can reach is thrown back off their
- * feet and left flat on the ground, stunned (1s at the heart of it, 0.8s further out), and set alight.
+ * feet and left flat on the ground, stunned (0.9s at the heart of it, 0.7s further out), and set alight.
  */
 function shikoStomp(w: World, a: Actor) {
   const t = w.time, p = { ...a.pos }, eye = { x: p.x, y: p.y + 0.6, z: p.z };
@@ -861,9 +864,9 @@ function shikoStomp(w: World, a: Actor) {
     if (d > STOMP_R + x.radius || Math.abs(x.pos.y - p.y) > STOMP_H) continue;
     if (!w.level.lineOfSight(eye, x.center)) continue;                 // a wall between them takes the shockwave
     const core = d < STOMP_CORE + x.radius;
-    w.damage(a, x, core ? 150 : 75, { kind: 'ability' }); ignite(w, a, x, 8);
-    if (!x.alive || x.def.frame === 'mech' || x.isBoss || !applyCC(w, a, x, 'stun', core ? 1 : 0.8)) continue;
-    x.set('knockdown', t, core ? 1 : 0.8, undefined, a);
+    w.damage(a, x, core ? 120 : 60, { kind: 'ability' }); ignite(w, a, x, 8);
+    if (!x.alive || x.def.frame === 'mech' || x.isBoss || !applyCC(w, a, x, 'stun', core ? 0.9 : 0.7)) continue;
+    x.set('knockdown', t, core ? 0.9 : 0.7, undefined, a);
     // swept off their feet, away from the landing: a low hop and a shove, then flat on the ground
     const n = d > 0.1 ? { x: dx / d, z: dz / d } : { x: Math.sin(a.yaw), z: Math.cos(a.yaw) };
     x.flying = false; x.vel.y = 4; x.grounded = false;
@@ -909,7 +912,7 @@ function onProj(w: World, p: Proj, at: V3, hit: Actor | null) {
     }
     case 'grievous': {
       const g = w.level.groundAt(at.x, at.z, at.y + 0.5);
-      zone(w, a, 'grievous', { x: at.x, y: g > -Infinity ? g : at.y, z: at.z }, 6, 4);
+      zone(w, a, 'grievous', { x: at.x, y: g > -Infinity ? g : at.y, z: at.z }, 6, 3);
       w.fx('hexburst', at, { r: 6, color: '#c77dff', dur: 4 }); w.sfx('hexburst', at, a);
       break;
     }
@@ -1088,7 +1091,7 @@ export function tickAbilities(w: World, dt: number) {
         x.sv.speed = x.has('speed', t) && x.sv.speedFrom !== a.id ? Math.max(x.sv.speed ?? 1, k) : k;
         x.sv.speedFrom = a.id; x.set('speed', t, 0.3); x.set('tempo', t, 0.3, amp ? 2 : 1);
       } else {
-        w.heal(a, x, (amp ? 52 : 16) * (x === a ? 0.7 : 1) * dt, true); x.set('groove', t, 0.3, amp ? 2 : 1);
+        w.heal(a, x, (amp ? 56 : 20) * (x === a ? 0.6 : 1) * dt, true); x.set('groove', t, 0.3, amp ? 2 : 1);
       }
     }
     if (a.has('grinding', t)) {
@@ -1254,7 +1257,8 @@ export function castAbility(w: World, a: Actor, id: string, slot: 'a1' | 'a2' | 
   const ok = I[id](w, a);
   if (!ok) return false;
   const def = slot === 'a1' ? a.def.ability1 : slot === 'a2' ? a.def.ability2 : slot === 'ult' ? a.def.ult : (isAbility(a.def.secondary) ? a.def.secondary : null);
-  if (slot === 'ult') { a.ult = 0; a.ults++; }
+  // (a tactician keeps what was banked past full: up to a quarter of the next ultimate - roles.ts)
+  if (slot === 'ult') { a.ult = isSub(a, 'tactician') ? Math.min(a.def.ult.charge * TACTICIAN_BANK, Math.max(0, a.ult - a.def.ult.charge)) : 0; a.ults++; }
   else if (def) a.cd[id] = t + def.cooldown * (1 - a.mods.cdr) * (1 - (a.mods.cdrBy[id] ?? 0));   // Stadium cooldown items / powers
   a.anim.castAt = t; a.anim.castId = id;
   w.stats.casts[id] = (w.stats.casts[id] ?? 0) + 1;

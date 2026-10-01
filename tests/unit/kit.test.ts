@@ -122,7 +122,7 @@ describe('Gantetsu', () => {
     expect(landed).toBeGreaterThan(0);
     expect(down).toBeGreaterThan(0.7);                        // flat on the ground...
     expect(stunned).toBeGreaterThan(0.7);                     // ...and stunned while he lies there
-    expect(e.health).toBeLessThan(hp0 - 70);
+    expect(e.health).toBeLessThan(hp0 - 50);                 // 60 at the edge of the slam, 120 at its heart
     expect(Math.hypot(e.pos.x - g.pos.x, e.pos.z - g.pos.z)).toBeGreaterThan(d0);   // thrown back from the landing
   });
   it('Tachiai Rush ends in the leap by itself when the charge runs out - unless it was cut short', () => {
