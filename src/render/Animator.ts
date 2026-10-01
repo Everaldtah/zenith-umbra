@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 
 import { BONES, CHAIN_PREFIXES, RT_INDEX, type BoneName, type ChainPrefix, type RtBone } from './Rig';
+import { CB_WIND, CB_ARC, CB_SWING, CB_THROW, CB_REACH, CB_THROW_REACH, swingExt, swingArc, swingPhi, throwExt, throwSpin } from './ChainBlades';
 import { HELD } from './HeldProps';
 import { ClipLayer, poseDir, type LayerOut } from './ClipLayer';
 import type { ClipLibrary } from './ClipLibrary';
@@ -186,9 +187,9 @@ const rot = (axis: THREE.Vector3, a: number) => new THREE.Quaternion().setFromAx
 // wind up behind the shoulder, sweep flat through the front with the weight rolling onto the lead foot, follow through
 // past the other shoulder, settle back into the guard (hammer upright in front, head by the right shoulder).
 export const SWING_TIME = 0.96;          // Reinhardt: 0.96s per swing
-// Enra's Hellfire Chains (Kratos' light swing from the frame counts in docs/research/kratos_blades_study.md): 0.15 s
-// wind-up, 0.25 s arc, recover to 0.62 s (the sim's 1.6 swings a second); the throw 0.25 s out, a beat taut, 0.3 s back
-export const CB_WIND = 0.15, CB_ARC = 0.25, CB_SWING = 0.62, CB_THROW = 0.6;
+// Enra's Hellfire Chains (Kratos' light swing from the frame counts in docs/research/kratos_blades_study.md): the
+// timelines live in ChainBlades.ts (shared with CharacterView's chains and FirstPerson's whip), re-exported here
+export { CB_WIND, CB_ARC, CB_SWING, CB_THROW } from './ChainBlades';
 // th: yaw of the haft around the body (0 = straight ahead, + = toward the left side), ph: haft elevation,
 // d: grip distance from the shoulder centre in ARM LENGTHS (1 = arms locked straight), gy: grip height above the
 // shoulders in body heights. Reference (Reinhardt): both hands together at the bottom of the haft, arms straight out
@@ -322,7 +323,10 @@ export class Animator {
   /** a held prop spun in its hand, flat like a propeller (radians about the model's vertical; Tomoe's Fang in the ult) */
   /** a held prop taken out of the hand and placed on its own (Tomoe's Fang wheeling round her in the ult): model-space
    *  position, the direction its +Z (the blade) points, its up, and how far it is from the hand (0 = in the hand) */
-  gunOrbit: [{ p: THREE.Vector3; z: THREE.Vector3; y: THREE.Vector3; w: number } | null, null] = [null, null];
+  gunOrbit: [{ p: THREE.Vector3; z: THREE.Vector3; y: THREE.Vector3; w: number } | null, { p: THREE.Vector3; z: THREE.Vector3; y: THREE.Vector3; w: number } | null] = [null, null];
+  /** Enra's chain blades: how far out on its chain each blade is, 0 (in the fist) .. 1 (the chain's full length) -
+   *  set by the chain-swing / throw arm branches (third person) or FirstPerson's whip; CharacterView pays the chain out */
+  chainExt: [number, number] = [0, 0];
   /** the Crescent Warpath's orbit, smoothed in over 0.1 s and back into the hands over 0.15 s when the dash ends */
   private orbitW = 0;
   /** a held bow stands upright in the fist (limbs vertical, facing where the forearm points) instead of lying along it */
@@ -1370,6 +1374,7 @@ export class Animator {
       if (!this.bones[ua] || !this.bones[fa]) continue;
       const cu = L && L.pose.w[RT_INDEX[ua as RtBone]] && L.pose.w[RT_INDEX[fa as RtBone]] ? poseDir(L.pose, ua as RtBone, fa as RtBone) : null;
       const cl = L && L.pose.w[RT_INDEX[fa as RtBone]] && L.pose.w[RT_INDEX[`hand_${S}` as RtBone]] ? poseDir(L.pose, fa as RtBone, `hand_${S}` as RtBone) : null;
+      if (carry?.chains) { this.gunOrbit[i] = null; this.chainExt[i] = 0; }     // the blade back in the fist unless a branch below flings it
       const shoulder = R[ua].p.clone().sub(R.chest.p).applyQuaternion(Dc).add(R.chest.p).add(hipsOff);
       const l1 = R[ua].p.distanceTo(R[fa].p), l2 = R[fa].p.distanceTo((R[`hand_${S}` as BoneName] ?? R[fa]).p) || l1;
       // relaxed pose: rest direction pulled 25% toward straight down, swung with the gait
@@ -1448,6 +1453,15 @@ export class Animator {
         else if (t < CB_WIND + CB_ARC) { const u = ez((t - CB_WIND) / CB_ARC); hand = at(phi0 + (phi1 - phi0) * u, 0.97, 0.15 - 0.3 * u); }
         else { const u = ez((t - CB_WIND - CB_ARC) / (CB_SWING - CB_WIND - CB_ARC)); hand = at(phi1 + (-side * 0.5 - phi1) * u, 0.97 - 0.4 * u, -0.15 - 0.2 * u); w = 1 - u; }
         over = { hand, w, pole: new THREE.Vector3(side * 0.8, -0.3, -0.3) };
+        // ...and the blade leaves the fist on its chain (ChainBlades' timelines): out round him to the chain's full
+        // length - the sim's 5 m reach from the shoulder, the pommel a blade short of it - a little ahead of the hand's
+        // bearing with its edge along the arc, hauled back in the recover; placeGuns blends the held prop out by w
+        const ext = swingExt(t), reach = CB_REACH / Math.max(1e-6, s.scale), phiB = swingPhi(t, side);
+        const rB = 0.97 * Lr + (reach * 0.82 - 0.97 * Lr) * ext;
+        const pB = shoulder.clone().add(new THREE.Vector3(Math.sin(phiB) * rB, (0.12 - 0.3 * swingArc(t)) * Lr, Math.cos(phiB) * rB).applyQuaternion(Dc));
+        const tan = new THREE.Vector3(Math.cos(phiB), 0, -Math.sin(phiB)).multiplyScalar(-side).applyQuaternion(Dc);   // along the arc, toward the far side
+        this.gunOrbit[i] = { p: pB, z: tan, y: new THREE.Vector3(0, 1, 0), w: Math.min(1, ext * 1.6) };
+        this.chainExt[i] = ext;
       } else if (carry?.chains && i === 1 && s.attackKind === 'secondary' && s.attackAge < CB_THROW) {
         // ...and the Chain Throw: the right blade drawn back over the shoulder, shot straight out along the aim to the
         // chain's full length (6-7 m out in 0.25 s), held taut a beat, and yanked back
@@ -1460,6 +1474,14 @@ export class Animator {
         else if (t < 0.34) hand = out;
         else { const u = ez((t - 0.34) / (CB_THROW - 0.34)); hand = out; w = 1 - u; }
         over = { hand, w, pole: new THREE.Vector3(side * 0.6, 0.4, -0.2) };
+        // the blade shot out along the aim to the chain's full length (the sim's 7.5 m), spinning once on the way,
+        // held taut a beat, spinning back
+        const ext = throwExt(t), reach = CB_THROW_REACH / Math.max(1e-6, s.scale), spin = throwSpin(t) * Math.PI * 2;
+        const pB = out.clone().addScaledVector(aimDir, Math.max(0, reach * 0.9 - Lr) * ext);
+        const ax = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), aimDir); if (ax.lengthSq() < 1e-6) ax.set(1, 0, 0); ax.normalize();
+        const qs = new THREE.Quaternion().setFromAxisAngle(ax, spin);
+        this.gunOrbit[i] = { p: pB, z: aimDir.clone().applyQuaternion(qs), y: new THREE.Vector3(0, 1, 0).applyQuaternion(qs), w: Math.min(1, ext * 3) };
+        this.chainExt[i] = ext;
       } else if (s.climb) {
         // up the wall hand over hand: each hand reaches high on the wall in turn, pulls down past the shoulder
         const Lr = l1 + l2, ph = s.time * 7 + (i === 0 ? 0 : Math.PI);

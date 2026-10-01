@@ -11,7 +11,8 @@ import * as THREE from 'three';
 import type { Actor } from '../game/Actor';
 import { CharacterView } from './CharacterView';
 import { animLib } from './ClipLibrary';
-import { reapPhase, REAP_SECS, REAP_STOP, CB_SWING } from './Animator';
+import { reapPhase, REAP_SECS, REAP_STOP } from './Animator';
+import { CB_SWING, CB_THROW, swingExt, swingArc, throwExt, throwSpin } from './ChainBlades';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BASE } from './Assets';
 import { driveFingers } from './Fingers';
@@ -446,7 +447,9 @@ export class FirstPersonArms {
         // (Hanzo's hold: the bow rolled nearly flat, upper limb to the right, tilted so that limb recedes into the view)
         an.bowCant = this.style.grip === 'bow' ? -1.35 + 0.45 * this.aimK : 0; an.bowTilt = this.style.grip === 'bow' ? 0.35 - 0.15 * this.aimK : 0;
         // chain blades (Enra): the fists clip holds the forearms up like a boxer's, which would stand the blades on end -
-        // they point at the reticle instead, the chains trailing back out of the bottom of the frame
+        // they point at the reticle instead, the chains trailing back out of the bottom of the frame; both blades
+        // back in the fists (the whip / throw below is the only thing that flings them)
+        if (HELD[a.def.id]?.chains) { an.gunOrbit[0] = an.gunOrbit[1] = null; an.chainExt[0] = an.chainExt[1] = 0; }
         an.placeGunsFromBones(HELD[a.def.id]?.chains ? new THREE.Vector3(0, 0, 14 / Math.max(1e-6, this.view.scaleFit)).add(this.eye) : undefined);
         driveFingers(this.view.fingers, a, t, dt, { fp: true });
         this.source = `clip:${want}`;
@@ -487,21 +490,37 @@ export class FirstPersonArms {
       const tgt: V = [-0.03, -0.1, 0.36 + 0.3 * ext];
       if (L && S.grip !== 'hammer') L = lerp(L, tgt, Math.min(1, Math.max(0, ext + 0.4))); else R = lerp(R, [0.05, -0.1, 0.36 + 0.3 * ext], 0.8);
       src = 'melee';
-    } else if (melee && a.def.id === 'enra' && atk < 0.62) {
-      // Hellfire Chains (docs/research/kratos_blades_study.md): the swinging hand alternates - wound back to its own
-      // edge of the frame, whipped across the whole view on the chain, recovered low across the body; the throw shoots
-      // the right blade from the bracer straight out to the reticle, holds it taut a beat and yanks it back
-      if (kind === 'secondary') {
+    } else if (melee && HELD[a.def.id]?.chains && atk < CB_SWING) {
+      // Hellfire Chains (docs/research/kratos_blades_study.md, Kratos' Blades of Chaos): the swinging hand alternates -
+      // wound back to its own edge of the frame, whipped across the whole view, recovered low across the body - and
+      // the BLADE leaves the fist on its chain (ChainBlades' timelines): it flies out to the chain's reach and sweeps
+      // the whole width of the view edge-first, the chain paying out behind it; the throw shoots the right blade from
+      // the bracer straight out to the reticle (7.5 m), spinning once, holds it taut a beat and yanks it back
+      const k0 = 1 / Math.max(1e-6, this.view.scaleFit);
+      const toMd = (v: V) => new THREE.Vector3(-v[0] * k0, v[1] * k0, v[2] * k0).add(this.eye);     // view metres -> model
+      const toDir = (v: V) => new THREE.Vector3(-v[0], v[1], v[2]).normalize();
+      an.gunOrbit[0] = an.gunOrbit[1] = null; an.chainExt[0] = an.chainExt[1] = 0;
+      if (kind === 'secondary' && atk < CB_THROW) {
         const back: V = [0.3, 0.08, 0.22], out: V = [0.02, -0.06, 0.98];
         R = atk < 0.08 ? lerp(S.R, back, smooth(atk / 0.08)) : atk < 0.25 ? lerp(back, out, smooth((atk - 0.08) / 0.17)) : atk < 0.34 ? out : lerp(out, S.R, smooth((atk - 0.34) / 0.28));
         wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.2, 0, 0));
+        const ext = throwExt(atk), spin = throwSpin(atk) * Math.PI * 2;
+        const qs = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), spin);
+        an.gunOrbit[1] = { p: toMd([0.02, -0.06 + 0.05 * ext, 0.98 + 6.4 * ext]), z: toDir([0, 0, 1]).applyQuaternion(qs), y: new THREE.Vector3(0, 1, 0).applyQuaternion(qs), w: Math.min(1, ext * 3) };
+        an.chainExt[1] = ext;
         src = 'throw';
+      } else if (kind === 'secondary') {
+        src = 'idle';
       } else {
         const dir = this.swings % 2 ? -1 : 1, base = dir > 0 ? S.R : (S.L ?? S.R);
         const own: V = [0.44 * dir, 0.04, 0.26], far: V = [-0.4 * dir, -0.2, 0.5];
         const h = atk < 0.12 ? lerp(base, own, smooth(atk / 0.12)) : atk < 0.38 ? lerp(own, far, smooth((atk - 0.12) / 0.26)) : lerp(far, base, smooth((atk - 0.38) / 0.24));
         const wq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.4, 0, dir * 0.6));
         if (dir > 0) { R = h; wristR = wq; } else { L = h; wristL = wq; }
+        const ext = swingExt(atk), arc = swingArc(atk), i = dir > 0 ? 1 : 0;
+        const xB = (1.7 - 3.4 * arc) * dir, zB = 0.5 + 3.6 * ext, yB = 0.15 - 0.45 * arc;
+        an.gunOrbit[i] = { p: toMd([xB, yB, zB]), z: toDir([-dir, -0.12, 0.3]), y: new THREE.Vector3(0, 1, 0), w: Math.min(1, ext * 1.6) };
+        an.chainExt[i] = ext;
         src = 'slash';
       }
     } else if (melee && atk < 0.6) {

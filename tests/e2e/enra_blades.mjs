@@ -29,22 +29,30 @@ const yaw = y => p.evaluate(y => { window.__zu.viewer.yaw = y; }, y);
 console.log(await p.evaluate(() => {
   const v = window.__zu.viewer.view, names = [];
   v.group.traverse(o => { if (o.name) names.push(o.name); });
-  return { hammer: !!v.hammer, guns: v.guns.length, chains: v.chainLoops?.length ?? 'n/a', tripo: names.filter(n => /tripo/.test(n)).length };
+  return { hammer: !!v.hammer, guns: v.guns.length, chains: v.chains?.length ?? "n/a", tripo: names.filter(n => /tripo/.test(n)).length };
 }));
 await yaw(-0.75); await wait(800); await shot('tp_idle');
 await yaw(0); await wait(600); await shot('tp_front');
-const freezeAt = (kind, age, side) => p.evaluate((kind, age, side) => {
-  const V = window.__zu.viewer, a = V.actor;
-  if (!V.__orig) { V.__orig = V.frame.bind(V); V.frame = () => { V.__orig(); if (V.__freeze !== undefined) V.t = V.__freeze; }; }
-  V.__freeze = V.t; a.anim.attackKind = kind; a.anim.attackAt = V.t - age; a.anim.attackSide = side;
-}, kind, age, side);
+// start the attack live, let it run for `age` seconds (the chain pays out, the trail is the real path), then hold the clock
+const freezeAt = async (kind, age, side) => {
+  await p.evaluate((kind, side) => {
+    const V = window.__zu.viewer, a = V.actor;
+    if (!V.__orig) { V.__orig = V.frame.bind(V); V.frame = () => { V.__orig(); if (V.__freeze !== undefined) V.t = V.__freeze; }; }
+    V.__freeze = undefined; a.anim.attackKind = kind; a.anim.attackAt = V.t; a.anim.attackSide = side;
+  }, kind, side);
+  await wait(age * 1000);
+  await p.evaluate(() => { const V = window.__zu.viewer; V.__freeze = V.t; });
+};
 const unfreeze = () => p.evaluate(() => { window.__zu.viewer.__freeze = undefined; });
-await yaw(-0.6);
+await yaw(Math.PI); await wait(700); await shot('tp_back_yoke');
+await yaw(-0.6); await p.evaluate(() => { const V = window.__zu.viewer; V.zoom = 3; V.tilt = 0.75; });   // the blade flies 4-5 m out: pull the camera back and up for the swings
 await freezeAt('primary', 0.27, 1); await wait(700); await shot('tp_swing_r');
 await unfreeze(); await wait(900);
 await freezeAt('primary', 0.27, -1); await wait(700); await shot('tp_swing_l');
 await unfreeze(); await wait(900);
 await freezeAt('secondary', 0.29, 1); await wait(700); await shot('tp_throw');
+await unfreeze(); await wait(900);
+await freezeAt('secondary', 0.16, 1); await wait(700); await shot('tp_throw_out');
 await unfreeze();
 
 // ---- first person: training

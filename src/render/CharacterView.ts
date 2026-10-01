@@ -7,9 +7,10 @@ import { hasModel, hasProp, heroModel, loadManifest, modelInfo, propModel, type 
 import { Eyelids, EyeGlow } from './Eyes';
 import { animLib, animLibrary } from './ClipLibrary';
 import { buildHammer, buildBlaster, buildChaingun, buildSonicAmp, buildMagSkate, fitGreatsword, type HammerProp, type ChaingunProp, type SkateProp } from './Hammer';
-import { buildFang, buildGreatAxe, buildScattergun } from './TomoeProps';
+import { buildFang, buildGreatAxe, buildScattergun, fitProp } from './TomoeProps';
 import { HELD, buildHeld, heldVisible, ARROW_GONE, CARD_GONE } from './HeldProps';
-import { buildChainLoop, updateChainLoop, type ChainLoop } from './ChainBlades';
+import { buildChain, layChain, slackCurve, yokeCurve, setChainHeat, buildFlame, updateFlame, buildTrail, updateTrail, heatMaterials, setHeat, fireK, CB_SWING, CB_THROW, type Chain, type Flame, type Trail } from './ChainBlades';
+import type { BoneName } from './Rig';
 import { Fingers, driveFingers } from './Fingers';
 import { Ragdoll } from './Ragdoll';
 import type { Level } from '../engine/Physics';
@@ -321,13 +322,27 @@ export class CharacterView {
   skates: SkateProp[] = [];
   /** the hero holds a HeldProps blade / bow (anim.guns) */
   private heldHero = false;
-  /** Enra's chains, one loop per held blade (HeldSpec.chains): from the bracer to the pommel, in the guns' root */
-  private chainLoops: ChainLoop[] = [];
+  /** Enra's Hellfire Chains (HeldSpec.chains, ChainBlades.ts): a chain per held blade from the bracer to the pommel,
+   *  the yoke joining the two over his shoulders, the fire on each blade and the trail its tip leaves, the blades' own
+   *  materials driven hot on an attack, the bracer props on the forearms - all in the guns' root */
+  chains: Chain[] = [];
+  private yoke: Chain | null = null;
+  private flames: Flame[] = [];
+  private trails: Trail[] = [];
+  private heats: ReturnType<typeof heatMaterials>[] = [[], []];
+  private heatSrc: (THREE.Object3D | undefined)[] = [undefined, undefined];
+  private bracers: THREE.Group[] = [];
+  private chainPts: THREE.Vector3[][] = [[], [], []];
   private attachGuns(anim: Animator, root: THREE.Object3D) {
     for (const g of this.guns) g.group.parent?.remove(g.group);
     for (const s of this.skates) s.group.parent?.remove(s.group);
-    for (const c of this.chainLoops) c.group.parent?.remove(c.group);
-    this.guns = []; this.skates = []; this.chainLoops = []; anim.feet = null; this.heldHero = false; anim.gunUpright = [false, false];
+    for (const c of this.chains) c.group.parent?.remove(c.group);
+    this.yoke?.group.parent?.remove(this.yoke.group);
+    for (const t of this.trails) t.mesh.parent?.remove(t.mesh);
+    for (const b of this.bracers) b.parent?.remove(b);
+    this.chains = []; this.yoke = null; this.flames = []; this.trails = []; this.bracers = []; this.heats = [[], []]; this.heatSrc = [undefined, undefined];
+    anim.gunOrbit[0] = anim.gunOrbit[1] = null; anim.chainExt = [0, 0];
+    this.guns = []; this.skates = []; anim.feet = null; this.heldHero = false; anim.gunUpright = [false, false];
     if (this.actor.def.id === 'tomoe' && anim.ok) {
       // Tomoe: the Crownfire Scattergun on the right forearm, the Crescent Fang in the left fist
       const fang = buildFang(anim.height), gun = buildScattergun(anim.height);
@@ -359,7 +374,13 @@ export class CharacterView {
       anim.arrowSlot = [held.L?.kind === 'arrow', held.R?.kind === 'arrow'];
       this.heldHero = true;
       if (held.chains) {
-        this.chainLoops = [held.L, held.R].map(it => { const c = buildChainLoop(anim.height); c.group.visible = !!it; root.add(c.group); return c; });
+        const L = anim.height, groups = [gl, gr];
+        this.chains = [held.L, held.R].map(it => { const c = buildChain(L); c.group.visible = !!it; root.add(c.group); return c; });
+        this.yoke = buildChain(L, 72); root.add(this.yoke.group);
+        this.flames = [held.L, held.R].map((it, i) => { const f = buildFlame(L, (it?.size ?? 0.37) * L); f.group.rotation.x = it?.pitch ?? 0; groups[i].add(f.group); return f; });
+        this.trails = [0, 1].map(() => { const t = buildTrail(); root.add(t.mesh); return t; });
+        this.bracers = [0, 1].map(() => { const g = new THREE.Group(); root.add(g); return g; });
+        if (held.bracer) void this.loadBracers(held.bracer, L);
       }
       return;
     }
@@ -368,6 +389,89 @@ export class CharacterView {
     for (const g of this.guns) g.group.scale.setScalar(1.25);          // concept-sized: they're half as long as he is tall
     for (const g of this.guns) root.add(g.group);
     anim.guns = [this.guns[0].group, this.guns[1].group];
+  }
+
+  /** the Tripo vambrace on each forearm (HeldSpec.bracer): its length along the forearm, centred on the bracer point */
+  private async loadBracers(id: string, L: number) {
+    await loadManifest();
+    if (!hasProp(id)) return;
+    for (let i = 0; i < 2; i++) {
+      const m = await propModel(id);
+      if (!m || !this.bracers[i]) return;
+      this.bracers[i].add(fitProp(m, 'blade', 0.17 * L));
+    }
+  }
+
+  /**
+   * Enra's Hellfire Chains, per frame (ChainBlades.ts). The bracer is read off the real forearm bone (the blade may be
+   * out on its chain, so the fist's frame can't give it); the chain pays out to wherever the blade is - a slack loop at
+   * the hip when it's in the hand, a taut line when it flies - and the yoke runs on from each bracer up the arm and
+   * over his shoulders to the other, so the two blades are one chain end to end. On an attack the swinging blade
+   * burns: its flame sheets light, its own glow is driven up, the chain's embers flare and its tip leaves a trail.
+   */
+  private updateChains(dt: number, time: number) {
+    const a = this.actor, an = this.anim, L = an.height, root = this.chains[0].group.parent;
+    if (!root) return;
+    root.updateWorldMatrix(true, false);
+    const bone = (n: string, out: THREE.Vector3) => { const b = an.bones[n as BoneName]; if (!b) return null; b.getWorldPosition(out); return root.worldToLocal(out); };
+    const age = time - a.anim.attackAt, kind = a.anim.attackKind;
+    const ext = an.chainExt;
+    // which blade a light swing is on: the one out on its chain, else the sweep side (third person) - FirstPerson
+    // alternates by its own count and reports it through chainExt
+    const swingHand = ext[0] > ext[1] ? 0 : ext[1] > ext[0] ? 1 : (a.anim.attackSide > 0 ? 1 : 0);
+    const held = HELD[a.def.id];
+    const bracerP: (THREE.Vector3 | null)[] = [null, null], elbowP: (THREE.Vector3 | null)[] = [null, null], shoulderP: (THREE.Vector3 | null)[] = [null, null];
+    for (let i = 0; i < 2; i++) {
+      const S = i ? 'R' : 'L', c = this.chains[i], g = this.guns[i]?.group, it = i === 0 ? held?.L : held?.R, bg = this.bracers[i];
+      const fa = bone(`forearm_${S}`, new THREE.Vector3()), hn = bone(`hand_${S}`, new THREE.Vector3()) ?? fa, up = bone(`upperarm_${S}`, new THREE.Vector3());
+      const vis = !!g && !!it && !!fa && !!hn && g.visible && !an.gunHide[i];
+      c.group.visible = vis; if (bg) bg.visible = vis && bg.children.length > 0;
+      if (!vis || !g || !it || !fa || !hn) { c.prev = null; updateFlame(this.flames[i], 0, dt, time); updateTrail(this.trails[i], null, null, false, time); continue; }
+      const len = it.size * L;
+      const br = fa.clone().lerp(hn, 0.62);
+      bracerP[i] = br; elbowP[i] = fa.clone(); shoulderP[i] = (up ?? fa).clone();
+      // the bracer prop sits on the forearm, its length along it
+      if (bg) {
+        const Zv = hn.clone().sub(fa); if (Zv.lengthSq() < 1e-10) Zv.set(0, 0, 1); Zv.normalize();
+        const Yv = new THREE.Vector3(0, 1, 0).addScaledVector(Zv, -Zv.y); if (Yv.lengthSq() < 1e-4) Yv.set(0, 0, 1); Yv.normalize();
+        bg.position.copy(br); bg.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(Yv, Zv), Yv, Zv));
+      }
+      // the chain: from the bracer to the ring at the pommel, about 1.2 m of it coiled at rest (the study), paid out
+      // to the blade when it's flung
+      const pommel = new THREE.Vector3(0, 0, -0.12 * len).applyQuaternion(g.quaternion).add(g.position);
+      const tip = new THREE.Vector3(0, 0, 0.88 * len).applyQuaternion(g.quaternion).add(g.position);
+      const rest = 0.36 * L;
+      layChain(c, slackCurve(c, br, pommel, Math.max(rest, br.distanceTo(pommel)), dt, this.chainPts[i]));
+      // the fire: on the swinging blade for a light swing, the right blade for the throw
+      const on = (kind === 'primary' && age < CB_SWING && i === swingHand) || (kind === 'secondary' && age < CB_THROW && i === 1);
+      const k = on ? fireK(kind, age) : 0;
+      updateFlame(this.flames[i], k, dt, time);
+      // the ribbon is the cut at the chain's reach (not the fling out and the haul back: those span metres in a few
+      // frames and would draw as slabs)
+      updateTrail(this.trails[i], pommel, tip, k > 0.3 && ext[i] > 0.6, time);
+      setChainHeat(c, k);
+      const body = g.userData.body as THREE.Object3D | undefined;
+      if (body && (this.heats[i].length === 0 || this.heatSrc[i] !== body.children[0])) { this.heats[i] = heatMaterials(body); this.heatSrc[i] = body.children[0]; }
+      setHeat(this.heats[i], k);
+    }
+    // the yoke: bracer -> elbow -> shoulder -> the nape -> shoulder -> elbow -> bracer, hanging just off the body
+    if (this.yoke) {
+      const neck = bone('neck', new THREE.Vector3()) ?? bone('chest', new THREE.Vector3());
+      const bl = bracerP[0], brr = bracerP[1];
+      if (bl && brr && neck && elbowP[0] && elbowP[1] && shoulderP[0] && shoulderP[1] && this.chains[0].group.visible && this.chains[1].group.visible) {
+        // clear of the body: Enra's pauldrons stand a good way off the shoulder joints, so the run over them is lifted
+        // and set back (a chain draped over the armour, not threaded through it)
+        const back = new THREE.Vector3(0, 0, -1), lift = new THREE.Vector3(0, 1, 0);
+        const way = [
+          bl, elbowP[0]!.clone().addScaledVector(back, 0.1 * L).addScaledVector(lift, 0), shoulderP[0]!.clone().addScaledVector(back, 0.21 * L).addScaledVector(lift, 0.11 * L),
+          neck.clone().addScaledVector(back, 0.25 * L).addScaledVector(lift, 0.04 * L),
+          shoulderP[1]!.clone().addScaledVector(back, 0.21 * L).addScaledVector(lift, 0.11 * L), elbowP[1]!.clone().addScaledVector(back, 0.1 * L).addScaledVector(lift, 0), brr,
+        ];
+        layChain(this.yoke, yokeCurve(way, this.chainPts[2]));
+        this.yoke.group.visible = true;
+        setChainHeat(this.yoke, Math.max(this.flames[0].k, this.flames[1].k) * 0.5);
+      } else this.yoke.group.visible = false;
+    }
   }
 
   /** barrels spin with each gun's spin-up, the muzzles flash on their own rounds, the cores glow hotter while firing */
@@ -411,18 +515,8 @@ export class CharacterView {
         else hide[i] = !vis;
       }
       this.anim.gunHide = hide;
-      // the chains: from a bracer a third of the way up the forearm to the pommel just behind the fist (the held blade's
-      // frame: origin in the fist, +Z along the forearm), the loop hanging a fifth of his height at rest
-      for (let i = 0; i < this.chainLoops.length; i++) {
-        const c = this.chainLoops[i], g = this.guns[i]?.group, it = i === 0 ? HELD[a.def.id]?.L : HELD[a.def.id]?.R;
-        if (!g || !it) { c.group.visible = false; continue; }
-        c.group.visible = g.visible && !hide[i];
-        if (!c.group.visible) { c.prev = null; continue; }
-        const L = this.anim.height, len = it.size * L;
-        const bracer = new THREE.Vector3(0, 0.012 * L, -0.17 * L).applyQuaternion(g.quaternion).add(g.position);
-        const pommel = new THREE.Vector3(0, 0, -0.12 * len).applyQuaternion(g.quaternion).add(g.position);
-        updateChainLoop(c, bracer, pommel, 0.19 * L, dt);
-      }
+      // Enra's chains, fire and bracers (ChainBlades.ts)
+      if (this.chains.length) this.updateChains(dt, time);
       return;
     }
     if (a.def.id === 'tomoe') {

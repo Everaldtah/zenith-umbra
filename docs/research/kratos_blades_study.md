@@ -72,3 +72,30 @@ out from the right bracer to the reticle and back.
 Enra's flair on the prop (prop_enra_blade): an oni-fang cleaver - the same forward-curved hooked profile as Kratos'
 blades, but the edge is a row of jagged fangs, the guard is an oni mask with two short horns, the spine and fuller glow
 crimson-orange like cooling iron, and the chain links are black iron with every fourth link an ember-red glowing link.
+
+## 7. The render, as shipped (2026-10-01, evera-84, the user's ask: Kratos' blades in both views, chains that reach, fire on every attack)
+`src/render/ChainBlades.ts` owns the timelines (`swingExt / swingArc / swingPhi`, `throwExt / throwSpin`, `fireK`; the
+`CB_*` constants moved here, Animator re-exports them) and the pieces:
+- **The blade leaves the fist.** `Animator.gunOrbit[i]` (third person: the chain-swing / throw arm branches) and
+  FirstPerson's whip set the pommel's point and facing; `placeGuns` blends the held prop out to it. A light swing takes
+  the blade round him at 0.82 x the sim's 5 m reach from the shoulder, edge along the arc, a little ahead of the hand's
+  bearing; the throw shoots it 0.9 x 7.5 m along the aim, one spin out, one back. `Animator.chainExt[i]` reports how
+  far out it is.
+- **The chain** (`buildChain / layChain / slackCurve`): an instanced run of torus links (iron, every fourth an ember on
+  its own mesh - emissive can't vary per instance) laid along a bezier from the bracer (read off the real forearm bone,
+  0.62 of the way to the hand) to the ring at the pommel; 0.36 x height of chain hangs in a loop at rest, trails the
+  pommel's motion, and pays out taut when the blade flies.
+- **The yoke** (`yokeCurve`): a Catmull-Rom through bracer -> elbow -> shoulder -> nape -> shoulder -> elbow -> bracer,
+  set back 0.1 / 0.21 / 0.25 x height off the bones so it drapes over Enra's pauldrons instead of threading them: the
+  two blades are one chain end to end (the user: "chains connecting both of them").
+- **The fire**: additive flame sheets along the blade (`buildFlame`, a canvas fire texture scrolling and flickering),
+  the blade's own materials driven hot (`heatMaterials` clones them per hand first - the two blades share one Tripo
+  model's materials, and one burning lit the other), the chain's embers flaring, and a ribbon trail (`buildTrail`) of
+  the tip's path, recorded only at the chain's reach (ext > 0.6: the fling out spans metres in a few frames and drew as a
+  slab) and fading by age and by place along the ribbon. `Fx` swaps the hammer crescent for an ember ring + motes along
+  the arc on the sweep, and streaks embers out to the reach on the throw.
+- **Props**: `prop_enra_chainblade` (Tripo, text-to-3D: the Blades of Chaos silhouette with the ring pommel, three
+  links, an oni-mask guard and a glowing fuller; `HELD` falls back to `prop_enra_blade` until it is published) and
+  `prop_enra_bracer` (a chain-wrapped vambrace with the oni plate), worn on each forearm by `CharacterView.loadBracers`.
+Checks: `tests/unit/chain_blades.test.ts` (timelines, slack vs taut, the yoke), `tests/e2e/enra_blades.mjs` (the
+viewer's swing / throw run live for the age then frozen, camera pulled back and up; the yoke from behind; first person).

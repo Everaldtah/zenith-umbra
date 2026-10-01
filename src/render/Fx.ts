@@ -9,7 +9,7 @@ import { FULL } from '../edition';
 import { fangPos } from '../game/abilities';
 import { soulLingers, REBIRTH_COLOR } from '../game/rebirth';
 import { buildFang } from './TomoeProps';
-import { thrownProp } from './HeldProps';
+import { thrownProp, HELD } from './HeldProps';
 import { CharacterView } from './CharacterView';
 import { SpiritDragons } from './SpiritDragon';
 import { ChainCage } from './ChainCage';
@@ -206,7 +206,12 @@ export class Fx {
       } break;
       case 'slash': case 'swing': {
         if (e.kind === 'slash') P.emit(p, n(12), c, { speed: 6, life: 0.3, size: 0.22 });
-        else if (e.actor) {
+        else if (e.actor && HELD[e.actor.def.id]?.chains) {
+          // the Chain Throw: embers streak out along the chain's line to its reach, a flash of fire at the far end
+          const a = e.actor, d = a.aimDir(), R = ('range' in a.def.secondary ? a.def.secondary.range : 7.5) * a.scale, c0 = a.center;
+          for (let k = 1; k <= 12; k++) { const u = k / 12; P.emit({ x: c0.x + d.x * R * u, y: c0.y + d.y * R * u, z: c0.z + d.z * R * u }, n(1), new THREE.Color(k % 3 ? '#ff6a1f' : '#ffd27a'), { speed: 1.2, life: 0.4, size: 0.25, up: 1.2 }); }
+          this.light({ x: c0.x + d.x * R, y: c0.y + d.y * R, z: c0.z + d.z * R }, '#ff6a1f', 7, now, 0.1);
+        } else if (e.actor) {
           // a crescent sweep in front of the attacker
           const a = e.actor, f = a.forward();
           const arc = new THREE.Mesh(new THREE.RingGeometry(1.4 * a.scale, 2.6 * a.scale, 24, 1, -0.9, 1.8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.8, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -218,8 +223,23 @@ export class Fx {
         break;
       }
       case 'hammer': if (e.actor) {
-        // rocket hammer: a wide flat crescent swept across the front, tilted with the swing direction
         const a = e.actor, r = e.r ?? 5, side = e.side ?? 1;
+        if (HELD[a.def.id]?.chains) {
+          // Hellfire Chains: no hammer crescent - the blade's own ribbon (ChainBlades) draws the cut; here the fire it
+          // throws off: a thin ember ring at the chain's reach, burning motes along the arc and a flash of orange
+          const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.78, r * 0.86, 48, 1, -1.6, 3.2), new THREE.MeshBasicMaterial({ color: '#ff6a1f', transparent: true, opacity: 0.5, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+          ring.position.set(a.pos.x, a.pos.y + a.height * 0.52, a.pos.z);
+          ring.rotation.order = 'YXZ'; ring.rotation.y = a.yaw - Math.PI / 2; ring.rotation.x = -Math.PI / 2 + 0.1 * side;
+          this.add(ring, 'fade', now, 0.26);
+          for (let k = 0; k < 14; k++) {
+            const th = a.yaw + (k / 13 - 0.5) * 2.6, d = r * (0.55 + Math.random() * 0.35);
+            P.emit({ x: a.pos.x + Math.sin(th) * d, y: a.pos.y + a.height * (0.4 + Math.random() * 0.3), z: a.pos.z + Math.cos(th) * d }, n(2), new THREE.Color(Math.random() < 0.6 ? '#ff6a1f' : '#ffd27a'), { speed: 2.5, life: 0.45, size: 0.3, up: 2 });
+          }
+          this.light(a.center, '#ff6a1f', 9, now, 0.12);
+          this.shake = Math.max(this.shake, 0.03 / (1 + near / 8));
+          break;
+        }
+        // rocket hammer: a wide flat crescent swept across the front, tilted with the swing direction
         const arc = new THREE.Mesh(new THREE.RingGeometry(r * 0.3, r, 40, 1, -1.5, 3.0), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
         arc.position.set(a.pos.x, a.pos.y + a.height * 0.5, a.pos.z);
         arc.rotation.order = 'YXZ'; arc.rotation.y = a.yaw - Math.PI / 2; arc.rotation.x = -Math.PI / 2 + 0.12 * side; arc.rotation.z = 0;
