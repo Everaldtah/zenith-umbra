@@ -76,6 +76,16 @@ class Particles {
 interface Timed { obj: THREE.Object3D; born: number; dur: number; kind: string; r?: number; from?: V3; to?: V3; actor?: Actor; target?: Actor; }
 
 const ringGeo = new THREE.RingGeometry(0.92, 1, 64);
+/** Hayate's koi water round a thrown shuriken: a flat ring of tide-light the star spins in and a thinner one tilted
+ *  through it, both in the star's plane (XZ of the projectile group, +Z along the flight); the spray comes off per frame */
+function buildWater(color: string): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const a = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.028, 6, 28), mat); a.rotation.x = Math.PI / 2;
+  const b = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.016, 6, 28), mat); b.rotation.x = Math.PI / 2 + 0.5;
+  g.add(a, b);
+  return g;
+}
 
 /** Grand Dohyo: the packed clay of the ring */
 const dohyoClay = () => new THREE.ShaderMaterial({
@@ -576,6 +586,8 @@ export class Fx {
       if (!m && p.mesh) {
         m = new THREE.Group();
         const star = thrownProp(p.mesh, p.owner.def.height * p.owner.scale, CharacterView.warm ?? undefined); star.name = 'spin'; m.add(star);
+        // a ricochet shuriken swims in koi water: the rings turn against the star, swell while it hunts
+        if (p.bounce !== undefined) { const water = buildWater(FXCOL[p.fx] ?? '#5ff2e0'); water.name = 'water'; m.add(water); }
         this.group.add(m); this.projMeshes.set(p.id, m);
       }
       if (!m) {
@@ -596,7 +608,22 @@ export class Fx {
       m.position.set(p.pos.x, p.pos.y, p.pos.z);
       if (p.fx === 'sonic') { const rg = m.getObjectByName('ring'); if (rg) rg.scale.setScalar(0.2 + 0.08 * Math.sin(now * 60 + p.id)); }
       if (p.fx === 'crescent') { const b = m.getObjectByName('spin'); if (b) b.rotation.x = -now * 26; }
-      else if (p.mesh) { const b = m.getObjectByName('spin'); if (b) b.rotation.y = now * (p.spin ?? 30); }
+      else if (p.mesh) {
+        const b = m.getObjectByName('spin'); if (b) b.rotation.y = now * (p.spin ?? 30);
+        const wtr = m.getObjectByName('water');
+        if (wtr) {
+          wtr.rotation.y = -now * 11; wtr.children[1].rotation.x = Math.PI / 2 + 0.5 * Math.sin(now * 7 + p.id);
+          const sc = p.seekTgt ? 1.4 : 1 + 0.15 * (p.bounced ?? 0); wtr.scale.setScalar(sc);
+          // the spray: droplets flung off the rim that fall away behind it, more while it hunts and right after a bounce
+          this.parts.emit(p.pos, p.seekTgt ? 3 : 2, col.clone().lerp(new THREE.Color('#ffffff'), 0.35), { speed: 1.4, life: 0.4, size: 0.1, grav: 6, spread: 0.3 });
+          // ...and a streak of water behind it, so the star reads from across the arena (the chain / cable line, reused)
+          const key = -p.id, sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z) || 1;
+          let line = this.beamMeshes.get(key);
+          if (!line) { line = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })); this.group.add(line); this.beamMeshes.set(key, line); }
+          const L = p.seekTgt ? 2.2 : 1.5;
+          this.orient(line, { x: p.pos.x - p.vel.x / sp * L, y: p.pos.y - p.vel.y / sp * L, z: p.pos.z - p.vel.z / sp * L }, p.pos, 0.09);
+        }
+      }
       const v = new THREE.Vector3(p.vel.x, p.vel.y, p.vel.z);
       if (v.lengthSq() > 0.01) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), v.normalize());
       if (Math.random() < 0.6) this.parts.emit(p.pos, 1, col, { speed: 0.5, life: 0.25, size: p.splash ? 0.3 : 0.14 });

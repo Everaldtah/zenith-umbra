@@ -24,6 +24,9 @@ export interface WeaponDef {
   heal?: boolean;        // beam / projectile heals allies instead of hurting enemies
   mesh?: string;         // projectile drawn as this prop (a manifest id, e.g. Hayate's shuriken), lying flat along its flight
   spin?: number;         // ...spinning about its own flat axis, rad/s (a thrown shuriken: 30)
+  bounce?: number;       // a ricochet shuriken: how many walls it skips off (World.stepProj)
+  seek?: number;         // ...and the perimeter (m, around the thrower) it hunts enemies in after a bounce or a cut
+  note?: string;         // a line under the weapon on the hero panel (what the ricochet does)
   sweep?: boolean;       // melee: a wide two-handed arc (alternating swing sides) instead of a thrust
   delay?: number;        // melee: seconds from the button press to the blow landing (heavy weapons wind up)
   burst?: number;        // rounds per trigger pull (fired burstGap seconds apart); rate is then bursts per second
@@ -267,8 +270,12 @@ export const HEROES: HeroDef[] = [
   {
     id: 'hayate', name: 'Hayate', title: 'The Rebuilt Blade', team: 'zenith', role: 'dps', subrole: 'flanker', frame: 'human', rival: 'seiran', full: true,
     hp: 225, armor: 0, speed: 6.4, height: 1.78, radius: 0.42, color: '#4fe3c1', glow: '#7ff5d8',
-    primary: { kind: 'projectile', name: 'Koi-Scale Shuriken', damage: 27, rate: 1.05, range: 45, speed: 62, burst: 3, burstGap: 0.08, ammo: 24, reload: 1.4, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken', spin: 30 },
-    secondary: { kind: 'projectile', name: 'Fan of Scales', damage: 27, rate: 1.4, range: 38, speed: 62, pellets: 3, spread: 0.11, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken', spin: 30 },
+    // the big koi-scale shuriken (prop_hayate_shuriken_v2, Tripo; the first, smaller one until it is published): every one
+    // skips off up to two walls and, off a wall or out of a body, turns on the next enemy within 12 m of him it hasn't cut
+    // (SEEK_DMG of the damage for each extra target) - a ricochet he can bank round corners
+    primary: { kind: 'projectile', name: 'Koi-Scale Shuriken', damage: 27, rate: 1.05, range: 45, speed: 62, burst: 3, burstGap: 0.08, ammo: 24, reload: 1.4, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken_v2', spin: 30, bounce: 2, seek: 12,
+      note: 'Ricochets off walls, and off a wall or out of an enemy it hunts the next enemy within 12m of you (70% damage per extra target).' },
+    secondary: { kind: 'projectile', name: 'Fan of Scales', damage: 27, rate: 1.4, range: 38, speed: 62, pellets: 3, spread: 0.11, sfx: 'shuriken', fx: 'tide', mesh: 'prop_hayate_shuriken_v2', spin: 30, bounce: 2, seek: 12 },
     ability1: { id: 'currentdash', name: 'Current Dash', key: 'SHIFT', cooldown: 8, desc: 'Dash 15m through enemies, cutting each for 50. Resets when you get an elimination.' },
     ability2: { id: 'mirrorwater', name: 'Mirror Water', key: 'E', cooldown: 8, desc: '2s: the blade comes up and everything that comes at you from in front is turned on it - shots and gunfire go back out where you are aiming, blows stop dead. E again to lower it.', counter: "Turns Seiran's Scatter Current back on him." },
     ult: { id: 'dragongate', name: 'Dragon Gate Blade', key: 'Q', cooldown: 0, charge: 2000, desc: 'Draw the nodachi for 8s: your primary becomes a sweeping blade (110 damage a slash, 5m) that looses the koi-dragon through every cut, and you move 30% faster. Current Dash still resets on an elimination.' },

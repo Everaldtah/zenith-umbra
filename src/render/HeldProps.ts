@@ -44,16 +44,22 @@ export const CARD_GONE: [number, number] = [0.04, 0.24];
 
 export interface HeldProp { group: THREE.Group; kind: Kind }
 
+/** Hayate's koi-scale shuriken: its radius as a fraction of his height (15 cm on him, a 30 cm fuma star - big enough to
+ *  read in his throwing hand in first person and all the way out in flight; Genji's is ~15 cm across) */
+export const SHURIKEN_R = 0.085;
+/** the newest published prop stands in for an id the manifest lacks yet (the big shuriken falls back to the first one) */
+const THROWN_ALT: Record<string, string> = { prop_hayate_shuriken_v2: 'prop_hayate_shuriken' };
+
 /** Hayate's koi-scale shuriken, lying flat (its plane XZ, the normal +Y): the procedural star */
 function shurikenMesh(L: number): THREE.Mesh {
-  const s = new THREE.Shape(), r = 0.045 * L, ri = 0.012 * L;
+  const s = new THREE.Shape(), r = SHURIKEN_R * L, ri = 0.25 * SHURIKEN_R * L;
   for (let k = 0; k < 8; k++) {
     const a = k / 8 * Math.PI * 2 + Math.PI / 8, rr = k % 2 ? ri : r;
     if (k) s.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); else s.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
   }
   s.holes.push(new THREE.Path().absarc(0, 0, ri * 0.45, 0, Math.PI * 2, true));
-  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.003 * L, bevelEnabled: true, bevelThickness: 0.001 * L, bevelSize: 0.0015 * L, bevelSegments: 1 });
-  geo.translate(0, 0, -0.0015 * L);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.005 * L, bevelEnabled: true, bevelThickness: 0.0015 * L, bevelSize: 0.002 * L, bevelSegments: 1 });
+  geo.translate(0, 0, -0.0025 * L);
   const steel = new THREE.MeshStandardMaterial({ color: '#dfe7e3', metalness: 0.85, roughness: 0.25, emissive: new THREE.Color('#4fe3c1'), emissiveIntensity: 0.25 });
   const m = new THREE.Mesh(geo, steel); m.castShadow = true;
   m.rotation.x = -Math.PI / 2;
@@ -82,10 +88,11 @@ function thrownTemplate(id: string, L: number, warm?: (o: THREE.Object3D) => Pro
   if (!e) { e = { tpl: null, loading: null }; thrown.set(id, e); }
   e.loading ??= (async () => {
     await loadManifest();
-    if (!hasProp(id)) return;
-    const m = await propModel(id);
+    const pid = hasProp(id) ? id : THROWN_ALT[id] && hasProp(THROWN_ALT[id]) ? THROWN_ALT[id] : null;
+    if (!pid) return;
+    const m = await propModel(pid);
     if (!m) return;
-    const f = fitFlat(m, 0.045 * L);
+    const f = fitFlat(m, SHURIKEN_R * L);
     if (warm) await warm(f);
     e!.tpl = f;
   })();
@@ -110,8 +117,8 @@ export async function thrownPropReady(id: string, L: number): Promise<THREE.Obje
 /** Hayate's shuriken in his throwing hand whenever the nodachi is on his back (group.userData.swap): held edge-on
  *  between the fingers, the flat facing across the forearm (its normal +X), just past the fist */
 function buildShuriken(L: number): THREE.Group {
-  const g = thrownProp('prop_hayate_shuriken', L);
-  g.rotation.z = -Math.PI / 2; g.position.set(0, 0.012 * L, 0.035 * L);
+  const g = thrownProp('prop_hayate_shuriken_v2', L);
+  g.rotation.z = -Math.PI / 2; g.position.set(0, 0.012 * L, 0.035 * L + SHURIKEN_R * L * 0.9);      // (the big star's centre sits past the fingertips: they pinch its inner blade)
   return g;
 }
 

@@ -383,7 +383,7 @@ export class Game {
     // thrown props (Hayate's shuriken): fitted now and drawn parked with the rest, so the first throw compiles nothing
     for (const a of w.actors) for (const wd of [a.def.primary, a.def.secondary]) {
       const mesh = (wd as { mesh?: string }).mesh;
-      if (mesh && hasProp(mesh)) laterLoads.push(thrownPropReady(mesh, a.def.height * a.scale).then(m => { if (m) warmGroup.add(m); }));
+      if (mesh) laterLoads.push(thrownPropReady(mesh, a.def.height * a.scale).then(m => { if (m) warmGroup.add(m); }));   // (null when no prop, nor a stand-in, is published)
     }
     for (const [hero, id] of Object.entries(DRAGON_MODEL)) if (FULL && w.actors.some(a => a.def.id === hero)) laterLoads.push(riggedModel(id).then(m => { if (m) warmGroup.add(m); }));
     const views = () => [...this.views.values()];

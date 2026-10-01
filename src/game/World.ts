@@ -43,6 +43,8 @@ export const FLOAT_SPEED = 1.2;
 export const PUSH_TIME = 300;
 /** health packs */
 export const PACK = { small: { hp: 75, respawn: 10 }, big: { hp: 250, respawn: 15 } };
+/** a ricochet shuriken: the damage left for each enemy after the first, how hard it turns on its prey (1/s), the life it gets per hunt (s) */
+export const SEEK_DMG = 0.7, SEEK_TURN = 9, SEEK_LIFE = 0.9;
 /** Gantetsu's Taiko Heartbeat: damage taken x(1 - TAIKO_DR) (Mauga's Cardiac Overdrive: 30%) */
 export const TAIKO_DR = 0.3;
 
@@ -59,6 +61,9 @@ export type GameEvent =
 export interface Proj {
   id: number; owner: Actor; team: TeamId; pos: V3; vel: V3; dmg: number; splash: number; heal: boolean;
   fx: string; life: number; r: number; grav: number; special?: string; crit: number; hits: Set<number>; pierce?: boolean; homing?: number; born: number;
+  /** a ricochet shuriken (Hayate): walls left to skip off; the perimeter round the thrower it hunts enemies in after a
+   *  bounce or a cut; the enemy it is hunting now (actor id); Fx draws the water round it while `seekTgt` or a bounce is set */
+  bounce?: number; seek?: number; seekTgt?: number; bounced?: number;
   /** drawn as this prop (WeaponDef.mesh), spinning at `spin` rad/s about its flat axis (Fx.syncProjectiles) */
   mesh?: string; spin?: number;
 }
@@ -496,9 +501,38 @@ export class World {
     return p;
   }
 
+  /**
+   * A ricochet shuriken looks for its next prey: the nearest enemy within `seek` m of the thrower it hasn't cut yet, in
+   * its line of sight. It snaps toward them and keeps turning on them as they move (SEEK_TURN). false = nothing to hunt.
+   */
+  private seekNext(p: Proj): boolean {
+    const o = p.owner, t = this.time;
+    let best: Actor | null = null, bd = Infinity;
+    for (const x of this.actors) {
+      if (!x.alive || x === o || x.team === p.team || p.hits.has(x.id) || x.has('phased', t) || x.has('spawnprot', t)) continue;
+      const d = dist3(x.pos, o.pos);
+      if (d > (p.seek ?? 0) || !this.level.lineOfSight(p.pos, x.center)) continue;
+      if (d < bd) { bd = d; best = x; }
+    }
+    if (!best) { p.seekTgt = 0; return false; }
+    const sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z), c = best.center, v = norm({ x: c.x - p.pos.x, y: c.y - p.pos.y, z: c.z - p.pos.z });
+    p.vel = { x: v.x * sp, y: v.y * sp, z: v.z * sp }; p.seekTgt = best.id; p.life = Math.max(p.life, SEEK_LIFE);
+    return true;
+  }
+
   private stepProj(p: Proj, dt: number): boolean {
     p.life -= dt;
     if (p.life <= 0) { if (p.special) this.projEnd(p, p.pos, null); return false; }
+    // a hunting shuriken keeps turning on its prey; prey lost (dead, cut already, out of sight), it looks for the next
+    if (p.seekTgt) {
+      const x = this.actors.find(a => a.id === p.seekTgt);
+      if (x && x.alive && !p.hits.has(x.id) && !x.has('phased', this.time)) {
+        const sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z), c = x.center, v = norm({ x: c.x - p.pos.x, y: c.y - p.pos.y, z: c.z - p.pos.z });
+        const k = Math.min(1, SEEK_TURN * dt);
+        const nv = norm({ x: p.vel.x / sp * (1 - k) + v.x * k, y: p.vel.y / sp * (1 - k) + v.y * k, z: p.vel.z / sp * (1 - k) + v.z * k });
+        p.vel = { x: nv.x * sp, y: nv.y * sp, z: nv.z * sp };
+      } else if (!this.seekNext(p)) p.life = Math.min(p.life, 0.35);
+    }
     if (p.homing) {
       const cand = this.actors.filter(x => x.alive && (p.heal ? x.team === p.team && x !== p.owner && x.health < x.maxHp : x.team !== p.team));
       const sp = Math.hypot(p.vel.x, p.vel.y, p.vel.z);
@@ -562,10 +596,27 @@ export class World {
       }
       if (p.splash) this.splash(p, hitPos, x);
       p.hits.add(x.id);
+      // a ricochet shuriken out of a body: on to the next enemy in the thrower's perimeter, SEEK_DMG of the damage
+      if (p.seek && !p.heal) {
+        if (!this.seekNext(p)) return false;
+        p.dmg *= SEEK_DMG; p.pos = hitPos;
+        this.fx('hit', hitPos, { color: p.owner.def.glow }); this.sfx('shuriken', hitPos);
+        return true;
+      }
       if (!p.pierce) return false;
     }
     if (tEnd < len) {
       const hp = { x: a.x + dir.x * tEnd, y: a.y + dir.y * tEnd, z: a.z + dir.z * tEnd };
+      // a ricochet shuriken skips off the wall (mirrored on its face) and turns on the nearest enemy in the perimeter
+      if (p.bounce && lh && !(bh && bh.t <= tEnd + 1e-6)) {
+        p.bounce--; p.bounced = (p.bounced ?? 0) + 1;
+        const n = { x: lh.nx, y: lh.ny, z: lh.nz }, k = 2 * (p.vel.x * n.x + p.vel.y * n.y + p.vel.z * n.z);
+        p.vel = { x: p.vel.x - k * n.x, y: p.vel.y - k * n.y, z: p.vel.z - k * n.z };
+        p.pos = { x: hp.x + n.x * 0.08, y: hp.y + n.y * 0.08, z: hp.z + n.z * 0.08 };
+        this.fx('impact', hp, { color: p.owner.def.glow, mat: lh.mat, n }); this.sfx('impact_metal', hp);
+        this.seekNext(p);
+        return true;
+      }
       if (bh && bh.t <= tEnd + 1e-6) this.hitBarrier(bh.owner, p.dmg, p.owner, hp);
       else this.fx('impact', hp, { color: p.owner.def.glow });
       if (p.special) this.projEnd(p, hp, null);

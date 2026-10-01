@@ -178,12 +178,47 @@ describe('Koi-Scale Shuriken: a prop projectile', () => {
     shoot(w, h, e);
     const mine = w.projs.filter(p => p.owner === h);
     expect(mine.length).toBeGreaterThan(0);
-    for (const p of mine) { expect(p.mesh).toBe('prop_hayate_shuriken'); expect(p.spin).toBe(30); }
+    for (const p of mine) { expect(p.mesh).toBe('prop_hayate_shuriken_v2'); expect(p.spin).toBe(30); }
     // the fan (RMB) throws the same shuriken
     fire(w, h, h.def.secondary as WeaponDef, 'secondary');
-    expect(w.projs.filter(p => p.owner === h && p.mesh === 'prop_hayate_shuriken').length).toBeGreaterThan(mine.length);
+    expect(w.projs.filter(p => p.owner === h && p.mesh === 'prop_hayate_shuriken_v2').length).toBeGreaterThan(mine.length);
     // other heroes' projectiles carry none
     shoot(w, e, h);
     expect(w.projs.filter(p => p.owner === e).every(p => !p.mesh)).toBe(true);
   });
 });
+
+describe('Koi-Scale Shuriken: the ricochet', () => {
+  it('skips off the floor (mirrored on it) instead of dying there, and turns on an enemy within 12 m of him', () => {
+    const w = arena(), h = place(w, 'hayate', 'zenith', 0, 0, 0), e = place(w, 'kagemaru', 'umbra', 2, 9, Math.PI);
+    // thrown at the floor 4 m ahead: a plain projectile ends there, a ricochet shuriken comes up off it
+    aimAt(h, { x: h.pos.x, y: h.pos.y, z: h.pos.z + 4 });
+    fire(w, h, h.def.primary as WeaponDef, 'primary');
+    const p = w.projs.find(q => q.owner === h)!;
+    expect(p.bounce).toBe(2);
+    let bounced = false, hunted = false;
+    run(w, 0.4, () => { if (p.bounced) bounced = true; if (p.seekTgt === e.id) hunted = true; });
+    expect(bounced).toBe(true);
+    expect(hunted).toBe(true);                        // ...and off the floor it turned on the enemy beside the lane
+    expect(e.hp).toBeLessThan(e.def.hp);              // and found him (within 0.4 s: 9 m at 62 m/s)
+    expect(w.projs.includes(p)).toBe(false);          // no one else in his perimeter: it ends in him
+  });
+  it('out of one enemy it hunts the next one in his perimeter for 70% of the damage; one 20 m off is left alone', () => {
+    const w = arena(), h = place(w, 'hayate', 'zenith', 0, 0, 0), a = place(w, 'kagemaru', 'umbra', 0, 10, Math.PI), b = place(w, 'enra', 'umbra', 6, 6, Math.PI);
+    shoot(w, h, a);
+    // (only the first star of the burst: the follow-ups are scheduled by updateWeapons, not by fire())
+    const stars = w.projs.filter(q => q.owner === h);
+    expect(stars.length).toBe(1);
+    run(w, 0.9);
+    expect(a.def.hp - a.hp).toBeGreaterThanOrEqual(27 - 0.01);
+    expect(b.def.hp - b.hp).toBeCloseTo(27 * 0.7, 0);          // the second cut, less of the damage
+    // the same again with the second enemy out of the perimeter: the star stops in the first
+    const w2 = arena(), h2 = place(w2, 'hayate', 'zenith', 0, 0, 0), a2 = place(w2, 'kagemaru', 'umbra', 0, 10, Math.PI), far = place(w2, 'enra', 'umbra', 0, 24, Math.PI);
+    shoot(w2, h2, a2);
+    run(w2, 1.2);
+    expect(a2.hp).toBeLessThan(a2.def.hp);
+    expect(far.hp).toBe(far.def.hp);
+    expect(w2.projs.some(q => q.owner === h2)).toBe(false);
+  });
+});
+

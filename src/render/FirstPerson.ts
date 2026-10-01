@@ -415,7 +415,10 @@ export class FirstPersonArms {
       const fire = this.swings % 2 === 0 && this.clips.has('fp_fire2') ? 'fp_fire2' : 'fp_fire';
       // chain blades (Enra): the fists clips are punches - a swing or a throw is the procedural whip / throw instead
       // (proc below), the clips resuming at the idle when it's done
-      if (HELD[a.def.id]?.chains && (kind === 'primary' || kind === 'secondary') && t - a.anim.attackAt < CB_SWING) {
+      // ...and Hayate's shuriken throws (Genji's thrust and fan, proc below) while the nodachi is sheathed: the baked
+      // fire clip is a generic flick
+      const throwing = a.def.id === 'hayate' && !a.has('dragonblade', t) && (kind === 'primary' || kind === 'secondary') && t - a.anim.attackAt < 0.5;
+      if ((HELD[a.def.id]?.chains && (kind === 'primary' || kind === 'secondary') && t - a.anim.attackAt < CB_SWING) || throwing) {
         this.oneShot = null;
         this.proc(t, newAttack);
         driveFingers(this.view.fingers, a, t, dt, { fp: true });
@@ -551,7 +554,26 @@ export class FirstPersonArms {
     } else if (kind !== 'punch' && atk < 0.5 && S.grip !== 'bow') {
       // ranged: per-grip kick
       const r = Math.max(0, 1 - atk / 0.18);
-      if (S.grip === 'kunai') { const u = atk / 0.3; R = lerp(R, u < 0.35 ? [0.24, -0.04, 0.16] : [0.06, -0.12, 0.58], bump(Math.min(1, u))); src = 'throw'; }
+      if (S.grip === 'kunai' && a.def.id === 'hayate') {
+        // Genji's throws (docs/research/genji_shuriken_study.md). Primary: each shuriken is its own short straight thrust
+        // of the forearm at the reticle from low right, the wrist flicking as it leaves, the hand snapping back for the
+        // next (the sim fires the three 0.08 s apart and resets attackAt each, so this plays once per star). Fan: the
+        // hand loads across the body low left, whips back across the bottom of the view and lets the fan go at the
+        // middle, following through to the right.
+        if (kind === 'secondary') {
+          const load: V = [-0.2, -0.27, 0.36], rel: V = [0.3, -0.19, 0.5];
+          R = atk < 0.08 ? lerp(S.R, load, smooth(atk / 0.08)) : atk < 0.26 ? lerp(load, rel, smooth((atk - 0.08) / 0.18)) : lerp(rel, S.R, smooth((atk - 0.26) / 0.24));
+          const roll = atk < 0.08 ? -1.1 * smooth(atk / 0.08) : atk < 0.26 ? -1.1 + 1.9 * smooth((atk - 0.08) / 0.18) : 0.8 * (1 - smooth((atk - 0.26) / 0.24));
+          wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.3, 0, roll));
+          src = 'fan';
+        } else {
+          // (no pull-back toward the lens: Genji's hand only goes forward, and a hand brought nearer fills the frame)
+          const back: V = add(S.R, [0.02, 0.02, 0]), out: V = [0.1, -0.17, 0.62];     // (the hand ends below the reticle, not on it)
+          R = atk < 0.1 ? lerp(back, out, smooth(atk / 0.1)) : lerp(out, S.R, smooth((atk - 0.1) / 0.3));
+          wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.9 * bump(Math.min(1, atk / 0.14)), 0, 0));
+          src = 'throw';
+        }
+      } else if (S.grip === 'kunai') { const u = atk / 0.3; R = lerp(R, u < 0.35 ? [0.24, -0.04, 0.16] : [0.06, -0.12, 0.58], bump(Math.min(1, u))); src = 'throw'; }
       else if (S.grip === 'caster') { R = add(R, [-0.03, 0.04, 0.12], bump(atk / 0.22)); src = 'flick'; }
       else { R = add(R, [0, 0.02, -S.recoil], r); if (L) L = add(L, [0, 0.02, -S.recoil], r); wristR = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5 * r, 0, 0)); src = 'recoil'; }
     }

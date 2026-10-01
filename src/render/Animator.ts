@@ -1441,6 +1441,24 @@ export class Animator {
         const hand = shoulder.clone().addScaledVector(aimDir, (l1 + l2) * (0.35 + 0.63 * Math.max(this.punchExt, -0.35)));
         hand.x += -side * (l1 + l2) * 0.12; hand.y -= 0.05 * (l1 + l2);
         over = { hand, w: this.punchW };
+      } else if (i === 1 && s.hero === 'hayate' && !s.melee && this.guardW < 0.02 && (s.attackKind === 'primary' || s.attackKind === 'secondary') && s.attackAge < 0.5) {
+        // Hayate's throws (Genji's, docs/research/genji_shuriken_study.md): a shuriken is a short straight thrust of the
+        // throwing arm along the aim from the hip, snapped back for the next; the fan loads across the body and whips
+        // out level to his own side
+        const t = s.attackAge, Lr = l1 + l2, ez = (u: number) => u * u * (3 - 2 * u);
+        const at = (x: number, y: number, z: number) => shoulder.clone().add(new THREE.Vector3(side * x, y, z).multiplyScalar(Lr).applyQuaternion(Dc));
+        const home = at(0.25, -0.5, 0.35);
+        let hand: THREE.Vector3, w = 1;
+        if (s.attackKind === 'secondary') {
+          const load = at(-0.45, -0.35, 0.55), rel = at(0.7, -0.2, 0.62);
+          hand = t < 0.08 ? home.clone().lerp(load, ez(t / 0.08)) : t < 0.26 ? load.clone().lerp(rel, ez((t - 0.08) / 0.18)) : rel.clone().lerp(home, ez((t - 0.26) / 0.24));
+          if (t >= 0.26) w = 1 - 0.6 * ez((t - 0.26) / 0.24);
+        } else {
+          const out = shoulder.clone().addScaledVector(aimDir, 0.95 * Lr).add(new THREE.Vector3(side * 0.05 * Lr, -0.08 * Lr, 0));
+          const k = t < 0.1 ? ez(t / 0.1) : 1 - ez(Math.min(1, (t - 0.1) / 0.3));
+          hand = home.clone().lerp(out, k); w = Math.max(0.4, k);
+        }
+        over = { hand, w, pole: new THREE.Vector3(side * 0.7, -0.6, -0.4) };
       } else if (carry?.chains && s.attackKind === 'primary' && s.attackAge < CB_SWING && i === ((s.swingSide ?? 1) > 0 ? 1 : 0)) {
         // Hellfire Chains, a light swing (Kratos' Blades of Chaos, docs/research/kratos_blades_study.md): the swinging
         // hand alternates with the sweep side; it winds back to its own side, whips through a wide flat arc across the

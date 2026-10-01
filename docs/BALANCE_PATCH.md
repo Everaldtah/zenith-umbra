@@ -65,7 +65,11 @@ transformation ultimate are allowed to be.*
 starting at 2.5 s instead of 5 (it was 12 HP/s after 3 s). Crimson Effigy 1900 -> 2000.
 
 **Hayate** - Health 200 -> 225. Current Dash cooldown 7 -> 8 s. Dragon Gate Blade 15 -> 8 s (Dragonblade runs ~6),
-cost 1800 -> 2000.
+cost 1800 -> 2000. *Later the same day:* the Koi-Scale Shuriken (both fires) ricochets: it skips off up to two walls, and
+off a wall or out of an enemy it turns on the nearest enemy within 12 m of him it hasn't cut, for 70% of the damage
+per extra target (`SEEK_DMG`). The star is twice the size (a 30 cm fuma shuriken) and its hit radius is 0.2 m
+(Overwatch's Season 9 projectile sizes). *The cost of a shuriken that comes round corners is paid in the per-target
+falloff and the 12 m leash on the hunt; a full burst into a crowd is still 27 + 19 + 13 per star.*
 
 **Seiran** - Scatter Current 32 -> 25 a scale (five scales: 160 -> 125, so it no longer one-shots a 225 hero point
 blank - the reason Overwatch removed Scatter Arrow). Riverstep cooldown 5 -> 4 s. Twin Koi Torrent 1900 -> 2000.

@@ -253,7 +253,7 @@ export class Menu {
         <div class="meta"><span class="${d.team}">${TEAM_NAME[d.team]}</span><span>${d.role.toUpperCase()}</span><span>${d.hp + d.armor} HP${d.armor ? ` (${d.armor} armor)` : ''}</span>${d.frame === 'flyer' ? '<span>FLYER</span>' : ''}${d.frame === 'mech' ? '<span>MECHA</span>' : ''}</div>
         ${d.pilot ? `<p class="pilot"><img src="${BASE}img/portrait_${d.pilot.id}.webp" onerror="this.remove()"><span><b>Pilot: ${d.pilot.name}</b> ${d.pilot.bio}</span></p>` : ''}
         <p class="lore">${d.lore}</p>
-        ${ab('LMB', pr.name ?? (pr.kind === 'charge' ? 'Charged shot' : pr.kind === 'melee' ? 'Melee strikes' : pr.kind === 'beam' ? 'Close-range stream' : 'Primary fire'), `${pr.damage}${pr.pellets ? `×${pr.pellets}` : ''} dmg${pr.kind === 'beam' ? '/s' : ''}${pr.splash ? `, ${pr.splash}m splash` : ''}${pr.ammo ? `, ${pr.ammo} rounds` : ''}${pr.sweep ? `, ${pr.range}m sweeping arc` : ''}`)}
+        ${ab('LMB', pr.name ?? (pr.kind === 'charge' ? 'Charged shot' : pr.kind === 'melee' ? 'Melee strikes' : pr.kind === 'beam' ? 'Close-range stream' : 'Primary fire'), `${pr.damage}${pr.pellets ? `×${pr.pellets}` : ''} dmg${pr.kind === 'beam' ? '/s' : ''}${pr.splash ? `, ${pr.splash}m splash` : ''}${pr.ammo ? `, ${pr.ammo} rounds` : ''}${pr.sweep ? `, ${pr.range}m sweeping arc` : ''}${pr.note ? `. ${pr.note}` : ''}`)}
         ${isAbility(S) ? ab('RMB', S.name, S.desc, S.counter) : ab('RMB', S.heal ? 'Healing' : 'Alt fire', S.heal ? `Heals allies ${S.damage}${S.kind === 'beam' ? '/s' : ''}` : `${S.damage} dmg`)}
         ${ab('SHIFT', d.ability1.name, d.ability1.desc, d.ability1.counter)}
         ${ab('E', d.ability2.name, d.ability2.desc, d.ability2.counter)}
