@@ -23,6 +23,14 @@ await p.evaluate(() => { window.__zu.game.input.mouse.l = true; }); await wait(4
 await wait(50); await shot('fp_throw_b');
 await p.evaluate(() => { window.__zu.game.input.mouse.l = false; }); await wait(140); await shot('fp_throw_c');
 await wait(500);
+// a star thrown at the floor 3 m ahead, caught twice as it skips up with its water (first person, looking down)
+await p.evaluate(() => { const g = window.__zu.game; g.camPitch = g.input.pitch = -0.75; });
+await wait(300);
+await p.evaluate(() => { window.__zu.game.input.mouse.l = true; }); await wait(25); await shot('fp_skip_a');
+await p.evaluate(() => { window.__zu.game.input.mouse.l = false; }); await wait(45); await shot('fp_skip_b');
+await wait(300);
+await p.evaluate(() => { const g = window.__zu.game; g.camPitch = g.input.pitch = 0; });
+await wait(600);
 // the fan: loaded across the body, then the sweep
 await p.evaluate(() => { window.__zu.game.input.mouse.r = true; }); await wait(70); await shot('fp_fan_load');
 await p.evaluate(() => { window.__zu.game.input.mouse.r = false; }); await wait(110); await shot('fp_fan_sweep');
