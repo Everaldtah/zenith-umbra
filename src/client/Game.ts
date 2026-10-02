@@ -244,7 +244,7 @@ export class Game {
     const pr = this.renderer.getPixelRatio(), W = Math.max(1, Math.round(innerWidth * pr)), H = Math.max(1, Math.round(innerHeight * pr));
     const rt = new THREE.WebGLRenderTarget(W, H, {
       type: THREE.HalfFloatType, samples: FULL && Q.antialias ? 4 : 0,
-      depthTexture: ao ? new THREE.DepthTexture(W, H) : undefined,
+      depthTexture: ao ? new THREE.DepthTexture(W, H) : null,
     });
     rt.texture.name = 'EffectComposer.rt1';
     const c = new EffectComposer(this.renderer, rt);
