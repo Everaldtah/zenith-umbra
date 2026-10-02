@@ -3,6 +3,7 @@
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 // Use the discrete GPU and let audio start without a click (the game unlocks it on first input anyway).
@@ -11,6 +12,34 @@ app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Engine core (src/engine), the shell's part:
+// - WebGL on ANGLE's Direct3D 11 backend, explicitly (no silent fallback to a slower one)
+// - never throttle the game: not when an overlay (stream chat, a pinned video, the Game Bar) covers the window -
+//   Windows' native occlusion tracking would otherwise slow it as "hidden" - and not in the background
+// - a larger V8 young generation: minor GCs run less often, so fewer of them land inside a frame
+app.commandLine.appendSwitch('use-angle', 'd3d11');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('js-flags', '--max-semi-space-size=32');
+// Uncapped mode (vsync off: lower input latency, may tear): launch with --uncapped, or put {"vsync": false} in
+// %APPDATA%/ZenithUmbra/engine.json. The in-game frame cap still applies on top.
+function enginePrefs() {
+  try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'engine.json'), 'utf8')); } catch { return {}; }
+}
+if (process.argv.includes('--uncapped') || enginePrefs().vsync === false) {
+  app.commandLine.appendSwitch('disable-gpu-vsync');
+  app.commandLine.appendSwitch('disable-frame-rate-limit');
+}
+
+/** the game's renderer and GPU processes above normal priority, like a native game under Windows Game Mode */
+function boostProcesses() {
+  for (const m of app.getAppMetrics()) {
+    if (m.type !== 'GPU' && m.type !== 'Tab') continue;
+    try { os.setPriority(m.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL); } catch { /* not permitted: leave it */ }
+  }
+}
 
 const ROOT = path.join(__dirname, 'game');
 const TYPES = {
@@ -45,9 +74,10 @@ app.whenReady().then(async () => {
   win = new BrowserWindow({
     width: 1600, height: 900, fullscreen: true, backgroundColor: '#000000', show: false,
     title: 'ZENITH//UMBRA', icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true,
-    webPreferences: { backgroundThrottling: false, contextIsolation: true, sandbox: true },
+    webPreferences: { backgroundThrottling: false, contextIsolation: true, sandbox: true, spellcheck: false },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { win.show(); boostProcesses(); setTimeout(boostProcesses, 5000); });
+  win.webContents.on('render-process-gone', () => setTimeout(boostProcesses, 3000));
   // F11 toggles fullscreen (Esc stays free for the in-game pause menu)
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }

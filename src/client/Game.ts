@@ -38,6 +38,7 @@ import { DRAGON_MODEL } from '../render/SpiritDragon';
 import { FX_KINDS, compileFor, loadsIdle, nextFrame, showProgress, sleep, texturesOf, uploadTextures, warmObject } from './Preload';
 import { animLibrary } from '../render/ClipLibrary';
 import { sfx } from '../audio/Sfx';
+import { EngineCore } from '../engine/EngineCore';
 import { Input, KEYS } from './Input';
 import { Hud } from './Hud';
 import { AiLab } from './AiLab';
@@ -111,6 +112,8 @@ export class Game {
   paused = false;
   acc = 0;
   last = performance.now();
+  /** frame pacing, render interpolation, GPU timing, dynamic resolution + FSR (src/engine) */
+  engine: EngineCore;
   fpsAvg = 60;
   camYaw = 0; camPitch = 0;
   /** first person, Overwatch-style: some abilities pull the camera out to third person while they last (Reinhardt's
@@ -165,6 +168,7 @@ export class Game {
     // three r186 removed PCFSoftShadowMap (it silently switches to PCF on the first shadow render - after the preload
     // has compiled every shader for the old type, so they'd all compile again in play)
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.engine = new EngineCore(this.renderer);
     host.append(this.renderer.domElement);
     this.renderer.domElement.className = 'game-canvas';
     this.input = new Input(this.renderer.domElement);
@@ -189,7 +193,8 @@ export class Game {
     this.input.settings = s;
     const Q = quality(s), v = s.video, o = s.sound, A = s.access;
     if (!v.dynamicRes) this.dynScale = 1;
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * Q.pixelRatio * this.dynScale);
+    this.engine.dynres.reset(this.dynScale);
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * (this.engine.on ? 1 : Q.pixelRatio * this.dynScale));
     this.renderer.shadowMap.enabled = Q.shadows > 0;
     const st = THREE.PCFShadowMap;             // (softShadows: PCFSoftShadowMap is gone in r186, see the constructor)
     if (this.renderer.shadowMap.type !== st) { this.renderer.shadowMap.type = st; this.renderer.shadowMap.needsUpdate = true; }
@@ -202,6 +207,7 @@ export class Game {
     sfx.applyMix();
     this.camera.fov = s.fov * 0.75;       // horizontal-ish FOV feel for 16:9
     this.buildComposer();
+    this.applyScale();
     // brightness / contrast / colour-blind correction on the final picture
     const cb = colorBlindFilter(A.colorblind, A.cbStrength);
     this.renderer.domElement.style.filter = [v.brightness !== 1 ? `brightness(${v.brightness.toFixed(2)})` : '', v.contrast !== 1 ? `contrast(${v.contrast.toFixed(2)})` : '', cb].filter(Boolean).join(' ');
@@ -240,6 +246,7 @@ export class Game {
     if (Q.fxaa) c.addPass(new FXAAPass());
     if (sharp) { const p = new ShaderPass(SHARPEN); p.uniforms.amount.value = v.sharpen / 100 * 0.6; c.addPass(p); }
     this.composer = c;
+    this.engine.finishComposer(c);
     if (this.bloom && this.match) { const day = FULL && this.match.world.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
       if (FULL && this.match.world.map.bloom) [this.bloom.threshold, this.bloom.strength] = this.match.world.map.bloom; }
   }
@@ -273,6 +280,18 @@ export class Game {
       if (m !== 'windowed' && !full) document.documentElement.requestFullscreen?.().catch(() => { /* needs a user gesture */ });
       else if (m === 'windowed' && full) document.exitFullscreen?.().catch(() => { /* ignore */ });
     } catch { /* not allowed here */ }
+  }
+
+  /** the render scale (setting x dynamic): with the engine, the canvas stays at native size and only the post chain
+   *  runs scaled - FSR resamples to the screen, the first-person pass draws at native; without a post chain (or with
+   *  the engine off) the canvas itself is scaled, as before */
+  private applyScale() {
+    const Q = quality(this.settings), native = Math.min(devicePixelRatio, 2), scale = Q.pixelRatio * this.dynScale;
+    if (this.engine.on && this.composer) {
+      if (this.renderer.getPixelRatio() !== native) this.renderer.setPixelRatio(native);
+      this.composer.setPixelRatio(native * scale);
+      this.engine.setScale(scale);
+    } else this.renderer.setPixelRatio(native * scale);
   }
 
   resize() {
@@ -582,12 +601,20 @@ export class Game {
   private loop(tms: number) {
     requestAnimationFrame(t => this.loop(t));
     const Q = quality(this.settings), v = this.settings.video;
-    let dt = Math.min(0.1, (tms - this.last) / 1000);
-    if (dt < 1 / Q.maxFps - 0.002) return;
+    let dt: number;
+    if (this.engine.on) {
+      dt = this.engine.frame(tms, v.fpsCap);
+      if (dt < 0) return;
+    } else {
+      dt = Math.min(0.1, (tms - this.last) / 1000);
+      if (dt < 1 / Q.maxFps - 0.002) return;
+    }
     this.last = tms;
     if (dt > 0) this.fpsAvg += (1 / dt - this.fpsAvg) * 0.05;
-    // dynamic render scale: hold the frame-rate target (the cap, or 60) by trading resolution, a step at a time
-    if (v.dynamicRes && this.running && tms - this.dynAt > 500) {
+    // dynamic render scale: the engine follows the GPU's measured load (src/engine/DynamicResolution.ts)
+    if (this.engine.on && v.dynamicRes && this.running) {
+      if (this.engine.updateDynRes(tms, v.fpsCap)) { this.dynScale = this.engine.dynres.scale; this.applyScale(); }
+    } else if (v.dynamicRes && this.running && tms - this.dynAt > 500) {
       this.dynAt = tms;
       const target = v.fpsCap || 60, prev = this.dynScale;
       if (this.fpsAvg < target * 0.92) this.dynScale = Math.max(0.5, this.dynScale - 0.05);
@@ -640,6 +667,7 @@ export class Game {
         this.acc += dt * this.timeScale;
         let steps = 0;
         while (this.acc >= DT && steps < 16 * Math.max(1, this.timeScale)) {
+          this.engine.beforeStep(w);
           w.step(DT); this.acc -= DT; steps++;
           this.dispatch();
         }
@@ -647,8 +675,11 @@ export class Game {
         this.hostSync?.flush();
       }
     }
-    // ---- views
+    // ---- views (from here to the HUD everything reads the poses at the shown instant, between the last two steps)
+    this.engine.beginView(w, this.clientSync ? 1 : this.acc / DT, me);
     const viewer = { team: me?.team ?? 'zenith', sees: (a: Actor) => !me || w.perceivable(me, a) };
+    const vdt = dt * (this.paused ? 0 : this.timeScale), showcase = w.mode === 'gallery';
+    this.engine.anim.begin(this.camera, innerHeight);
     for (const a of w.actors) {
       // the World swaps hero defs (Tenkai-Oh's pilot ejecting / calling the mech back): rebuild that actor's view
       const old = this.views.get(a.id);
@@ -656,7 +687,11 @@ export class Game {
       if (a.isSummon && !a.def.model) { this.swarm ??= new PuppetSwarm(this.scene); continue; }
       if (!this.views.has(a.id)) this.addView(a, viewer.team);
       const v = this.views.get(a.id)!;
-      v.update(dt * (this.paused ? 0 : this.timeScale), w.time, viewer);
+      // animation LOD: small / off-screen heroes re-pose at a reduced rate; between updates only the root follows
+      const always = a === me || showcase || !a.alive || a.isBoss || !!a.def.holo || !!a.forced || a.def.id === 'susanoo' || a.has('knockdown', w.time) || v.anim.down > 0 || this.bossCam?.actor === a;
+      const adt = this.engine.anim.step(v, a, vdt, always);
+      if (adt >= 0) v.update(adt, w.time, viewer);
+      else { v.group.position.set(a.pos.x, a.pos.y, a.pos.z); v.group.rotation.y = a.yaw; }
       if (a === me && this.view === 'first' && this.abilityCam < 0.08) v.group.visible = false;
     }
     // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
@@ -681,24 +716,29 @@ export class Game {
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     if (FULL && !this.paused) this.sound.frame(w, me, this.camera, dt);
     // ---- render
-    if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    this.engine.render(this.scene, () => { if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera); });
     if (this.fp && wantFp) {
       // viewmodel pass: own depth so the arms never clip into walls; always to the screen, whatever target the passes
       // before it left bound
       const r = this.renderer;
       r.setRenderTarget(null); r.autoClear = false; r.localClippingEnabled = true; r.clearDepth(); r.render(this.fp.scene, this.fp.camera); r.autoClear = true; r.localClippingEnabled = false;
     }
+    this.engine.endRender();
     this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.video.perfStats !== 'off' ? this.fpsAvg : 0, this.input.held('score'), this.spectateLabel());
     if (this.settings.video.perfStats === 'advanced') {
-      const ri = this.renderer.info, pr = this.renderer.getPixelRatio();
-      this.hud.perf([`${this.fpsAvg.toFixed(0)} FPS  ${(1000 / Math.max(1, this.fpsAvg)).toFixed(1)} ms`, `render ${Math.round(innerWidth * pr)}x${Math.round(innerHeight * pr)} (${Math.round(pr / Math.min(devicePixelRatio, 2) * 100)}%)`,
-        `draws ${ri.render.calls}  tris ${(ri.render.triangles / 1000).toFixed(0)}k`, `audio ${sfx.voices} voices  load ${(sfx.load.avg * 100).toFixed(0)}% (peak ${(sfx.load.peak * 100).toFixed(0)}%)`, `sim ${IS_DESKTOP ? 120 : 60} Hz  heroes ${w.actors.length}`]);
+      const ri = this.renderer.info, e = this.engine, es = e.on && this.composer;
+      const pr = es ? Math.min(devicePixelRatio, 2) * quality(this.settings).pixelRatio * this.dynScale : this.renderer.getPixelRatio();
+      this.hud.perf([`${this.fpsAvg.toFixed(0)} FPS  ${(1000 / Math.max(1, this.fpsAvg)).toFixed(1)} ms`, `render ${Math.round(innerWidth * pr)}x${Math.round(innerHeight * pr)} (${Math.round(pr / Math.min(devicePixelRatio, 2) * 100)}%)${es && e.fsr.enabled ? ' ' + e.fsr.mode.toUpperCase() : ''}`,
+        `draws ${ri.render.calls}  tris ${(ri.render.triangles / 1000).toFixed(0)}k`, `audio ${sfx.voices} voices  load ${(sfx.load.avg * 100).toFixed(0)}% (peak ${(sfx.load.peak * 100).toFixed(0)}%)`, `sim ${IS_DESKTOP ? 120 : 60} Hz  heroes ${w.actors.length}`,
+        ...(e.on ? [`CPU ${e.cpuMs.toFixed(1)} ms (render ${e.renderMs.toFixed(1)})  GPU ${e.gpu.ms >= 0 ? e.gpu.ms.toFixed(1) + ' ms' : 'n/a'}`, `display ${e.pacer.refreshHz.toFixed(0)} Hz${e.pacer.vsynced ? ' vsync' : ''}  interp ${e.interp.alpha.toFixed(2)}`, `anim LOD ${e.anim.updated} full / ${e.anim.held} held`] : [])]);
     } else this.hud.perf(null);
+    this.engine.graph.show(this.host, this.engine.on && this.settings.video.perfStats === 'advanced');
     if (this.lab && w.mode === 'aitest') {
       this.lab.frame(w, this.views, this.fx, dt * this.timeScale, this.renderer);
       if (Math.round(w.time * 60) % 30 === 0) this.lab.render();
     }
+    this.engine.endView();
     // ---- campaign cues (boss intros)
     const dir = this.director;
     if (dir && !this.clientSync) for (const ev of dir.events.splice(0)) {
