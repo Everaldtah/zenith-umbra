@@ -2,6 +2,7 @@
 // site stays light and the full game stays a download. The desktop packager (desktop/build.mjs) runs `vite build`
 // itself and keeps everything.
 //   - anim/            the clip library and first-person clips (the web edition animates procedurally)
+//   - env/pbr/, fx/    CC0 map surfaces + HDRIs and gunfire sprites (desktop rendering)
 //   - sfx/             the recorded sound bank and voice lines (the web edition synthesises its sounds)
 //   - Gantetsu, Hibiki, Tomoe, Hayate, Seiran (desktop roster)
 //   - the new maps     props, skies, textures, key art for Hanabi Harbor, Cloudstep Terraces, Kagura Avenue,
@@ -27,6 +28,10 @@ const each = (dir, test) => { const d = path.join(DIST, dir); if (fs.existsSync(
 
 rm(path.join(DIST, 'anim'));
 rm(path.join(DIST, 'sfx'));
+// the desktop edition's CC0 surfaces + HDRIs (env/pbr, ~55 MB) and gunfire sprites (fx): the web edition paints its
+// arenas with the generated textures and the studio-room lighting
+rm(path.join(DIST, 'env', 'pbr'));
+rm(path.join(DIST, 'fx'));
 each('models', f => FULL_HEROES.some(h => f.startsWith(h + '.') || f.startsWith(h + '_')) || [...Object.values(PROP_PREFIX), ...HERO_PROPS].some(p => f.startsWith(p)));
 each('env', f => FULL_MAPS.some(m => f.includes(`_${m}`)));
 each('img', f => FULL_MAPS.some(m => f === `map_${m}.webp`) || FULL_HEROES.some(h => f.includes(h)));

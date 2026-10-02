@@ -1,0 +1,379 @@
+{
+ "sets": {
+  "asphalt_02": {
+   "tile": 5.0,
+   "metal": false,
+   "n": "asphalt_02_n.webp",
+   "arm": "asphalt_02_arm.webp"
+  },
+  "brick_wall_10": {
+   "tile": 3.0,
+   "metal": false,
+   "n": "brick_wall_10_n.webp",
+   "arm": "brick_wall_10_arm.webp"
+  },
+  "ceramic_roof_01": {
+   "tile": 2.5,
+   "metal": false,
+   "n": "ceramic_roof_01_n.webp",
+   "arm": "ceramic_roof_01_arm.webp"
+  },
+  "cliff_side": {
+   "tile": 8.0,
+   "metal": false,
+   "n": "cliff_side_n.webp",
+   "arm": "cliff_side_arm.webp"
+  },
+  "concrete_floor_02": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "concrete_floor_02_n.webp",
+   "arm": "concrete_floor_02_arm.webp"
+  },
+  "concrete_pavement": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "concrete_pavement_n.webp",
+   "arm": "concrete_pavement_arm.webp"
+  },
+  "cracked_red_ground": {
+   "tile": 5.0,
+   "metal": false,
+   "n": "cracked_red_ground_n.webp",
+   "arm": "cracked_red_ground_arm.webp"
+  },
+  "dry_ground_rocks": {
+   "tile": 5.0,
+   "metal": false,
+   "n": "dry_ground_rocks_n.webp",
+   "arm": "dry_ground_rocks_arm.webp"
+  },
+  "grassy_cobblestone": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "grassy_cobblestone_n.webp",
+   "arm": "grassy_cobblestone_arm.webp"
+  },
+  "grey_roof_tiles": {
+   "tile": 2.5,
+   "metal": false,
+   "n": "grey_roof_tiles_n.webp",
+   "arm": "grey_roof_tiles_arm.webp"
+  },
+  "grey_roof_tiles_02": {
+   "tile": 2.5,
+   "metal": false,
+   "n": "grey_roof_tiles_02_n.webp",
+   "arm": "grey_roof_tiles_02_arm.webp"
+  },
+  "japanese_cedar_planks": {
+   "tile": 3.0,
+   "metal": false,
+   "n": "japanese_cedar_planks_n.webp",
+   "arm": "japanese_cedar_planks_arm.webp"
+  },
+  "japanese_stone_wall": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "japanese_stone_wall_n.webp",
+   "arm": "japanese_stone_wall_arm.webp"
+  },
+  "marble_01": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "marble_01_n.webp",
+   "arm": "marble_01_arm.webp"
+  },
+  "metal_plate": {
+   "tile": 2.0,
+   "metal": true,
+   "n": "metal_plate_n.webp",
+   "arm": "metal_plate_arm.webp"
+  },
+  "monastery_stone_floor": {
+   "tile": 4.0,
+   "metal": false,
+   "n": "monastery_stone_floor_n.webp",
+   "arm": "monastery_stone_floor_arm.webp"
+  },
+  "old_sandstone_02": {
+   "tile": 6.0,
+   "metal": false,
+   "n": "old_sandstone_02_n.webp",
+   "arm": "old_sandstone_02_arm.webp"
+  },
+  "plastered_wall": {
+   "tile": 3.0,
+   "metal": false,
+   "n": "plastered_wall_n.webp",
+   "arm": "plastered_wall_arm.webp"
+  },
+  "rusty_corrugated_iron": {
+   "tile": 2.5,
+   "metal": true,
+   "n": "rusty_corrugated_iron_n.webp",
+   "arm": "rusty_corrugated_iron_arm.webp"
+  },
+  "weathered_planks": {
+   "tile": 3.0,
+   "metal": false,
+   "n": "weathered_planks_n.webp",
+   "arm": "weathered_planks_arm.webp"
+  },
+  "white_stucco": {
+   "tile": 3.0,
+   "metal": false,
+   "n": "white_stucco_n.webp",
+   "arm": "white_stucco_arm.webp"
+  }
+ },
+ "maps": {
+  "hanabi": {
+   "ground": {
+    "set": "japanese_stone_wall",
+    "c": "hanabi_ground_c.webp"
+   },
+   "wall": {
+    "set": "japanese_cedar_planks",
+    "c": "hanabi_wall_c.webp"
+   },
+   "roof": {
+    "set": "grey_roof_tiles",
+    "c": "hanabi_roof_c.webp"
+   },
+   "wood": {
+    "set": "japanese_cedar_planks",
+    "c": "hanabi_wood_c.webp"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  },
+  "cloudstep": {
+   "ground": {
+    "set": "grassy_cobblestone",
+    "c": "cloudstep_ground_c.webp"
+   },
+   "wall": {
+    "set": "white_stucco"
+   },
+   "roof": {
+    "set": "ceramic_roof_01",
+    "c": "cloudstep_roof_c.webp"
+   },
+   "wood": {
+    "set": "japanese_cedar_planks",
+    "c": "cloudstep_wood_c.webp"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  },
+  "kagura": {
+   "ground": {
+    "set": "concrete_pavement",
+    "c": "kagura_ground_c.webp"
+   },
+   "wall": {
+    "set": "plastered_wall"
+   },
+   "roof": {
+    "set": "grey_roof_tiles",
+    "c": "kagura_roof_c.webp"
+   },
+   "wood": {
+    "set": "japanese_cedar_planks",
+    "c": "kagura_wood_c.webp"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  },
+  "lantern": {
+   "ground": {
+    "set": "monastery_stone_floor",
+    "c": "lantern_ground_c.webp"
+   },
+   "wall": {
+    "set": "white_stucco"
+   },
+   "roof": {
+    "set": "grey_roof_tiles_02",
+    "c": "lantern_roof_c.webp"
+   },
+   "wood": {
+    "set": "japanese_cedar_planks",
+    "c": "lantern_wood_c.webp"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  },
+  "starfall": {
+   "ground": {
+    "set": "marble_01",
+    "c": "starfall_ground_c.webp"
+   },
+   "wall": {
+    "set": "marble_01"
+   },
+   "roof": {
+    "set": "ceramic_roof_01",
+    "c": "starfall_roof_c.webp"
+   },
+   "wood": {
+    "set": "japanese_cedar_planks",
+    "c": "starfall_wood_c.webp"
+   },
+   "trim": {
+    "set": "marble_01"
+   }
+  },
+  "foundry": {
+   "ground": {
+    "set": "metal_plate",
+    "c": "foundry_ground_c.webp"
+   },
+   "wall": {
+    "set": "brick_wall_10",
+    "c": "foundry_wall_c.webp"
+   },
+   "roof": {
+    "set": "rusty_corrugated_iron",
+    "c": "foundry_roof_c.webp"
+   },
+   "wood": {
+    "set": "weathered_planks",
+    "c": "foundry_wood_c.webp"
+   },
+   "trim": {
+    "set": "metal_plate"
+   }
+  },
+  "mile": {
+   "ground": {
+    "set": "cracked_red_ground",
+    "c": "mile_ground_c.webp"
+   },
+   "wall": {
+    "set": "white_stucco"
+   },
+   "roof": {
+    "set": "asphalt_02",
+    "c": "mile_roof_c.webp"
+   },
+   "rock": {
+    "set": "cliff_side",
+    "c": "mile_rock_c.webp"
+   },
+   "wood": {
+    "set": "weathered_planks",
+    "c": "mile_wood_c.webp"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  },
+  "gulch": {
+   "ground": {
+    "set": "dry_ground_rocks",
+    "c": "gulch_ground_c.webp"
+   },
+   "wall": {
+    "set": "weathered_planks",
+    "c": "gulch_wall_c.webp"
+   },
+   "roof": {
+    "set": "rusty_corrugated_iron",
+    "c": "gulch_roof_c.webp"
+   },
+   "rock": {
+    "set": "old_sandstone_02",
+    "c": "gulch_rock_c.webp"
+   },
+   "wood": {
+    "set": "weathered_planks",
+    "c": "gulch_wood_c.webp"
+   },
+   "trim": {
+    "set": "weathered_planks"
+   }
+  },
+  "training": {
+   "ground": {
+    "set": "concrete_floor_02"
+   },
+   "wall": {
+    "set": "plastered_wall"
+   },
+   "trim": {
+    "set": "plastered_wall"
+   }
+  }
+ },
+ "hdri": {
+  "hanabi": {
+   "file": "hdr_hanabi.hdr",
+   "src": "golden_bay",
+   "sunPhi": 0.6351,
+   "sunElev": 0.3099,
+   "mood": 1.0
+  },
+  "cloudstep": {
+   "file": "hdr_cloudstep.hdr",
+   "src": "kloofendal_48d_partly_cloudy_puresky",
+   "sunPhi": 0.5983,
+   "sunElev": 0.8376,
+   "mood": 0.55
+  },
+  "kagura": {
+   "file": "hdr_kagura.hdr",
+   "src": "zhengyang_gate",
+   "sunPhi": 0.6289,
+   "sunElev": 0.6596,
+   "mood": 0.75
+  },
+  "lantern": {
+   "file": "hdr_lantern.hdr",
+   "src": "cobblestone_street_night",
+   "sunPhi": 0.6351,
+   "sunElev": 0.2669,
+   "mood": 0.8
+  },
+  "starfall": {
+   "file": "hdr_starfall.hdr",
+   "src": "industrial_sunset_puresky",
+   "sunPhi": 0.6351,
+   "sunElev": 0.0706,
+   "mood": 0.8
+  },
+  "foundry": {
+   "file": "hdr_foundry.hdr",
+   "src": "freight_station",
+   "sunPhi": 0.6289,
+   "sunElev": 0.1626,
+   "mood": 0.85
+  },
+  "mile": {
+   "file": "hdr_mile.hdr",
+   "src": "goegap",
+   "sunPhi": 0.678,
+   "sunElev": 0.813,
+   "mood": 1.1
+  },
+  "gulch": {
+   "file": "hdr_gulch.hdr",
+   "src": "goegap_road",
+   "sunPhi": 0.6289,
+   "sunElev": 0.1074,
+   "mood": 1.0
+  },
+  "training": {
+   "file": "hdr_training.hdr",
+   "src": "wide_street_01",
+   "sunPhi": 0.6289,
+   "sunElev": 0.9235,
+   "mood": 0.8
+  }
+ }
+}

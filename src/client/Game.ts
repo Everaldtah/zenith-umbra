@@ -8,6 +8,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -45,6 +46,9 @@ import { AiLab } from './AiLab';
 import { PRESETS, IS_DESKTOP, quality, type Settings } from './Settings';
 import { UI_COLORS, GIANT_SWORD } from '../render/CharacterView';
 import { SUSANOO_SHOWCASE } from '../game/susanoo';
+import { loadSurfaces, CLASSIC } from '../render/Surfaces';
+import { mapEnvironment } from '../render/EnvLight';
+import { gradeFor, gradePass, setGrade } from '../render/PostFx';
 
 /** Image Sharpening (Settings > Video): a light unsharp mask after tone mapping */
 const SHARPEN = {
@@ -93,6 +97,11 @@ export class Game {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer | null = null;
   bloom: UnrealBloomPass | null = null;
+  /** the per-map colour grade (desktop edition) and the sharpening pass (an upscaler may stand in for it) */
+  grade: ShaderPass | null = null;
+  sharpenPass: ShaderPass | null = null;
+  /** the map's image-based lighting strength relative to the studio room it replaces (1 = the room) */
+  private envK = 1;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(90, 1, 0.08, 1200);
   input: Input;
@@ -223,16 +232,34 @@ export class Game {
     this.resize();
   }
 
-  /** the post chain the options ask for: ambient occlusion, bloom (glow quality), tone mapping, FXAA, sharpening */
+  /** the post chain the options ask for: ambient occlusion, bloom (glow quality), tone mapping, colour grade, anti-aliasing,
+   *  sharpening. The chain draws into a multisampled target when MSAA is on (the canvas' own MSAA never reached the
+   *  composer's targets), and GTAO reads that target's depth instead of re-drawing the scene for a normal buffer */
   private buildComposer() {
     const s = this.settings, Q = quality(s), v = s.video;
-    const ao = v.ao !== 'off', sharp = v.sharpen > 0;
-    this.composer = null; this.bloom = null;
-    if (!Q.bloom && !Q.fxaa && !ao && !sharp) return;
-    const c = new EffectComposer(this.renderer);
+    const ao = v.ao !== 'off', sharp = v.sharpen > 0, grade = FULL && !CLASSIC;
+    if (this.composer) { for (const p of this.composer.passes) (p as { dispose?: () => void }).dispose?.(); this.composer.dispose(); }
+    this.composer = null; this.bloom = null; this.grade = null; this.sharpenPass = null;
+    if (!Q.bloom && !Q.fxaa && !ao && !sharp && !grade) return;
+    const pr = this.renderer.getPixelRatio(), W = Math.max(1, Math.round(innerWidth * pr)), H = Math.max(1, Math.round(innerHeight * pr));
+    const rt = new THREE.WebGLRenderTarget(W, H, {
+      type: THREE.HalfFloatType, samples: FULL && Q.antialias ? 4 : 0,
+      depthTexture: ao ? new THREE.DepthTexture(W, H) : undefined,
+    });
+    rt.texture.name = 'EffectComposer.rt1';
+    const c = new EffectComposer(this.renderer, rt);
+    // the scene pass draws into the composer's first read buffer (renderTarget2, rt's clone); only it needs a depth
+    // texture - rt1 keeps a plain depth buffer
+    if (rt.depthTexture) { rt.depthTexture.dispose(); rt.depthTexture = null; }
+    // passes swap read/write a varying number of times a frame: the scene pass must always land in renderTarget2 (its
+    // depth texture is what GTAO reads)
+    const render = c.render.bind(c);
+    c.render = (dt?: number) => { if (c.readBuffer !== c.renderTarget2) c.swapBuffers(); render(dt); };
     c.addPass(new RenderPass(this.scene, this.camera));
     if (ao) {
       const g = new GTAOPass(this.scene, this.camera, innerWidth, innerHeight);
+      // (r186: passing the depth to the constructor throws - setGBuffer needs the normal target the default path makes)
+      g.setGBuffer(c.renderTarget2.depthTexture!);
       g.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1, samples: { off: 8, low: 8, medium: 12, high: 16 }[v.ao] });
       g.blendIntensity = { off: 0, low: 0.6, medium: 0.8, high: 1 }[v.ao];
       c.addPass(g);
@@ -243,8 +270,11 @@ export class Game {
       c.addPass(this.bloom);
     }
     c.addPass(new OutputPass());
-    if (Q.fxaa) c.addPass(new FXAAPass());
-    if (sharp) { const p = new ShaderPass(SHARPEN); p.uniforms.amount.value = v.sharpen / 100 * 0.6; c.addPass(p); }
+    if (grade) { this.grade = gradePass(gradeFor(this.match?.world.map.id)); c.addPass(this.grade); }
+    // post anti-aliasing: SMAA on the desktop edition (sharper than FXAA, keeps texture detail)
+    if (Q.fxaa) c.addPass(FULL ? new SMAAPass() : new FXAAPass());
+    if (sharp) { const p = new ShaderPass(SHARPEN); p.uniforms.amount.value = v.sharpen / 100 * 0.6; c.addPass(p); this.sharpenPass = p; }
+    c.setSize(innerWidth, innerHeight);
     this.composer = c;
     this.engine.finishComposer(c);
     if (this.bloom && this.match) { const day = FULL && this.match.world.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
@@ -254,7 +284,7 @@ export class Game {
   /** detail options that live in the scene: reflections, fog distance, texture filtering, effects density, waypoint */
   applySceneDetail() {
     const s = this.settings, Q = quality(s), v = s.video, A = s.access;
-    this.scene.environmentIntensity = Q.envIntensity * (v.localReflections ? 1 : 0.8);
+    this.scene.environmentIntensity = Q.envIntensity * (v.localReflections ? 1 : 0.8) * this.envK;
     const fog = this.scene.fog as (THREE.Fog & { __base?: [number, number] }) | null;
     if (fog && 'near' in fog) {
       fog.__base ??= [fog.near, fog.far];
@@ -297,6 +327,7 @@ export class Game {
   resize() {
     this.renderer.setSize(innerWidth, innerHeight);
     this.composer?.setSize(innerWidth, innerHeight);
+    if (this.grade) setGrade(this.grade, gradeFor(this.match?.world.map.id));
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
   }
@@ -304,7 +335,7 @@ export class Game {
   async start(o: StartOpts) {
     this.stop();
     // hero GLB manifest + the animation clip library (public/anim; missing = fully procedural) before any view exists
-    await Promise.all([loadManifest(), animLibrary()]);
+    await Promise.all([loadManifest(), animLibrary(), FULL ? loadSurfaces() : null]);
     this.opts = o;
     const q = PRESETS[this.settings.preset];
     this.scene = new THREE.Scene();
@@ -333,8 +364,14 @@ export class Game {
     if (this.bloom) { const day = FULL && w.map.sun.intensity >= 2.1; this.bloom.threshold = day ? 0.97 : 0.82; this.bloom.strength = day ? 0.38 : 0.55;
       if (FULL && w.map.bloom) [this.bloom.threshold, this.bloom.strength] = w.map.bloom; }
     // image-based lighting so metallic / dark generated materials still catch light
+    // (desktop edition: the map's own HDRI - its sky and ground in every reflection - turned to its sun; else the room)
     this.envTex ??= new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environment = this.envTex;
+    const menv = FULL ? await mapEnvironment(this.renderer, w.map.id, w.map.sun.dir) : null;
+    this.scene.environment = menv?.texture ?? this.envTex;
+    this.scene.environmentRotation.set(0, menv?.rotY ?? 0, 0);
+    // a normalised HDRI (mean 1, sun clamped) gives less fill than the studio room's bright panels: scaled up so shade
+    // keeps the old level (measured: tests/e2e/render_ab.mjs, same camera, mean frame luminance within a few %)
+    this.envK = menv ? 1.6 * menv.mood : 1;
     this.scene.environmentIntensity = 0.55;
     this.fx = new Fx(this.scene, quality(this.settings).fxCap);
     // scene detail options now, and again once the heroes' models have streamed in (texture filtering)
@@ -436,6 +473,7 @@ export class Game {
       this.fp ??= new FirstPersonArms(me, equippedSkin(me.def.id));
       for (const t = performance.now(); performance.now() - t < 15000 && !this.fp.view.real; await sleep(100)) { /* its own copy of the hero */ }
       this.fp.scene.environment = this.scene.environment;
+      this.fp.scene.environmentRotation.copy(this.scene.environmentRotation);   // (the map HDRI's turn to its sun)
       // (what the viewmodel would fetch on its first frame - Tenkai-Oh's gauntlets - fetched now; the update mounts it)
       await Promise.race([this.fp.preload(), sleep(10000)]);
       this.fp.update({ dt: 1 / 60, time: w.time, yawRate: 0, pitchRate: 0, aspect: this.camera.aspect });

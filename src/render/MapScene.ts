@@ -4,6 +4,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Box, MapDef, Mat } from '../data/maps';
 import { Level } from '../engine/Physics';
 import { propModel, texture, hasTexture } from './Assets';
+import { FULL } from '../edition';
+import { applySurfaces, boxAttrs, noBoxAttrs } from './Surfaces';
 
 /** the texture set a map paints with: its own when the manifest has it, else the closest sibling's (a map whose textures
  * haven't been generated yet would otherwise load black walls and sky) */
@@ -149,26 +151,32 @@ export class MapScene {
       accent: new THREE.MeshStandardMaterial({ map: tex('wall'), color: new THREE.Color(m.tint).lerp(new THREE.Color('#ffffff'), 0.4), emissive: new THREE.Color(m.tint), emissiveIntensity: 0.25, roughness: 0.4 }),
       glass: new THREE.MeshStandardMaterial({ color: new THREE.Color(m.tint), transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.2, emissive: new THREE.Color(m.tint), emissiveIntensity: 0.3 }),
     };
+    // desktop edition: CC0 PBR surfaces (relief, AO / roughness, palette-matched albedo) + painted bevels and grime
+    if (FULL) applySurfaces(m.id, mats);
     const buckets: Record<string, THREE.BufferGeometry[]> = {};
     const add = (mat: Mat, g: THREE.BufferGeometry) => (buckets[mat] ??= []).push(g.index ? g.toNonIndexed() : g);
+    // surfaces (Surfaces.ts): boxes carry their centre + half extents for the painted bevels and the grime at their foot;
+    // floors, ramps and cliff skirts carry none
+    const boxed = (b: Box, grime: boolean) => { const g = boxGeo(b), y0 = b.y ?? 0; boxAttrs(g, b.x, y0 + b.h / 2, b.z, b.w / 2, b.h / 2, b.d / 2, grime); return g; };
+    const bare = (g: THREE.BufferGeometry) => { noBoxAttrs(g); return g; };
     const voidMap = map.floors.length > 1 && map.water === undefined;
     for (const f of map.floors) {
-      add(f.mat ?? 'ground', boxGeo({ ...f, h: 0.01 }, voidMap ? 0.01 : 0.5));
+      add(f.mat ?? 'ground', bare(boxGeo({ ...f, h: 0.01 }, voidMap ? 0.01 : 0.5)));
       if (voidMap) {
         // floating island underside: a rock skirt that tapers into the clouds
         const under = new THREE.CylinderGeometry(1, 0.35, 1, 7, 1);
         under.scale(Math.max(f.w, f.d) * 0.55, Math.min(f.w, f.d) * 0.5 + 3, Math.min(f.w, f.d) * 0.55);
         under.translate(f.x, -(Math.min(f.w, f.d) * 0.25 + 1.5), f.z);
-        worldUV(under);
+        worldUV(under); noBoxAttrs(under);
         if (f.mat !== 'trim') add('wall', under);
-        else add('trim', boxGeo({ ...f, h: 0.01 }, 0.4));
+        else add('trim', bare(boxGeo({ ...f, h: 0.01 }, 0.4)));
       }
     }
-    for (const b of map.boxes) add(b.mat ?? 'wall', b.ramp ? wedgeGeo(b) : boxGeo(b));
+    for (const b of map.boxes) add(b.mat ?? 'wall', b.ramp ? bare(wedgeGeo(b)) : boxed(b, true));
     // render-only detail: frames, bands, awnings, eaves, lit panes
-    for (const b of map.decor ?? []) add(b.mat ?? 'trim', b.ramp ? wedgeGeo(b) : boxGeo(b));
+    for (const b of map.decor ?? []) add(b.mat ?? 'trim', b.ramp ? bare(wedgeGeo(b)) : boxed(b, false));
     for (const [k, list] of Object.entries(buckets)) {
-      for (const g of list) { if (!g.attributes.normal) g.computeVertexNormals(); for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n); }
+      for (const g of list) { if (!g.attributes.normal) g.computeVertexNormals(); for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'bevL', 'bevH'].includes(n)) g.deleteAttribute(n); }
       const merged = mergeGeometries(list, false);
       if (!merged) continue;
       const mesh = new THREE.Mesh(merged, mats[k as Mat]);
