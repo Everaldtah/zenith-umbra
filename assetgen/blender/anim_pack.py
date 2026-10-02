@@ -23,7 +23,7 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
 ap.add_argument("--ual1"); ap.add_argument("--ual2")
 ap.add_argument("--mixamo", help="folder of Mixamo FBX files (one clip per file)")
-ap.add_argument("--extra", nargs="*", default=[], help="more glTF / FBX animation files, packed as-is")
+ap.add_argument("--extra", nargs="*", default=[], help="more glTF / FBX animation files ([NAME.glb=]path), packed as-is - or, with --map, renamed / cut / filtered by action-name prefix")
 ap.add_argument("--folder", action="append", default=[], help="NAME.glb=DIR: one pack from a folder of one-clip files on a shared skeleton (Kevin Iglesias FREE packs, the CMU glTF conversions)")
 ap.add_argument("--drop-bones", default="", help="regex: bones whose keys are removed (Kevin Iglesias' FBX key their axis / unit conversion - a -90 deg turn and x100 scale - on B-root)")
 ap.add_argument("--map", help="JSON: {file stem: clip name | [clip name, start s, end s]} - only these files are packed, renamed, and cut to the window")
@@ -100,6 +100,7 @@ def export(arm, fname, actions):
 
 
 def pack_file(path, fname):
+    rename = globals().get("rename")
     reset()
     import_any(path)
     arms = [o for o in bpy.data.objects if o.type == "ARMATURE"]
@@ -109,6 +110,17 @@ def pack_file(path, fname):
     for x in bpy.data.actions:
         for suf in (f"_{arm.name}", "_Armature"):
             if x.name.endswith(suf) and len(x.name) > len(suf): x.name = x.name[: -len(suf)]; break
+    if rename is not None:
+        # one file holding many clips (a Tripo Studio export: actions named after their prompts): --map keys are the
+        # starts of action names -> renamed / cut, everything else dropped
+        for x in list(bpy.data.actions):
+            key = next((k for k in rename if x.name.startswith(k)), None)
+            if key is None: bpy.data.actions.remove(x); continue
+            spec = rename[key]
+            name, win = (spec, None) if isinstance(spec, str) else (spec[0], spec[1:3])
+            x.name = name; x.use_fake_user = True
+            drop_object_curves(x); drop_bone_curves(x)
+            if win: cut(x, *win)
     acts = [x for x in bpy.data.actions if keep(x.name)]
     strip_meshes(arm)
     return export(arm, fname, acts)
@@ -214,8 +226,10 @@ packs = []
 if a.ual1: packs.append(pack_file(a.ual1, "UAL1.glb"))
 if a.ual2: packs.append(pack_file(a.ual2, "UAL2.glb"))
 if a.mixamo: packs.append(pack_mixamo(a.mixamo))
-for e in a.extra: packs.append(pack_file(e, os.path.splitext(os.path.basename(e))[0] + ".glb"))
 rename = {k: v for k, v in json.load(open(a.map, encoding="utf-8")).items() if not k.startswith("_")} if a.map else None
+for e in a.extra:
+    out_name, _, src = e.rpartition("=") if "=" in e else ("", "", e)
+    packs.append(pack_file(src, out_name or os.path.splitext(os.path.basename(src))[0] + ".glb"))
 for spec in a.folder:
     fname, folder = spec.split("=", 1)
     packs.append(pack_clips(files_in(folder), fname, rename))

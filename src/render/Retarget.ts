@@ -150,7 +150,7 @@ const LOOP_HINT = /loop|idle|walk|jog|run|sprint|strafe|crouch.*(fwd|bwd|left|ri
  * Bake every clip of a loaded glTF (scene + animations) into PoseClips. The scene's node transforms at load time are
  * its rest pose; they are restored afterwards, so the same scene can be baked again.
  */
-export function bakeClips(root: THREE.Object3D, clips: THREE.AnimationClip[], src = ''): PoseClip[] {
+export function bakeClips(root: THREE.Object3D, clips: THREE.AnimationClip[], src = '', keepTravel = false): PoseClip[] {
   const map = mapSkeleton(root);
   if (!map) return [];
   const saved: [THREE.Object3D, THREE.Vector3, THREE.Quaternion, THREE.Vector3][] = [];
@@ -190,7 +190,7 @@ export function bakeClips(root: THREE.Object3D, clips: THREE.AnimationClip[], sr
       contact: new Uint8Array(frames * 2), phase0: 0, rootMotion: false,
     };
     groundClip(pc);
-    analyse(pc);
+    analyse(pc, keepTravel);
     out.push(pc);
   }
   mixer.uncacheRoot(root);
@@ -224,11 +224,46 @@ export function groundClip(c: PoseClip) {
 const pAt = (c: PoseClip, f: number, b: RtBone) => { const o = (f * NB + RT_INDEX[b]) * 3; return new THREE.Vector3(c.p[o], c.p[o + 1], c.p[o + 2]); };
 
 /** loop detection, root-motion removal, travel speed / direction from the feet, foot contacts, gait phase */
-export function analyse(c: PoseClip) {
+/** a near-loop within this many times the loop tolerances gets its seam closed (closeSeam) */
+const SEAM_CLOSE = 2.5;
+const _sq = new THREE.Quaternion(), _sq2 = new THREE.Quaternion();
+/**
+ * Ease the last quarter of a clip into its first frame so it loops: every bone's rotation, every limb's position relative
+ * to the hips and the hips' height. The hips' horizontal path (the travel) is left alone - the loop's drift removal
+ * takes it out evenly.
+ */
+export function closeSeam(c: PoseClip) {
+  const n = c.frames, last = n - 1, fs = Math.max(1, Math.floor(last * 0.75)), h = RT_INDEX.hips;
+  const q0 = [] as THREE.Quaternion[], eq = [] as THREE.Quaternion[], er = [] as THREE.Vector3[];
+  for (let i = 0; i < NB; i++) {
+    q0.push(new THREE.Quaternion().fromArray(c.q, i * 4));
+    eq.push(q0[i].clone().multiply(_sq.fromArray(c.q, (last * NB + i) * 4).invert()));
+    if (eq[i].w < 0) eq[i].set(-eq[i].x, -eq[i].y, -eq[i].z, -eq[i].w);
+    er.push(i === h ? new THREE.Vector3(0, c.p[h * 3 + 1] - c.p[(last * NB + h) * 3 + 1], 0)
+      : pAt(c, 0, RT[i]).sub(pAt(c, 0, 'hips')).sub(pAt(c, last, RT[i]).sub(pAt(c, last, 'hips'))));
+  }
+  for (let f = fs + 1; f <= last; f++) {
+    const u = (f - fs) / (last - fs), k = u * u * (3 - 2 * u);
+    for (let i = 0; i < NB; i++) {
+      if (!c.mask[i]) continue;
+      const o = (f * NB + i) * 4;
+      _sq2.identity().slerp(eq[i], k).multiply(_sq.fromArray(c.q, o)).toArray(c.q, o);
+      const p = (f * NB + i) * 3;
+      c.p[p] += er[i].x * k; c.p[p + 1] += er[i].y * k + (i === h ? 0 : er[h].y * k); c.p[p + 2] += er[i].z * k;
+    }
+  }
+}
+
+/** keepTravel: leave a travelling one-shot's path in (tools measuring raw takes) */
+export function analyse(c: PoseClip, keepTravel = false) {
   const n = c.frames, last = n - 1, dur = c.duration;
   // loop: first and last poses match (hips height, both feet relative to the hips)
   const rel = (f: number, b: RtBone) => pAt(c, f, b).sub(pAt(c, f, 'hips'));
-  const same = Math.abs(pAt(c, 0, 'hips').y - pAt(c, last, 'hips').y) < 0.04 && rel(0, 'foot_L').distanceTo(rel(last, 'foot_L')) < 0.08 && rel(0, 'foot_R').distanceTo(rel(last, 'foot_R')) < 0.08;
+  const seam = () => Math.max(Math.abs(pAt(c, 0, 'hips').y - pAt(c, last, 'hips').y) / 0.04, rel(0, 'foot_L').distanceTo(rel(last, 'foot_L')) / 0.08, rel(0, 'foot_R').distanceTo(rel(last, 'foot_R')) / 0.08);
+  // a gait cut to (nearly) one cycle out of a longer generated take (Tripo text-to-motion) misses the loop tolerances by
+  // a little: close the seam instead of losing the clip
+  if (LOOP_HINT.test(c.name) && seam() > 1 && seam() < SEAM_CLOSE) closeSeam(c);
+  const same = seam() <= 1;
   c.loop = same && (LOOP_HINT.test(c.name) || dur >= 0.4);
   // root motion: a looping clip whose hips travel is made in place
   const drift = pAt(c, last, 'hips').sub(pAt(c, 0, 'hips')); drift.y = 0;
@@ -244,7 +279,7 @@ export function analyse(c: PoseClip) {
   // a one-shot that travels (Mixamo's front flip lands 7 leg lengths on, a CMU vault runs up to the obstacle): the game
   // moves the body itself (the dash, the roll, the leap), so the clip is put in place - its hips keep their sway around a
   // smoothed path, the path itself is taken out. Deaths keep their fall (the body comes to rest where it drops)
-  if (!c.loop && !/death|dying|dies|dead|killed/i.test(c.name)) {
+  if (!c.loop && !keepTravel && !/death|dying|dies|dead|killed/i.test(c.name)) {
     const h = RT_INDEX.hips, hx = (f: number) => c.p[(f * NB + h) * 3], hz = (f: number) => c.p[(f * NB + h) * 3 + 2];
     let ex = 0;
     for (let f = 0; f < n; f++) ex = Math.max(ex, Math.hypot(hx(f) - hx(0), hz(f) - hz(0)));
@@ -293,7 +328,9 @@ export function analyse(c: PoseClip) {
       for (let f = 0; f < n; f++) {
         const f0 = Math.max(0, f - 1), f1 = Math.min(last, f + 1);
         const v = pAt(c, f1, b).sub(pAt(c, f0, b)).multiplyScalar(c.fps / Math.max(1, f1 - f0)); v.y = 0;
-        const stance = c.rootMotion ? v.length() < 0.35 * c.speed : -v.dot(tv) > 0.6 * c.speed && Math.abs(v.clone().addScaledVector(tv, -v.dot(tv)).length()) < 0.5 * c.speed;
+        // (a root-motion loop has had its drift taken out above, so its planted foot also slides back at the travel speed,
+        // exactly as in an in-place clip - the same test holds for both)
+        const stance = -v.dot(tv) > 0.6 * c.speed && Math.abs(v.clone().addScaledVector(tv, -v.dot(tv)).length()) < 0.5 * c.speed;
         ok.push(c.contact[f * 2 + s] && stance ? 1 : 0);
       }
       for (let f = 0; f < n; f++) c.contact[f * 2 + s] = ok[f];

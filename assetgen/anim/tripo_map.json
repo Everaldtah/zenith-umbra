@@ -1,0 +1,76 @@
+{
+  "_source": "Tripo Studio text-to-motion (studio.tripo3d.ai Animate > Create Your Own Animation, 20 credits each, 2026-10-02), generated on the Tripo auto-rig (Mixamo bone names), exported together as assetgen/out/tripo/anim/tripo_motion.glb. Keys: the start of each action name (the prompt); value: clip name, or [clip name, start s, end s] (one clean loop cycle cut out of the 5 s take)",
+  "A hero walks straight forward calmly": [
+    "TR_Walk_Fwd",
+    0.733,
+    1.8
+  ],
+  "A hero walks slowly backward": [
+    "TR_Walk_Bwd",
+    1.0,
+    2.267
+  ],
+  "A hero walks sideways to the left": [
+    "TR_Walk_Left",
+    3.267,
+    4.167
+  ],
+  "An athletic hero jogs straight forward": [
+    "TR_Jog_Fwd",
+    3.4,
+    4.033
+  ],
+  "An athletic hero jogs backward": [
+    "TR_Jog_Bwd",
+    1.467,
+    2.1
+  ],
+  "An athletic hero jogs sideways to the left": [
+    "TR_Jog_Left",
+    3.3,
+    3.933
+  ],
+  "A hero sprints straight forward": [
+    "TR_Run_Fwd",
+    0.9,
+    1.667
+  ],
+  "A hero runs backward quickly": [
+    "TR_Run_Bwd",
+    1.2,
+    1.833
+  ],
+  "A hero runs fast sideways to the left": [
+    "TR_Run_Left",
+    1.033,
+    1.7
+  ],
+  "A hero stands in place in a relaxed combat-ready stance": "TR_Idle",
+  "A stunned hero sways dizzily": "TR_Stun_Idle",
+  "A hero crouches slightly and springs": [
+    "TR_Jump_Start",
+    0.85,
+    1.45
+  ],
+  "A hero lands on both feet": [
+    "TR_Jump_Land",
+    1.1,
+    2.1
+  ],
+  "A hero sprints forward and drops into a fast low slide": [
+    "TR_Slide",
+    1.9,
+    3.2
+  ],
+  "A hero does a quick forward combat roll": [
+    "TR_Roll",
+    0.6,
+    2.9
+  ],
+  "A hero makes a quick explosive dash": [
+    "TR_Dash",
+    0.6,
+    2.2
+  ],
+  "_rejected": "jogs diagonally forward-left (came out a pure left strafe, 91 deg), jogs diagonally backward-left (105 deg), airborne in mid-air (a horizontal skydive) - generated but not packed; the blend space fills diagonals between neighbours and the Quaternius Jump_Loop stays"
+}

@@ -4,26 +4,28 @@
     "UAL2.glb",
     "mixamo.glb",
     "cmu.glb",
-    "kevin.glb"
+    "kevin.glb",
+    "tripo.glb"
   ],
   "credits": {
     "quaternius": "Universal Animation Library 1 & 2 by Quaternius (CC0) - quaternius.com",
     "mixamo": "Animations from Mixamo (Adobe) - mixamo.com",
     "cmu": "Motion capture from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu; created with funding from NSF EIA-0196217), via cgspeed's BVH conversion and rancidmilk's Quaternius-rig retarget - free to use / modify / redistribute, never to be sold as animations (see LICENSE-CMU.txt)",
-    "kevin": "Human Soldier / Melee / Spellcasting / Throwing Animations FREE by Kevin Iglesias (keviniglesias.com) - Standard Unity Asset Store EULA, desktop build only"
+    "kevin": "Human Soldier / Melee / Spellcasting / Throwing Animations FREE by Kevin Iglesias (keviniglesias.com) - Standard Unity Asset Store EULA, desktop build only",
+    "tripo": "Movement generated with Tripo Studio text-to-motion (tripo3d.ai; outputs of the project's paid account, like the Tripo hero models)"
   },
   "slots": {
     "idle": [
-      "Idle_Loop"
+      "TR_Idle"
     ],
     "jump_start": [
-      "Jump_Start"
+      "TR_Jump_Start"
     ],
     "jump_loop": [
       "Jump_Loop"
     ],
     "land": [
-      "Jump_Land"
+      "TR_Jump_Land"
     ],
     "death": [
       "Death01",
@@ -55,15 +57,18 @@
       "Sword_Regular_C"
     ],
     "roll": [
+      "TR_Roll",
       "Roll",
       "MX_Roll_Fwd",
       "CMU_Dive_Roll"
     ],
     "dash": [
+      "TR_Dash",
       "Sword_Dash",
       "Shield_Dash"
     ],
     "slide": [
+      "TR_Slide",
       "Slide_Start"
     ],
     "flip": [
@@ -98,6 +103,9 @@
     "vault": [
       "CMU_Vault_Over",
       "CMU_Vault_Run"
+    ],
+    "stun": [
+      "TR_Stun_Idle"
     ]
   },
   "exclude": [
@@ -107,7 +115,22 @@
     "Crouch_Fwd_Loop",
     "Sprint_Loop",
     "Jog_Fwd_Loop",
-    "MX_Jog_BwdLeft"
+    "MX_Jog_BwdLeft",
+    "Walk_Loop",
+    "MX_Walk_Bwd",
+    "MX_Walk_Right",
+    "MX_Walk_Left",
+    "MX_Jog_Bwd",
+    "MX_Jog_BwdRight",
+    "MX_Jog_Right",
+    "MX_Jog_FwdRight",
+    "MX_Jog_Fwd",
+    "MX_Jog_FwdLeft",
+    "MX_Jog_Left",
+    "MX_Run_Bwd",
+    "MX_Run_Right",
+    "MX_Run_Fwd",
+    "MX_Run_Left"
   ],
   "heroes": {
     "enra": {
