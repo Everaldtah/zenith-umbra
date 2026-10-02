@@ -112,7 +112,7 @@ export class SettingsScreen {
     this.select('Camera', () => s.view, x => { s.view = x; }, [['first', 'FIRST PERSON'], ['third', 'THIRD PERSON']], 'Quick play and competitive are first person (as in Overwatch 2); V toggles where allowed.');
     this.select('Frame Rate Cap', () => v.fpsCap, x => { v.fpsCap = x; }, [[0, 'DISPLAY BASED'], [30, '30'], [60, '60'], [120, '120'], [144, '144'], [165, '165'], [240, '240'], [300, '300']]);
     this.slider('Render Scale', () => v.renderScale, x => { v.renderScale = x; custom(); }, 50, 200, 5, x => `${x}%`);
-    this.select('Dynamic Render Scale', () => v.dynamicRes, x => { v.dynamicRes = x; }, onOff, 'Lowers the render scale on busy frames to hold the frame-rate target.');
+    this.select('Dynamic Render Scale', () => v.dynamicRes, x => { v.dynamicRes = x; }, onOff, 'Lowers the render scale only when the GPU is what holds the frame rate back (never for a CPU-bound frame); FSR upscales back to full resolution.');
     this.slider('Brightness', () => v.brightness, x => { v.brightness = x; }, 0.5, 1.5, 0.01, x => x.toFixed(2));
     this.slider('Contrast', () => v.contrast, x => { v.contrast = x; }, 0.5, 1.5, 0.01, x => x.toFixed(2));
     this.slider('Gamma', () => v.gamma, x => { v.gamma = x; }, 0.5, 1.5, 0.01, x => x.toFixed(2));

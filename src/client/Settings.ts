@@ -147,7 +147,7 @@ const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o));
 export function defaultSettings(preset: Preset = typeof document === 'undefined' ? 'high' : detect()): Settings {
   return {
     preset, sens: 1, volume: 0.7, fov: 90, view: 'third', difficulty: 0.65, showFps: true,
-    video: { displayMode: IS_DESKTOP ? 'borderless' : 'windowed', dynamicRes: false, fpsCap: 0, quality: preset, ...QUALITY_TABLE[preset],
+    video: { displayMode: IS_DESKTOP ? 'borderless' : 'windowed', dynamicRes: IS_DESKTOP, fpsCap: 0, quality: preset, ...QUALITY_TABLE[preset],
       damageFx: 'default', sharpen: 0, gamma: 1, contrast: 1, brightness: 1, perfStats: 'simple' },
     sound: { master: 0.7, sfx: 1, music: 0.6, voice: 1, announcer: 1, ambience: 0.8, ui: 0.8, hitmarker: 1, mix: 'default', menuMusic: true, background: false, latency: 'interactive' },
     controls: { binds: clone(DEFAULT_BINDS), heroBinds: clone(HERO_DEFAULT_BINDS), heroSens: {}, invertY: false, zoomSens: 1, barrierFreeLook: true, freeLookRelative: false,

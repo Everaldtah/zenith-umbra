@@ -121,27 +121,46 @@ describe('Interpolator', () => {
 
 describe('DynamicResolution', () => {
   const budget = 1000 / 60;
-  it('drops the scale when the GPU is over budget and recovers slowly when it has room', () => {
-    const d = new DynamicResolution();
+  it('drops the scale when the GPU is over budget and recovers when it has room', () => {
+    const d = new DynamicResolution(); d.warmup = 0;
     let t = 0;
     for (let i = 0; i < 120; i++) d.update(t += 16.7, 22, 6, 22, budget);
     expect(d.scale).toBeLessThan(0.95);
     const low = d.scale;
-    for (let i = 0; i < 60; i++) d.update(t += 16.7, 8, 6, 16.7, budget);    // 1 s of headroom: not yet
+    for (let i = 0; i < 25; i++) d.update(t += 16.7, 8, 6, 16.7, budget);    // under half a second of headroom: not yet
     expect(d.scale).toBe(low);
     for (let i = 0; i < 400; i++) d.update(t += 16.7, 8, 6, 16.7, budget);
     expect(d.scale).toBeGreaterThan(low);
   });
 
-  it('never blurs a CPU-bound frame (GPU idle, frame long)', () => {
+  it('settles where the GPU fits instead of sinking (load proportional to pixels)', () => {
+    const d = new DynamicResolution(); d.warmup = 0; d.max = 1.25; d.reset(1.25);
+    let t = 0;
+    const full = 20;                                                        // GPU ms at scale 1
+    for (let i = 0; i < 3000; i++) { const g = full * d.scale * d.scale; d.update(t += 16.7, g, 6, Math.max(16.7, g), budget); }
+    const g = full * d.scale * d.scale;
+    expect(g).toBeLessThan(budget * 0.95);                                   // holds the frame rate
+    expect(g).toBeGreaterThan(budget * 0.6);                                 // without throwing away resolution
+  });
+
+  it('holds the scale through the first seconds of a match (uploads and warm-up are not GPU load)', () => {
     const d = new DynamicResolution();
+    let t = 0;
+    for (let i = 0; i < 150; i++) d.update(t += 16.7, 60, 5, 60, budget);   // 2.5 s of terrible frames at the start
+    expect(d.scale).toBe(1);
+    for (let i = 0; i < 60; i++) d.update(t += 16.7, 60, 5, 60, budget);
+    expect(d.scale).toBeLessThan(1);
+  });
+
+  it('never blurs a CPU-bound frame (GPU idle, frame long)', () => {
+    const d = new DynamicResolution(); d.warmup = 0;
     let t = 0;
     for (let i = 0; i < 300; i++) d.update(t += 25, 7, 24, 25, budget);
     expect(d.scale).toBe(1);
   });
 
   it('panics down at once on a GPU spike, within its limits', () => {
-    const d = new DynamicResolution();
+    const d = new DynamicResolution(); d.warmup = 0;
     d.update(0, 10, 5, 16.7, budget);
     for (let i = 1; i <= 3; i++) d.update(i, 40, 5, 40, budget);
     expect(d.scale).toBeLessThan(1);
