@@ -1,0 +1,2 @@
+Particle sprites: Kenney Particle Pack (CC0) - https://kenney.nl/assets/particle-pack
+star_06, star_08, star_09, magic_05, smoke_01, smoke_02, smoke_04, smoke_05, smoke_06, smoke_07, scorch_01, scorch_02, scorch_03, dirt_01, dirt_02, dirt_03, circle_05, muzzle_02, muzzle_03

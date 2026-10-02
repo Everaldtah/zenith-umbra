@@ -2,8 +2,23 @@
 // coloured sheath with a thin rail trail that lingers a beat - fired out of a star-shaped muzzle flash; it lands in a spray
 // of hot sparks, a flash, a curl of smoke and a scorch mark that stays on the wall; rotary cannons throw brass. Pooled
 // instanced billboards: hundreds of rounds a second cost a handful of draw calls.
+// Sprites: Kenney's CC0 Particle Pack (public/fx, assetgen/fetch_cc0.py) - star bursts for the flashes, real smoke wisps,
+// burn marks for the scorches, dirt for the dust a round kicks off the ground; the canvas-drawn star stays in the mix.
 import * as THREE from 'three';
 import type { V3 } from '../engine/Physics';
+import { BASE } from './Assets';
+
+const fxLoader = new THREE.TextureLoader();
+const fxCache = new Map<string, THREE.Texture>();
+/** a sprite from public/fx (white with alpha: the material colour tints it) */
+function fxTex(name: string): THREE.Texture {
+  let t = fxCache.get(name);
+  if (!t) { t = fxLoader.load(`${BASE}fx/${name}.webp`); t.colorSpace = THREE.SRGBColorSpace; fxCache.set(name, t); }
+  return t;
+}
+const FLASH_TEX = ['star_09', 'star_06', 'star_08'], SMOKE_TEX = ['smoke_01', 'smoke_02', 'smoke_04', 'smoke_05', 'smoke_06', 'smoke_07'];
+const SCORCH_TEX = ['scorch_01', 'scorch_02', 'scorch_03'], DIRT_TEX = ['dirt_01', 'dirt_02', 'dirt_03'];
+const MAX_DUST = 24;
 
 const MAX_TR = 256, MAX_SP = 512, MAX_FL = 64, MAX_DC = 96, MAX_CS = 96;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _mid = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -65,7 +80,9 @@ export class WeaponFx {
   private flashes: THREE.Sprite[] = []; private flashBorn: number[] = []; private flashI = 0;
   private decals: THREE.Mesh[] = []; private decalBorn: number[] = []; private decalI = 0;
   private cases: { m: THREE.Mesh; v: THREE.Vector3; born: number; spin: THREE.Vector3 }[] = []; private caseI = 0;
-  private smoke: THREE.Sprite[] = []; private smokeBorn: number[] = []; private smokeI = 0;
+  private smoke: THREE.Sprite[] = []; private smokeBorn: number[] = []; private smokeI = 0; private smokeSpin: number[] = [];
+  /** dirt kicked off the ground by a round: a burst of grit that spreads and drops */
+  private dust: THREE.Sprite[] = []; private dustBorn: number[] = []; private dustI = 0;
   /** the ground under a point (casings bounce on it) */
   ground: ((x: number, z: number, y: number) => number) | null = null;
 
@@ -81,18 +98,23 @@ export class WeaponFx {
     this.trMesh = im(MAX_TR); this.railMesh = im(MAX_TR, 0.35); this.spMesh = im(MAX_SP);
     const star = starTexture();
     for (let i = 0; i < MAX_FL; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: star, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      // a quarter keep the canvas star, the rest are Kenney bursts: no two flashes in a burst look alike
+      const map = i % 4 === 3 ? star : fxTex(FLASH_TEX[i % 4]);
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
       s.visible = false; this.flashes.push(s); this.flashBorn.push(-9); this.group.add(s);
     }
     const scorch = scorchTexture(), dg = new THREE.PlaneGeometry(1, 1);
     for (let i = 0; i < MAX_DC; i++) {
-      const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: scorch, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+      // burn marks: Kenney scorches darkened to soot (one in four keeps the canvas mark: a softer, round one)
+      const kenney = i % 4 !== 3;
+      const d = new THREE.Mesh(dg, new THREE.MeshBasicMaterial({ map: kenney ? fxTex(SCORCH_TEX[i % 3]) : scorch, color: kenney ? '#1c140e' : '#ffffff', transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }));
       d.visible = false; this.decals.push(d); this.decalBorn.push(-99); this.group.add(d);
     }
     const cg = new THREE.CylinderGeometry(0.022, 0.022, 0.09, 6), cm = new THREE.MeshStandardMaterial({ color: '#d8a64a', metalness: 0.9, roughness: 0.3 });
     for (let i = 0; i < MAX_CS; i++) { const m = new THREE.Mesh(cg, cm); m.visible = false; this.cases.push({ m, v: new THREE.Vector3(), born: -9, spin: new THREE.Vector3() }); this.group.add(m); }
-    const puff = new THREE.CanvasTexture((() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(200,200,200,0.5)'); r.addColorStop(1, 'rgba(200,200,200,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return c; })());
-    for (let i = 0; i < 48; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puff, transparent: true, depthWrite: false, color: '#9a938a' })); s.visible = false; this.smoke.push(s); this.smokeBorn.push(-9); this.group.add(s); }
+    // smoke: wisps from the Kenney set, each puff turned and slowly curling as it rises
+    for (let i = 0; i < 48; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTex(SMOKE_TEX[i % SMOKE_TEX.length]), transparent: true, depthWrite: false, color: '#9a938a' })); s.visible = false; this.smoke.push(s); this.smokeBorn.push(-9); this.smokeSpin.push(0); this.group.add(s); }
+    for (let i = 0; i < MAX_DUST; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTex(DIRT_TEX[i % 3]), transparent: true, depthWrite: false, color: '#dccaa6' })); s.visible = false; this.dust.push(s); this.dustBorn.push(-9); this.group.add(s); }
   }
 
   /** a round: tracer from the muzzle to where it landed; `rail` rounds leave a lingering trail (hitscan) */
@@ -125,6 +147,13 @@ export class WeaponFx {
     }
     this.muzzle({ x: p.x + N.x * 0.05, y: p.y + N.y * 0.05, z: p.z + N.z * 0.05 }, color, now, big ? 0.7 : 0.38);
     if (Math.random() < 0.4) this.puff({ x: p.x + N.x * 0.15, y: p.y + N.y * 0.15, z: p.z + N.z * 0.15 }, now, 0.5);
+    // a round into the ground throws grit and a low, dusty puff
+    if (n && N.y > 0.6 && Math.random() < (big ? 1 : 0.55)) {
+      const d = this.dust[this.dustI], i = this.dustI; this.dustI = (this.dustI + 1) % MAX_DUST;
+      d.position.set(p.x, p.y + 0.2, p.z); d.scale.setScalar(big ? 1.0 : 0.6); d.visible = true; this.dustBorn[i] = now;
+      (d.material as THREE.SpriteMaterial).rotation = Math.random() * Math.PI * 2;
+      if (Math.random() < 0.5) this.puff({ x: p.x, y: p.y + 0.2, z: p.z }, now, big ? 0.8 : 0.5, '#b3a186');
+    }
     if (n) {
       const d = this.decals[this.decalI], i = this.decalI; this.decalI = (this.decalI + 1) % MAX_DC;
       d.position.set(p.x + N.x * 0.012, p.y + N.y * 0.012, p.z + N.z * 0.012);
@@ -153,9 +182,11 @@ export class WeaponFx {
     mesh.setMatrixAt(i, _m); mesh.setColorAt(i, col);
   }
 
-  private puff(p: V3, now: number, size: number) {
+  private puff(p: V3, now: number, size: number, color = '#9a938a') {
     const s = this.smoke[this.smokeI], i = this.smokeI; this.smokeI = (this.smokeI + 1) % this.smoke.length;
     s.position.set(p.x, p.y, p.z); s.scale.setScalar(size); s.visible = true; this.smokeBorn[i] = now;
+    const m = s.material as THREE.SpriteMaterial;
+    m.color.set(color); m.rotation = Math.random() * Math.PI * 2; this.smokeSpin[i] = (Math.random() - 0.5) * 1.6;
   }
 
   update(now: number, dt: number) {
@@ -189,7 +220,10 @@ export class WeaponFx {
     // flashes: 50 ms pops
     this.flashes.forEach((s, i) => { if (!s.visible) return; const k = (now - this.flashBorn[i]) / 0.05; if (k >= 1) s.visible = false; else (s.material as THREE.SpriteMaterial).opacity = 1 - k * k; });
     // smoke: rises, spreads, fades
-    this.smoke.forEach((s, i) => { if (!s.visible) return; const k = (now - this.smokeBorn[i]) / 0.9; if (k >= 1) { s.visible = false; return; } s.position.y += dt * 0.6; s.scale.multiplyScalar(1 + dt * 1.4); (s.material as THREE.SpriteMaterial).opacity = 0.45 * (1 - k); });
+    this.smoke.forEach((s, i) => { if (!s.visible) return; const k = (now - this.smokeBorn[i]) / 0.9; if (k >= 1) { s.visible = false; return; } s.position.y += dt * 0.6; s.scale.multiplyScalar(1 + dt * 1.4);
+      const m = s.material as THREE.SpriteMaterial; m.rotation += this.smokeSpin[i] * dt; m.opacity = 0.6 * Math.min(1, k * 8) * (1 - k); });
+    // dust: a fast burst of grit that spreads, sinks and thins out in 0.4 s
+    this.dust.forEach((s, i) => { if (!s.visible) return; const k = (now - this.dustBorn[i]) / 0.4; if (k >= 1) { s.visible = false; return; } s.scale.multiplyScalar(1 + dt * 2.2); s.position.y -= dt * 0.3; (s.material as THREE.SpriteMaterial).opacity = 0.95 * (1 - k * k); });
     // scorch marks stay a while, then fade
     this.decals.forEach((d, i) => { if (!d.visible) return; const age = now - this.decalBorn[i]; if (age > 9) d.visible = false; else (d.material as THREE.MeshBasicMaterial).opacity = age > 6 ? 1 - (age - 6) / 3 : 1; });
     // brass

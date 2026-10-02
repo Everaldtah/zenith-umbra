@@ -1,0 +1,3 @@
+Surfaces and HDRIs in this folder are derived from CC0 (public domain) assets by Poly Haven - https://polyhaven.com
+Textures: asphalt_02, brick_wall_10, ceramic_roof_01, cliff_side, concrete_floor_02, concrete_pavement, cracked_red_ground, dry_ground_rocks, grassy_cobblestone, grey_roof_tiles, grey_roof_tiles_02, japanese_cedar_planks, japanese_stone_wall, marble_01, metal_plate, monastery_stone_floor, old_sandstone_02, plastered_wall, rusty_corrugated_iron, weathered_planks, white_stucco
+HDRIs: cobblestone_street_night, freight_station, goegap, goegap_road, golden_bay, industrial_sunset_puresky, kloofendal_48d_partly_cloudy_puresky, wide_street_01, zhengyang_gate

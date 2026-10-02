@@ -18,7 +18,7 @@ if (process.env.DESKTOP) {
 } else {
   b = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: 'new', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist', '--window-size=1600,900'], defaultViewport: { width: 1600, height: 900 } });
   p = await b.newPage();
-  await p.goto(`http://localhost:${port}/play.html`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+  await p.goto(`http://localhost:${port}/play.html${process.env.QS ?? ""}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   for (let i = 0; i < 60 && !(await p.evaluate(() => !!window.__zu?.menu)); i++) await wait(500);
 }
 const errors = [];
