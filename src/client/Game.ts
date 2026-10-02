@@ -321,6 +321,8 @@ export class Game {
       if (this.renderer.getPixelRatio() !== native) this.renderer.setPixelRatio(native);
       this.composer.setPixelRatio(native * scale);
       this.engine.setScale(scale);
+      // below native FSR's RCAS does the sharpening; the low-res sharpen pass would only sharpen the aliasing it upscales
+      if (this.sharpenPass) this.sharpenPass.enabled = scale >= 0.99;
     } else this.renderer.setPixelRatio(native * scale);
   }
 
