@@ -13,6 +13,7 @@ import type { Mode } from '../game/World';
 import { LEVELS, LEVEL, BOSSES, CAMPAIGN_HEROES } from '../campaign/data';
 import { playStory } from '../campaign/Cinematic';
 import { Coop } from '../net/Coop';
+import { ZENITH } from '../net/zenith';
 import { HeroViewer } from './HeroViewer';
 import { startUltShowcase } from './UltShowcase';
 import { OnlineUI, recordCareerMatch, progressHtml } from './OnlineUI';
@@ -61,6 +62,7 @@ export class Menu {
     this.root.addEventListener('mouseover', e => { if ((e.target as HTMLElement).closest('button,.hc')) sfx.play('ui_hover'); });
     this.root.addEventListener('click', e => { sfx.unlock(); if ((e.target as HTMLElement).closest('button,.hc')) sfx.play('ui_click'); });
     this.title();
+    if (ZENITH?.party && FULL) this.partyCoop();
   }
 
   private show(html: string) { this.root.style.display = ''; this.root.innerHTML = html; }
@@ -393,7 +395,27 @@ export class Menu {
     if (lv2) lv2.onclick = () => { this.coop!.leave(); this.campaign(); };
     this.refreshCoop();
   }
-  name() { try { return localStorage.getItem('zu-name') ?? ''; } catch { return ''; } }
+  /**
+   * Started from a Zenith.net launcher party ("Play together"): go straight to Starfall co-op online. The party
+   * leader hosts a squad, everyone else joins the squad that carries the same party id.
+   */
+  private partyCoop() {
+    this.campaign();
+    (this.root.querySelector('.con') as HTMLElement | null)?.click();
+    const c = this.coop;
+    if (!c || !ZENITH?.party) return;
+    if (ZENITH.host) { c.host(this.cHero, this.cLevel); this.campaign(); return; }
+    const party = ZENITH.party;
+    const tryJoin = () => {
+      if (c !== this.coop || c.role) return;
+      const sq = c.squads().find(p => p.party === party);
+      if (sq) { c.join(sq.id, this.cHero); this.campaign(); }
+    };
+    const prev = c.onPlayers;
+    c.onPlayers = p => { prev?.(p); tryJoin(); };
+    tryJoin();
+  }
+  name() { if (ZENITH) return ZENITH.user; try { return localStorage.getItem('zu-name') ?? ''; } catch { return ''; } }
   private refreshCoop() {
     const c = this.coop; if (!c) return;
     const st = this.root.querySelector('.coop .st'); if (st) st.innerHTML = c.lobby.brokers ? `<span class="ok">● online</span>` : `<span class="bad">● connecting</span>`;

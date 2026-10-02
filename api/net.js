@@ -249,6 +249,7 @@ export default async function handler(req, res) {
       await store.hello({
         id, name: clean(m.name) || 'Hero', status: STATUS.includes(m.status) ? m.status : 'lobby', mission: clean(m.mission),
         platform: m.platform === 'desktop' ? 'desktop' : 'web', v: +m.v || 1,
+        ...(m.party ? { party: String(m.party).replace(/[^\w:-]/g, '').slice(0, 80) } : {}),   // Zenith.net launcher party
         ...(m.info ? { info: text(m.info) } : {}), ...(m.ping ? { ping: Math.round(num(m.ping, 0, 9999)) } : {}),
         ...(m.lvl ? { lvl: Math.round(num(m.lvl, 0, 99999)) } : {}), ...(m.rank ? { rank: text(m.rank, 24) } : {}),
         ...(m.score ? { score: Math.round(num(m.score, 0, 1000)) } : {}),

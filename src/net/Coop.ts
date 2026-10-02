@@ -3,6 +3,7 @@
 import { Lobby, type Presence, type LobbyMsg } from './lobby';
 import { PeerLink, type LinkState } from './link';
 import { NodeLobby, NET_URL } from './nodeLobby';
+import { ZENITH } from './zenith';
 import type { NetSession } from './session';
 
 export interface Member { id: string; name: string; hero: string; link?: LinkState; }
@@ -38,6 +39,7 @@ export class Coop implements NetSession {
     }, 6000);
   }
   private wire<T extends Lobby | NodeLobby>(l: T): T {
+    if (ZENITH?.party) l.me.party = ZENITH.party;          // Zenith.net launcher party: party members find each other's squad
     l.onPlayers = p => this.onPlayers?.(p);
     l.onStatus = n => this.onStatus?.(n);
     l.onMessage = m => this.handle(m);

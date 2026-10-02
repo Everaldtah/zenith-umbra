@@ -16,6 +16,8 @@ export interface Presence {
   id: string; name: string; status: Status; platform: Platform; mission?: string; v: number;
   /** online play (Vercel node only): a custom game's line, ping to the node, profile level, best rank, host score */
   info?: string; ping?: number; lvl?: number; rank?: string; score?: number;
+  /** Zenith.net launcher party id (both transports) */
+  party?: string;
 }
 export interface LobbyMsg { t: string; from: string; mid: string; [k: string]: unknown }
 
@@ -68,7 +70,7 @@ export class Lobby {
       try {
         const p = JSON.parse(dec.decode(payload)) as Presence;
         if (p.v !== PROTO || typeof p.name !== 'string') return;
-        this.players.set(id, { ...p, id, name: p.name.slice(0, 20), seen: Date.now() });
+        this.players.set(id, { ...p, id, name: p.name.slice(0, 20), party: typeof p.party === 'string' ? p.party.slice(0, 80) : undefined, seen: Date.now() });
         this.emit();
       } catch { /* ignore junk */ }
       return;
