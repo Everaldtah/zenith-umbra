@@ -2,7 +2,7 @@
 # tree at once, and a build from it ships whatever half-finished work is lying around.
 #   powershell -File scripts/clean-release.ps1 <sha> [-Desktop]
 # Makes a throwaway worktree at <sha>, junctions the heavy git-ignored inputs into it (node_modules, desktop/node_modules,
-# assetgen/out = the HQ / HD models) and copies the only git-ignored public file (public/anim/mixamo.glb), then runs
+# assetgen/out = the HQ / HD models) and copies the git-ignored public files (public/anim/mixamo.glb, kevin.glb...), then runs
 # tsc + the unit tests + `npm run build` (web: vite + lite-strip) and, with -Desktop, `node desktop/build.mjs --installer`
 # (installs to %LOCALAPPDATA%\Programs\ZenithUmbra). The junctions are removed before the worktree is, so the shared
 # node_modules is never deleted through them.
@@ -23,7 +23,9 @@ Pop-Location
 try {
   New-Item -ItemType Directory -Force (Join-Path $wt 'assetgen') | Out-Null
   foreach ($l in $links) { cmd /c mklink /J (Join-Path $wt $l) (Join-Path $main $l) | Out-Null }
-  Copy-Item (Join-Path $main 'public\anim\mixamo.glb') (Join-Path $wt 'public\anim\mixamo.glb')
+  # every git-ignored file under public/ (clip packs whose licences keep them out of git) - asked of git, not listed here
+  Push-Location $main; $ignored = git ls-files --others --ignored --exclude-standard public; Pop-Location
+  foreach ($f in $ignored) { $dst = Join-Path $wt $f; New-Item -ItemType Directory -Force (Split-Path -Parent $dst) | Out-Null; Copy-Item (Join-Path $main $f) $dst; "copied $f" }
   Push-Location $wt
   npx tsc --noEmit -p .; if ($LASTEXITCODE) { throw 'tsc failed' }
   npx vitest run --reporter=dot; if ($LASTEXITCODE) { Write-Warning 'unit tests failed (the campaign sims are occasionally flaky - re-run before shipping)' }
