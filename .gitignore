@@ -31,3 +31,5 @@ __pycache__/
 work/
 # Mixamo clips may ship inside the game but not be redistributed as raw files: deployed from disk, never committed
 public/anim/mixamo.glb
+# Kevin Iglesias FREE packs: Unity Asset Store EULA - shipped inside the desktop build, never redistributed as raw files
+public/anim/kevin.glb

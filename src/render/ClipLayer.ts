@@ -40,6 +40,14 @@ export interface LayerOut {
 
 interface Action { clip: PoseClip; slot: Slot; t: number; rate: number; full: boolean; w: number; hold: boolean; }
 
+/** inertialized transitions: the half-life (s) the pose jump of a cut decays with (critically damped, from rest) */
+export const INERT_HALFLIFE = 0.1;
+const INERT_Y = 2 * Math.LN2 / INERT_HALFLIFE;
+/** the share of a pose jump still left t seconds after the cut: x(t) = (1 + y t) e^(-y t) (a critically damped spring
+ *  released from rest - Bollo's inertialization, GDC 2018, in D. Holden's spring form; theorangeduck.com, MIT) */
+export const inertDecay = (t: number) => (1 + INERT_Y * t) * Math.exp(-INERT_Y * t);
+const _qi = new THREE.Quaternion(), _qo = new THREE.Quaternion();
+
 export class ClipLayer {
   private base = new Pose(); private tmp = new Pose(); private act = new Pose();
   phase = 0; idleT = 0;
@@ -49,6 +57,9 @@ export class ClipLayer {
   private prev = { attack: 9, cast: 9, hit: 9, jump: 9, land: 9, reload: 0 };
   private death: PoseClip | null = null;
   private out: LayerOut = { pose: this.base, legs: 0, torso: 0, armsLoco: 0, armsAction: 0, loco: 0, action: '', clipName: '' };
+  // inertialization: the pose handed out last frame, and the jump a cut opened (decayed to nothing over ~0.3 s)
+  private last = new Pose(); private lastOk = false; private cut = false;
+  private off = { q: RT.map(() => new THREE.Quaternion()), p: RT.map(() => new THREE.Vector3()), d: RT.map(() => new THREE.Vector3()), on: new Uint8Array(RT.length), t: 9 };
 
   constructor(public lib: ClipLibrary, public seed = 0, public hero = '') {}
 
@@ -56,6 +67,8 @@ export class ClipLayer {
 
   private start(slot: Slot, clip: PoseClip | null, target?: number, hold = false) {
     if (!clip) return;
+    // a one-shot cutting into another that still shows: the pose would jump - inertialize it
+    if (this.action && this.action.w > 0.05) this.cut = true;
     const want = target ?? TARGET[slot] ?? clip.duration;
     const rate = Math.min(2.2, Math.max(0.6, clip.duration / Math.max(0.05, want)));
     this.action = { clip, slot, t: 0, rate, full: FULL.has(slot), w: 0, hold };
@@ -73,13 +86,13 @@ export class ClipLayer {
     o.action = ''; o.armsAction = 0; o.clipName = '';
     // ---- death: full body, held on the last frame
     if (s.dead) {
-      this.death ??= this.pick('death');
+      if (!this.death) { this.death = this.pick('death'); this.cut = true; }
       if (!this.death) return null;
       samplePose(this.death, Math.min(this.death.duration, (s.deathAge ?? 0) * Math.max(1, this.death.duration / 1.6)), this.base);
       o.legs = o.torso = o.armsAction = 1; o.armsLoco = 0; o.loco = 0; o.action = 'death'; o.clipName = this.death.name;
-      return o;
+      return this.inertialize(o, dt);
     }
-    this.death = null;
+    if (this.death) { this.death = null; this.lastOk = false; this.off.t = 9; }        // (back from the dead: no flow from the corpse)
     // ---- one-shot triggers (ages drop to ~0 when a new event happens)
     const P = this.prev;
     if (s.attackAge < P.attack - 1e-6) {
@@ -109,7 +122,7 @@ export class ClipLayer {
     if (rl > P.reload + 1e-3 && (!this.action || this.action.slot === 'shoot')) this.start('reload', this.pick('reload', 0), Math.max(0.4, (s.reloadDur ?? rl) * 0.95));
     P.reload = rl;
     P.attack = s.attackAge; P.cast = s.castAge; P.hit = s.hitAge; P.jump = s.jumpAge; P.land = s.landAge;
-    if (!k.eligible) { this.action = null; return null; }
+    if (!k.eligible) { this.action = null; this.lastOk = false; this.off.t = 9; return null; }
     // ---- base: idle / locomotion / airborne / stunned
     const base = this.base.reset();
     const air = k.airBlend;
@@ -145,7 +158,7 @@ export class ClipLayer {
     if (a) {
       a.t += dt * a.rate;
       const real = a.clip.duration / a.rate, tr = a.t / a.rate;
-      if (a.t >= a.clip.duration && !a.hold) this.action = null;
+      if (a.t >= a.clip.duration && !a.hold) { if (a.w > 0.3) this.cut = true; this.action = null; }
       else {
         // fast in (the pose answers the button within a few frames), eased out: trimmed gestures end on their key pose and
         // blend back to the base over ~0.2 s instead of the clip's own walk back to idle
@@ -170,6 +183,34 @@ export class ClipLayer {
         o.action = a.slot; o.clipName = a.clip.name;
       }
     }
+    return this.inertialize(o, dt);
+  }
+
+  /** a cut this frame opens an offset from last frame's pose to this one; every frame the remaining offset (decayed by
+   *  inertDecay) rides on top, so the body flows from where it was into the new motion instead of snapping to it */
+  private inertialize(o: LayerOut, dt: number): LayerOut {
+    const pose = o.pose, F = this.off;
+    if (this.cut && this.lastOk) {
+      for (let i = 0; i < RT.length; i++) {
+        F.on[i] = pose.w[i] && this.last.w[i] ? 1 : 0;
+        if (!F.on[i]) continue;
+        F.q[i].copy(this.last.q[i]).multiply(_qi.copy(pose.q[i]).invert());
+        if (F.q[i].w < 0) F.q[i].set(-F.q[i].x, -F.q[i].y, -F.q[i].z, -F.q[i].w);        // the short way round
+        F.p[i].copy(this.last.p[i]).sub(pose.p[i]); F.d[i].copy(this.last.d[i]).sub(pose.d[i]);
+      }
+      F.t = 0;
+    } else F.t += dt;
+    this.cut = false;
+    if (F.t < 6 * INERT_HALFLIFE) {
+      const k = inertDecay(F.t);
+      for (let i = 0; i < RT.length; i++) {
+        if (!F.on[i] || !pose.w[i]) continue;
+        _qo.identity().slerp(F.q[i], k);
+        pose.q[i].premultiply(_qo);
+        pose.p[i].addScaledVector(F.p[i], k); pose.d[i].addScaledVector(F.d[i], k);
+      }
+    }
+    this.last.copy(pose); this.lastOk = true;
     return o;
   }
 }

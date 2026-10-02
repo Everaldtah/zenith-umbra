@@ -1,0 +1,11 @@
+cmu.glb - motion capture from the CMU Graphics Lab Motion Capture Database.
+
+"The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from
+NSF EIA-0196217."
+
+Converted to BVH by Bruce Hahne (cgspeed.com), retargeted to the CC0 Quaternius rig by rancidmilk
+(rancidmilk.itch.io/free-character-animations), cut and packed for ZENITH//UMBRA (assetgen/anim/cmu_map.json).
+
+Terms (mocap.cs.cmu.edu): "The motion capture data may be copied, modified, or redistributed without permission."
+"You may include this data in commercially-sold products, but you may not resell this data directly, even in converted
+form." The same terms pass on to anyone who receives these animations from this repository.

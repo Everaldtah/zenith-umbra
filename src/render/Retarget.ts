@@ -39,7 +39,7 @@ export interface PoseClip {
 // "UpperArmL"), so matching works on lowercase alphanumerics with the side peeled off either end.
 const PARTS: Record<string, string[]> = {
   shoulder: ['shoulder', 'clavicle', 'collar', 'collarbone'],
-  upperarm: ['upperarm', 'arm', 'uparm', 'humerus'],
+  upperarm: ['upperarm', 'arm', 'uparm', 'humerus', 'shldr'],      // (shldr: the DAZ / Poser upper arm - CMU's BVH conversions)
   forearm: ['forearm', 'lowerarm', 'loarm'],
   hand: ['hand', 'palm', 'fist', 'wrist'],
   thigh: ['thigh', 'upleg', 'upperleg', 'femur'],
@@ -51,7 +51,7 @@ const CENTER: Record<string, string[]> = { hips: ['hips', 'hip', 'pelvis'], neck
 export function normBoneName(n: string) {
   return n.toLowerCase()
     .replace(/^mixamorig\d*[-_:. ]*/, '')
-    .replace(/^(armature|def|org|mch|bip0?1|cc_base|valvebiped\d*)[-_:. ]+/, '')
+    .replace(/^(armature|def|org|mch|bip0?1|cc_base|valvebiped\d*|b)[-_:. ]+/, '')        // (b-: Kevin Iglesias' rig, "B-upperArm.L")
     .replace(/[^a-z0-9]/g, '');
 }
 const partOf = (base: string) => {
@@ -189,11 +189,36 @@ export function bakeClips(root: THREE.Object3D, clips: THREE.AnimationClip[], sr
       restP: new Float32Array(rest.p.flatMap(v => [v.x, v.y, v.z])), speed: 0, travel: [0, 1],
       contact: new Uint8Array(frames * 2), phase0: 0, rootMotion: false,
     };
+    groundClip(pc);
     analyse(pc);
     out.push(pc);
   }
   mixer.uncacheRoot(root);
   return out;
+}
+
+/**
+ * Some conversions animate the hips at an absolute height over a rest pose that stands elsewhere (the CMU BVH takes on
+ * the Quaternius rig: the feet float 0.6 - 1 leg lengths over the floor in every frame). A clip whose feet never come
+ * within GROUND_SLACK of the rest pose's ankle height is shifted down so its lowest foot stands on the floor. Real
+ * airborne clips (a jump loop's tucked feet) stay well under that slack and are left alone. A clip that starts further
+ * than that from the rest pose's hips (horizontally) is moved over them.
+ */
+const GROUND_SLACK = 0.4;
+/** a one-shot whose hips wander further than this (leg lengths) from where they start is put in place (analyse) */
+const TRAVEL_SLACK = 0.6;
+export function groundClip(c: PoseClip) {
+  const fl = RT_INDEX.foot_L, fr = RT_INDEX.foot_R;
+  if (!c.mask[fl] || !c.mask[fr]) return 0;
+  let lo = Infinity;
+  for (let f = 0; f < c.frames; f++) lo = Math.min(lo, c.p[(f * NB + fl) * 3 + 1], c.p[(f * NB + fr) * 3 + 1]);
+  const ankle = Math.min(c.restP[fl * 3 + 1], c.restP[fr * 3 + 1]), shift = lo - ankle;
+  if (shift > GROUND_SLACK) for (let i = 1; i < c.p.length; i += 3) c.p[i] -= shift;
+  // ...and the same takes start wherever the actor stood in the capture volume (1 - 3 leg lengths off the rig's origin):
+  // a clip whose first frame has the hips that far out is moved so it starts over the rest pose's hips
+  const h = RT_INDEX.hips, dx = c.p[h * 3] - c.restP[h * 3], dz = c.p[h * 3 + 2] - c.restP[h * 3 + 2];
+  if (Math.hypot(dx, dz) > GROUND_SLACK) for (let i = 0; i < c.p.length; i += 3) { c.p[i] -= dx; c.p[i + 2] -= dz; }
+  return Math.max(0, shift);
 }
 
 const pAt = (c: PoseClip, f: number, b: RtBone) => { const o = (f * NB + RT_INDEX[b]) * 3; return new THREE.Vector3(c.p[o], c.p[o + 1], c.p[o + 2]); };
@@ -214,6 +239,27 @@ export function analyse(c: PoseClip) {
     for (let f = 0; f < n; f++) {
       const k = f / last;
       for (let i = 0; i < NB; i++) { const o = (f * NB + i) * 3; c.p[o] -= drift.x * k; c.p[o + 2] -= drift.z * k; }
+    }
+  }
+  // a one-shot that travels (Mixamo's front flip lands 7 leg lengths on, a CMU vault runs up to the obstacle): the game
+  // moves the body itself (the dash, the roll, the leap), so the clip is put in place - its hips keep their sway around a
+  // smoothed path, the path itself is taken out. Deaths keep their fall (the body comes to rest where it drops)
+  if (!c.loop && !/death|dying|dies|dead|killed/i.test(c.name)) {
+    const h = RT_INDEX.hips, hx = (f: number) => c.p[(f * NB + h) * 3], hz = (f: number) => c.p[(f * NB + h) * 3 + 2];
+    let ex = 0;
+    for (let f = 0; f < n; f++) ex = Math.max(ex, Math.hypot(hx(f) - hx(0), hz(f) - hz(0)));
+    if (ex > TRAVEL_SLACK) {
+      const W = Math.max(1, Math.round(c.fps * 0.2)), sx = new Float32Array(n), sz = new Float32Array(n);
+      for (let f = 0; f < n; f++) {
+        let ax = 0, az = 0, k = 0;
+        for (let j = Math.max(0, f - W); j <= Math.min(last, f + W); j++) { ax += hx(j); az += hz(j); k++; }
+        sx[f] = ax / k; sz[f] = az / k;
+      }
+      for (let f = 0; f < n; f++) {
+        const dx = sx[f] - sx[0], dz = sz[f] - sz[0];
+        for (let i = 0; i < NB; i++) { const o = (f * NB + i) * 3; c.p[o] -= dx; c.p[o + 2] -= dz; }
+      }
+      c.rootMotion = true;
     }
   }
   // contacts: a foot within a few centimetres (per leg length) of its lowest point

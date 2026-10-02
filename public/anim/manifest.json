@@ -2,11 +2,15 @@
   "packs": [
     "UAL1.glb",
     "UAL2.glb",
-    "mixamo.glb"
+    "mixamo.glb",
+    "cmu.glb",
+    "kevin.glb"
   ],
   "credits": {
     "quaternius": "Universal Animation Library 1 & 2 by Quaternius (CC0) - quaternius.com",
-    "mixamo": "Animations from Mixamo (Adobe) - mixamo.com"
+    "mixamo": "Animations from Mixamo (Adobe) - mixamo.com",
+    "cmu": "Motion capture from the CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu; created with funding from NSF EIA-0196217), via cgspeed's BVH conversion and rancidmilk's Quaternius-rig retarget - free to use / modify / redistribute, never to be sold as animations (see LICENSE-CMU.txt)",
+    "kevin": "Human Soldier / Melee / Spellcasting / Throwing Animations FREE by Kevin Iglesias (keviniglesias.com) - Standard Unity Asset Store EULA, desktop build only"
   },
   "slots": {
     "idle": [
@@ -24,12 +28,21 @@
     "death": [
       "Death01",
       "MX_Death_Back",
-      "MX_Death_Knees"
+      "MX_Death_Knees",
+      "KI_Death_A",
+      "KI_Death_B",
+      "KI_Death_C",
+      "KI_Death_Melee",
+      "CMU_Death_Rug_Pull",
+      "CMU_Death_Face_Fall"
     ],
     "hit": [
       "Hit_Chest",
       "Hit_Head",
-      "MX_Hit_React"
+      "MX_Hit_React",
+      "KI_Hit_Chest",
+      "KI_Hit_Side",
+      "KI_Hit_Guard"
     ],
     "punch": [
       "Punch_Jab",
@@ -43,7 +56,8 @@
     ],
     "roll": [
       "Roll",
-      "MX_Roll_Fwd"
+      "MX_Roll_Fwd",
+      "CMU_Dive_Roll"
     ],
     "dash": [
       "Sword_Dash",
@@ -55,7 +69,11 @@
     "flip": [
       "NinjaJump_Start",
       "MX_FrontFlip",
-      "MX_Backflip"
+      "MX_Backflip",
+      "CMU_Backflip",
+      "CMU_Side_Flip",
+      "CMU_Cartwheel",
+      "CMU_Front_Handspring_Flip"
     ],
     "cast": [
       "Spell_Simple_Shoot",
@@ -63,7 +81,9 @@
     ],
     "throw": [
       "OverhandThrow",
-      "MX_Throw"
+      "MX_Throw",
+      "KI_Throw_Weapon",
+      "KI_Grenade_Throw"
     ],
     "shoot": [
       "Pistol_Shoot"
@@ -74,6 +94,10 @@
     "block": [
       "Sword_Block",
       "MX_Block"
+    ],
+    "vault": [
+      "CMU_Vault_Over",
+      "CMU_Vault_Run"
     ]
   },
   "exclude": [
@@ -90,7 +114,8 @@
       "melee": [
         "MX_Punch_Hook",
         "MX_Punch_Uppercut",
-        "Punch_Cross"
+        "Punch_Cross",
+        "CMU_Kick_Roundhouse"
       ]
     },
     "kagemaru": {
@@ -112,8 +137,22 @@
     },
     "tomoe": {
       "throw": [
+        "KI_Throw_Boomerang",
         "MX_Throw",
         "OverhandThrow"
+      ],
+      "reload": [
+        "KI_Rifle_Reload"
+      ]
+    },
+    "gantetsu": {
+      "reload": [
+        "KI_DualPistol_Reload"
+      ]
+    },
+    "hibiki": {
+      "reload": [
+        "KI_AssaultRifle_Reload"
       ]
     }
   },
@@ -143,7 +182,7 @@
       1.0
     ],
     "hundredsuns": [
-      "MX_Cast_1H_Up",
+      "KI_Cast_Call",
       1.0
     ],
     "silence": [
@@ -151,11 +190,11 @@
       0.7
     ],
     "bloodpact": [
-      "MX_Cast_1H_Fwd",
+      "KI_Cast_Direct_1H",
       0.6
     ],
     "requiem": [
-      "MX_Cast_2H_PullUp",
+      "KI_Cast_Omni",
       1.2
     ],
     "marionette": [
@@ -167,7 +206,7 @@
       0.6
     ],
     "theater": [
-      "MX_Cast_2H_Fwd",
+      "KI_Cast_Direct_2H",
       1.1
     ],
     "chain": [
@@ -191,7 +230,7 @@
       1.0
     ],
     "recall": [
-      "MX_Cast_1H_Fwd",
+      "KI_Catch_Boomerang",
       0.45
     ]
   },
@@ -203,6 +242,18 @@
     "MX_Cast_2H_PullUp": [
       0.25,
       2.3
+    ],
+    "CMU_Vault_Over": [
+      0.35,
+      1.3
+    ],
+    "CMU_Vault_Run": [
+      0.6,
+      1.7
+    ],
+    "CMU_Dive_Roll": [
+      0.35,
+      2.1
     ]
   },
   "fp": {

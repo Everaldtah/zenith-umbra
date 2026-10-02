@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { classifyBone, mapSkeleton, bakeClips, samplePose, Pose, type PoseClip } from '../../src/render/Retarget';
 import { ClipLibrary, slotOf, mirrorClip, reverseClip } from '../../src/render/ClipLibrary';
+import { inertDecay } from '../../src/render/ClipLayer';
 import { Animator, type AnimState } from '../../src/render/Animator';
 import { mannequin } from '../../src/render/CharacterView';
 import { Actor } from '../../src/game/Actor';
@@ -255,6 +256,28 @@ describe('library', () => {
       if (an.clip?.action === 'melee' && seen[seen.length - 1] !== an.clip.clipName) seen.push(an.clip.clipName);
     }
     expect(seen).toEqual(['Sword_Combo_1', 'Sword_Combo_2', 'Sword_Combo_3', 'Sword_Combo_1']);
+    expect(finite(an)).toBe(true);
+  });
+
+  it('a one-shot cutting into another flows into it (inertialized) instead of popping', () => {
+    const { an } = hero('kaien');
+    an.useClips(lib, 0);
+    let t = 0, atk = -9, cast = -9;
+    const hy: number[] = [], act: string[] = [];
+    for (let f = 0; f < 80; f++) {
+      t += 1 / 60;
+      if (f === 10) atk = t;                    // a swing (the fixture's swing drops the body)...
+      if (f === 24) cast = t;                   // ...cut mid-way by a roll that starts standing
+      an.update(state({ time: t, attackAge: t - atk, melee: true, attackTime: 0.45, castAge: t - cast, castId: f >= 24 ? 'pilotroll' : '' }));
+      hy.push(an.clip!.pose.p[RT_INDEX.hips].y); act.push(an.clip!.action);
+    }
+    expect(act[22]).toBe('melee'); expect(act[26]).toBe('roll');
+    // the cut frame moves the hips no more than the swing itself was moving them a frame before
+    const step = (f: number) => Math.abs(hy[f] - hy[f - 1]);
+    const swingStep = Math.max(step(21), step(22), step(23));
+    expect(step(24)).toBeLessThan(swingStep * 2.5 + 0.01);
+    // ...and the hips do reach the new clip's pose: the offset has decayed a third of a second later
+    expect(inertDecay(0.35)).toBeLessThan(0.05);
     expect(finite(an)).toBe(true);
   });
 
