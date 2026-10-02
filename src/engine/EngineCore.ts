@@ -39,7 +39,8 @@ export class EngineCore {
   readonly interp = new Interpolator();
   readonly gpu: GpuTimer;
   readonly dynres = new DynamicResolution();
-  readonly fsr = new FsrPass();
+  /** the post chain's last pass; a new one per composer (a rebuilt chain disposes the old composer's passes) */
+  fsr = new FsrPass();
   readonly anim = new AnimBudget();
   readonly graph = new FrameGraph();
   /** runtime switch for the once-per-frame shadow / scene-graph update (A/B in one session: tests/e2e/engine_ab.mjs) */
@@ -49,7 +50,6 @@ export class EngineCore {
   renderMs = 0;
   private frameStart = 0;
   private lastFrameMs = 16.7;
-  private warmed = new WeakSet<THREE.WebGLRenderer>();
 
   constructor(private renderer: THREE.WebGLRenderer) {
     this.gpu = new GpuTimer(renderer.getContext() as WebGL2RenderingContext);
@@ -111,16 +111,13 @@ export class EngineCore {
   /** the post chain is (re)built: FSR goes last; it upscales whatever resolution the composer runs at */
   finishComposer(c: EffectComposer) {
     if (!this.on) return;
+    const prev = this.fsr;
+    this.fsr = new FsrPass();
+    this.fsr.forceLinear = prev.forceLinear;
+    this.fsr.sharpness = prev.sharpness;
     c.addPass(this.fsr);
-    this.warm();
-  }
-
-  /** compile the FSR programs now, not on the first frame that needs them (a mid-match hitch) */
-  private warm() {
-    const r = this.renderer;
-    if (this.warmed.has(r)) return;
-    this.warmed.add(r);
-    this.fsr.warm(r);
+    // compile its programs now (a settings change), not on the first frame that needs them (a mid-match hitch)
+    this.fsr.warm(this.renderer);
   }
 
   /** composer scale vs canvas: FSR does the resampling, so it only runs when they differ */
