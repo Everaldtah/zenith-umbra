@@ -435,10 +435,12 @@ export class Menu {
     this.show(`<div class="pause"><h2>PAUSED</h2><div class="btns">
       <button class="primary res">RESUME</button>
       ${this.game.match?.world.mode === 'training' ? '<button class="swap">SWITCH HERO</button>' : ''}
+      ${this.game.rangeUI ? '<button class="range">HERO RANGE · SPAR ARENA</button>' : ''}
       <button class="set">SETTINGS</button><button class="quit">QUIT TO MENU</button></div>
       <p class="tips">Click the game to capture the mouse · Esc pauses</p></div>`);
     (this.root.querySelector('.res') as HTMLElement).onclick = () => { this.close(); this.game.setPaused(false); };
     const sw = this.root.querySelector<HTMLElement>('.swap'); if (sw) sw.onclick = () => this.heroSelect(true);
+    const rg = this.root.querySelector<HTMLElement>('.range'); if (rg) rg.onclick = () => { this.close(); this.game.openConsole(); };
     (this.root.querySelector('.set') as HTMLElement).onclick = () => this.settings(() => this.pause());
     (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.abandon(); this.game.stop(); if (this.online.session?.phase === 'idle' && this.online.session.online) this.online.open(); else this.title(); };
   }

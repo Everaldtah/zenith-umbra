@@ -279,7 +279,7 @@ export class Hud {
       this.obj.innerHTML = `<div class="side us"><i style="width:${mine}%"></i><b>${mine.toFixed(0)}%</b></div>
         <div class="mid ${P.owner ? (P.owner === my ? 'us' : 'them') : ''}">${unlock > 0 ? `POINT OPENS ${unlock.toFixed(0)}` : capTxt}<small>${fmtTime(Math.max(0, w.timeLimit - t))}</small></div>
         <div class="side them"><i style="width:${theirs}%"></i><b>${theirs.toFixed(0)}%</b></div>`;
-    } else this.obj.innerHTML = `<div class="mid">TRAINING GROUNDS <small>H: switch hero · Esc: menu</small></div>`;
+    } else this.obj.innerHTML = `<div class="mid">TRAINING GROUNDS <small>H: switch hero${FULL ? ' · G: hero range & spar · V: first / third person' : ''} · Esc: menu</small></div>`;
     // overhead bars (enemies + allies), projected
     const seen = new Set<number>();
     const v = new THREE.Vector3();

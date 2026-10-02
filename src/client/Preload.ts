@@ -110,7 +110,7 @@ export async function warmObject(renderer: THREE.WebGLRenderer, obj: THREE.Objec
 export const FX_KINDS = ['hit', 'impact', 'healhit', 'burst', 'tracer', 'slash', 'swing', 'hammer', 'shatter', 'lightning', 'parry', 'deflect', 'susanoocast', 'skybolt', 'stormcall', 'susanooslash', 'susanoofade', 'effigyfade', 'rebirthcast', 'rebirth', 'rebirthring', 'sealstorm', 'sealshield', 'sealstrike', 'sealburst', 'sealmend', 'decoy',
   'undying', 'death', 'dust', 'step', 'doublejump', 'pad', 'spawn', 'barrierhit', 'barrierbreak', 'ultflash', 'sunburst', 'nova', 'slam',
   'implode', 'link', 'strings', 'chainline', 'wish', 'voidshield', 'papers', 'smoke', 'flash', 'chargetrail', 'lance', 'soundcone', 'cut',
-  'arrowhit', 'immune', 'zonebreak', 'singularity', 'swoop', 'swoopburst', 'healthpack', 'wound', 'warcall', 'reaping', 'crossmix', 'amp',
+  'arrowhit', 'immune', 'zonebreak', 'singularity', 'swoop', 'swoopburst', 'healthpack', 'ultpack', 'wound', 'warcall', 'reaping', 'crossmix', 'amp',
   'twinkoi', 'dragoncoil', 'dragoncut'];
 
 // ---------------------------------------------------------------- progress on the loading screen

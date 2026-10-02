@@ -52,6 +52,8 @@ import { SUSANOO_SHOWCASE } from '../game/susanoo';
 import { loadSurfaces, CLASSIC } from '../render/Surfaces';
 import { mapEnvironment } from '../render/EnvLight';
 import { gradeFor, gradePass, setGrade } from '../render/PostFx';
+import { TrainingScene } from '../render/TrainingScene';
+import { RangeUI, type ConsoleTab } from './RangeUI';
 
 /** Image Sharpening (Settings > Video): a light unsharp mask after tone mapping */
 const SHARPEN = {
@@ -203,7 +205,7 @@ export class Game {
     this.renderer.domElement.addEventListener('click', () => { sfx.unlock(); if (this.running && !this.paused && this.match?.player) this.input.lock(); });
     document.addEventListener('pointerlockchange', () => {
       // losing the mouse pauses the match - except in the Stadium Armory, which frees the cursor on purpose
-      if (!document.pointerLockElement && this.running && this.match?.player && !this.match.world.winner && !this.armory?.open) this.setPaused(true);
+      if (!document.pointerLockElement && this.running && this.match?.player && !this.match.world.winner && !this.armory?.open && !this.rangeUI?.open) this.setPaused(true);
     });
     (window as any).__zu = { ...(window as any).__zu, game: this, sfx, voice };
     requestAnimationFrame(t => this.loop(t));
@@ -406,6 +408,13 @@ export class Game {
     this.fx = new Fx(this.scene, quality(this.settings).fxCap);
     // scene detail options now, and again once the heroes' models have streamed in (texture filtering)
     // (texture filtering is applied again by the preload, once every model is in - no re-uploads mid-match)
+    // Training Grounds: the Hero Range and the Spar Arena (built before the preload: their shaders compile with the rest)
+    if (FULL && this.match.range) {
+      this.training = new TrainingScene(this.scene, this.match.range, this.match.spar);
+      this.rangeUI = new RangeUI(this.host, this.match.range, this.match.spar, () => this.closeConsole());
+      // a spar round puts you at your end: the camera turns with you, to face the opponent
+      if (this.match.spar) this.match.spar.onPlace = a => { if (a === this.match?.player) { this.camYaw = this.input.yaw = a.yaw; this.camPitch = this.input.pitch = 0; } };
+    }
     this.buildComposer(); this.applySceneDetail();
     // first person: your rounds leave the viewmodel's gun(s) - right hand, or alternating hands for twin guns
     let hand = 1;
@@ -602,6 +611,21 @@ export class Game {
   get view(): 'first' | 'third' { const m = this.match?.world.mode; return (m && FIXED_VIEW[m]) || this.settings.view; }
 
   armory: Armory | null = null;
+  /** Training Grounds (desktop edition): the Hero Range lane + Spar Arena dressing, and their console / meters */
+  training: TrainingScene | null = null;
+  rangeUI: RangeUI | null = null;
+
+  /** the Training Grounds console (G, the consoles by the range and the arena, or the pause menu): pauses while open */
+  openConsole(tab?: ConsoleTab) {
+    if (!this.rangeUI || !this.running) return;
+    this.paused = true; this.input.unlock();
+    this.rangeUI.show(tab);
+  }
+  private closeConsole() {
+    // (the key that closed it must not reopen it, or open the pause menu, on the next frame)
+    this.input.pressed('range'); this.input.once('Escape');
+    this.setPaused(false);
+  }
   /** Stadium: open the Armory between rounds (cursor free), close and re-grab the mouse when the round starts */
   private updateArmory(w: WorldCls, me: Actor | null) {
     const S = w.stadium;
@@ -640,6 +664,8 @@ export class Game {
     this.views.clear();
     this.fp?.dispose(); this.fp = null;
     this.swarm?.dispose(this.scene); this.swarm = null;
+    this.training?.dispose(this.scene); this.training = null;
+    this.rangeUI?.dispose(); this.rangeUI = null;
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
     this.match = null; this.mapScene = null; this.fx = null;
     this.netEl?.remove(); this.netEl = null;
@@ -722,6 +748,7 @@ export class Game {
     if (this.input.pressed('perf')) { const o = ['off', 'simple', 'advanced'] as const; this.settings.video.perfStats = o[(o.indexOf(this.settings.video.perfStats) + 1) % 3]; }
     this.updateArmory(w, me);
     if (w.mode === 'training' && me && !this.paused && this.input.pressed('swap')) { this.paused = true; this.input.unlock(); (window as any).__zu.openSwap?.(); }
+    if (w.mode === 'training' && me && !this.paused && this.rangeUI && this.input.pressed('range')) this.openConsole(this.rangeUI.nearest(me) ?? undefined);
     if (!me && !online) this.spectatorKeys();
     // ---- simulate (a shared co-op world never pauses)
     if (!this.paused || online) {
@@ -787,6 +814,8 @@ export class Game {
       else { v.group.position.set(a.pos.x, a.pos.y, a.pos.z); v.group.rotation.y = a.yaw; }
       if (a === me && this.view === 'first' && this.abilityCam < 0.08) v.group.visible = false;
     }
+    // heroes taken out of the world (the Hero Range / Spar Arena swapping their target): their bodies go too
+    if (this.rangeUI && this.views.size) { const ids = new Set(w.actors.map(a => a.id)); for (const [id, v] of this.views) if (!ids.has(id)) { this.scene.remove(v.group); v.dispose(); this.views.delete(id); } }
     // ---- first-person arms: rebuilt when the hero changes (mech <-> pilot), hidden while scoped, dead or in a boss intro
     // (a scope hides the viewmodel; an archer's Hawk Eye aims down the arrow with the bow still in view - Freja's Take Aim)
     const wantFp = !!me && me.alive && this.view === 'first' && (!me.sv.zoom || FP_STYLE[me.def.id]?.grip === 'bow') && !this.bossCam && this.abilityCam < 0.08;
@@ -804,7 +833,8 @@ export class Game {
     this.fx.fpActor = wantFp ? me : null;
     this.swarm?.update(w, w.time, viewer.team, viewer.sees);
     this.fx.update(dt * (this.paused ? 0 : this.timeScale), w, w.time);
-    this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null, this.camera.position);   // (the float hides while the camera is inside it)
+    this.mapScene.update(w.time, w.point, viewer.team, w.packs, w.rules === 'push' ? w.push : null, this.camera.position, w.ultPacks);   // (the float hides while the camera is inside it)
+    this.training?.update(w.time, vdt);
     this.updateCamera(dt, me);
     sfx.setListener(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
     if (FULL && !this.paused) this.sound.frame(w, me, this.camera, dt);
@@ -819,6 +849,7 @@ export class Game {
     this.engine.endRender();
     this.framesRendered++;
     this.hud.update(w, me, this.camera, w.time, this.settings.video.perfStats !== 'off' ? this.fpsAvg : 0, this.input.held('score'), this.spectateLabel());
+    this.rangeUI?.update(me, w.time);
     if (this.settings.video.perfStats === 'advanced') {
       const ri = this.renderer.info, e = this.engine, es = e.on && this.composer;
       const pr = es ? Math.min(devicePixelRatio, 2) * quality(this.settings).pixelRatio * this.dynScale : this.renderer.getPixelRatio();

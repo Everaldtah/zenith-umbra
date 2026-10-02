@@ -43,6 +43,8 @@ export const FLOAT_SPEED = 1.2;
 export const PUSH_TIME = 300;
 /** health packs */
 export const PACK = { small: { hp: 75, respawn: 10 }, big: { hp: 250, respawn: 15 } };
+/** ultimate charge packs (Training Grounds, desktop edition): a player who touches one has their ultimate ready at once */
+export const ULT_PACK = { respawn: 8, r: 1.1 };
 /** a ricochet shuriken: the damage left for each enemy after the first, how hard it turns on its prey (1/s), the life it gets per hunt (s) */
 export const SEEK_DMG = 0.7, SEEK_TURN = 9, SEEK_LIFE = 0.9;
 /** Gantetsu's Taiko Heartbeat: damage taken x(1 - TAIKO_DR) (Mauga's Cardiac Overdrive: 30%) */
@@ -51,7 +53,7 @@ export const TAIKO_DR = 0.3;
 export type GameEvent =
   | { t: 'sfx'; id: string; pos?: V3; vol?: number; actor?: Actor }
   | { t: 'fx'; kind: string; pos: V3; to?: V3; r?: number; color?: string; dur?: number; side?: number; actor?: Actor; target?: Actor; mat?: string; n?: V3 }
-  | { t: 'dmg'; src: Actor | null; tgt: Actor; amt: number; crit: boolean; heal?: boolean; pos: V3 }
+  | { t: 'dmg'; src: Actor | null; tgt: Actor; amt: number; crit: boolean; heal?: boolean; pos: V3; kind?: string }
   | { t: 'kill'; src: Actor | null; tgt: Actor }
   | { t: 'demech'; src: Actor | null; tgt: Actor }
   | { t: 'cast'; actor: Actor; id: string; name: string }
@@ -81,6 +83,12 @@ export class World {
   projs: Proj[] = [];
   zones: Zone[] = [];
   events: GameEvent[] = [];
+  /** listeners that see every event the moment it is emitted, at its own sim time (the Hero Range's meter) */
+  taps: ((e: GameEvent) => void)[] = [];
+  /** run at the end of every step (Training Grounds: the spar arena's rounds and walls) */
+  tickers: ((dt: number) => void)[] = [];
+  /** may veto a hit before anything is applied (the sealed spar box: nothing crosses its walls) */
+  gate: ((src: Actor | null, tgt: Actor) => boolean) | null = null;
   timers: { at: number; fn: () => void }[] = [];
   prevIn = new Map<number, { a1: boolean; a2: boolean; ult: boolean; alt: boolean; jump: boolean; fire: boolean; melee: boolean; swoop: boolean; descend: boolean }>();
   attackers = new Map<number, Map<number, number>>();
@@ -99,6 +107,7 @@ export class World {
   private pathPts: V3[] = []; private pathCum: number[] = [];
   /** health packs: position, size, and when each is back */
   packs: { x: number; y: number; z: number; big: boolean; readyAt: number }[] = [];
+  ultPacks: { x: number; y: number; z: number; readyAt: number }[] = [];
   /** campaign hooks: enemy/boss definitions and the encounter director */
   extraDefs: Record<string, HeroDef> = { puppet: PUPPET_DEF, susanoo: SUSANOO_DEF };
   /** the match's path finder, when it has one (summoned armies route around walls with it) */
@@ -122,6 +131,7 @@ export class World {
       const y = p.y ?? Math.max(0, this.level.groundAt(p.x, p.z, 0.3));
       this.packs.push({ x: p.x, y, z: p.z, big: !!p.big, readyAt: 0 });
     }
+    if (this.full) for (const p of this.map.ultPacks ?? []) this.ultPacks.push({ x: p.x, y: p.y ?? Math.max(0, this.level.groundAt(p.x, p.z, 0.3)), z: p.z, readyAt: 0 });
     if (this.rules === 'control') { this.point.unlockAt = 12; this.timeLimit = 1500; }
     if (this.rules === 'push') {
       const path = this.map.path ?? [[-this.map.size[0] + 6, 0], [this.map.size[0] - 6, 0]];
@@ -187,6 +197,7 @@ export class World {
   // ------------------------------------------------------------------ helpers
   emit(e: GameEvent) {
     this.events.push(e);
+    for (const f of this.taps) f(e);
     if (e.t === 'sfx') this.stats.sfx[e.id] = (this.stats.sfx[e.id] ?? 0) + 1;
     else if (e.t === 'fx') this.stats.fx[e.kind] = (this.stats.fx[e.kind] ?? 0) + 1;
     else if (e.t === 'counter') this.stats.counters++;
@@ -278,6 +289,7 @@ export class World {
     const t = this.time;
     if (!tgt.alive || amount <= 0) return 0;
     if (src && src.team === tgt.team && src !== tgt) return 0;
+    if (this.gate && !this.gate(src, tgt)) return 0;
     if (tgt.has('phased', t) || tgt.has('spawnprot', t) || tgt.has('reborn', t)) return 0;
     if (tgt.has('parry', t) && o.kind === 'melee' && src) {
       src.set('stun', t, 1);
@@ -380,7 +392,7 @@ export class World {
         }
       }
     }
-    this.emit({ t: 'dmg', src, tgt, amt: dealt, crit: !!o.crit, pos: tgt.center });
+    this.emit({ t: 'dmg', src, tgt, amt: dealt, crit: !!o.crit, pos: tgt.center, kind: o.ability ? 'ability' : o.kind });
     if (tgt.health <= 0.01 && tgt.hp <= 0.01) this.kill(tgt, src);
     return dealt;
   }
@@ -716,6 +728,7 @@ export class World {
     else if (this.stadium) this.stadium.update(dt);
     else if (this.rules === 'push') this.updatePush(dt);
     else if (this.mode !== 'training') this.updatePoint(dt);
+    for (const f of this.tickers) f(dt);
   }
 
   // ------------------------------------------------------------------ health packs
@@ -738,6 +751,20 @@ export class World {
         a.stats.packs = (a.stats.packs ?? 0) + 1;
         this.emit({ t: 'dmg', src: a, tgt: a, amt: h + ar, crit: false, heal: true, pos: a.center });
         this.fx('healthpack', { x: p.x, y: p.y + 0.5, z: p.z }, { color: '#7dffb0', r: p.big ? 1.6 : 1 }); this.sfx('healthpack', { x: p.x, y: p.y, z: p.z }, a);
+        break;
+      }
+    }
+    // ultimate charge packs: only for the people playing (a bot never takes one), and only when the ultimate isn't ready
+    for (const p of this.ultPacks) {
+      if (t < p.readyAt) continue;
+      for (const a of this.actors) {
+        if (!a.alive || !(a.isPlayer || a.netId) || Math.hypot(a.pos.x - p.x, a.pos.z - p.z) > ULT_PACK.r || Math.abs(a.pos.y - p.y) > 1.3) continue;
+        const cost = a.def.ult.charge;
+        if (a.ult >= cost) continue;
+        a.ult = cost;
+        p.readyAt = t + ULT_PACK.respawn;
+        a.stats.ultPacks = (a.stats.ultPacks ?? 0) + 1;
+        this.fx('ultpack', { x: p.x, y: p.y + 0.5, z: p.z }, { color: '#ffd23f', actor: a }); this.sfx('healthpack', { x: p.x, y: p.y, z: p.z }, a);
         break;
       }
     }

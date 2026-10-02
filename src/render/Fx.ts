@@ -347,6 +347,8 @@ export class Fx {
         break;
       }
       case 'swoopburst': this.ring(p, 2.2, e.color ?? '#bfe8ff', now, 0.35); P.emit(p, n(34), new THREE.Color('#fff4d6'), { speed: 6, life: 0.55, size: 0.3, spread: 0.6 }); this.light(p, e.color ?? '#bfe8ff', 25, now); break;
+      // ultimate charge pack (Training Grounds): a gold ring, sparks rising, a pulse of light
+      case 'ultpack': this.ring({ x: p.x, y: p.y - 0.45, z: p.z }, 1.8, '#ffd23f', now, 0.5); P.emit(p, n(30), new THREE.Color('#fff1a8'), { speed: 3, life: 0.8, size: 0.3, up: 4, spread: 0.6 }); this.light(p, '#ffc83a', 22, now); break;
       // ---- Gantetsu
       case 'healthpack': this.ring({ x: p.x, y: p.y - 0.45, z: p.z }, (e.r ?? 1) * 1.6, '#29f0a0', now, 0.45); P.emit(p, n(26), new THREE.Color('#7dffb0'), { speed: 2.5, life: 0.7, size: 0.28, up: 3, spread: 0.6 }); this.light(p, '#29f0a0', 18, now); break;
       // Hibiki: track swap (a ring sweeping out to the aura edge in the new track's colour), Max Volume (rings pumping out),

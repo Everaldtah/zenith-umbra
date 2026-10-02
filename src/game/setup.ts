@@ -7,9 +7,17 @@ import { World, type Mode } from './World';
 import { Stadium } from './stadium';
 import type { Actor } from './Actor';
 import { Director } from '../campaign/Director';
+import { HeroRange } from './herorange';
+import { Spar } from './spar';
 import { LEVEL, CAMPAIGN_HEROES } from '../campaign/data';
 
-export interface Match { world: World; nav: Nav; player: Actor | null; bots: Bot[]; }
+export interface Match {
+  world: World; nav: Nav; player: Actor | null; bots: Bot[];
+  /** Training Grounds (desktop edition): the Hero Range - any hero as a target, attack or defense mode */
+  range?: HeroRange;
+  /** Training Grounds (desktop edition): the Spar Arena - one-on-one against any hero in a sealed box */
+  spar?: Spar;
+}
 
 export function createMatch(mapId: string, mode: Mode, playerHero: string | null, skill = 0.7): Match {
   const world = new World(mapId, mode);
@@ -38,7 +46,8 @@ export function createMatch(mapId: string, mode: Mode, playerHero: string | null
       r.spawn = [x, z]; world.respawn(r, true);
       const b = new Bot(world, r, nav, skill); r.controller = b; bots.push(b);
     }
-    return { world, nav, player, bots };
+    const range = FULL ? new HeroRange(world, nav) : undefined;
+    return { world, nav, player, bots, range, spar: FULL ? new Spar(world, nav, range) : undefined };
   }
   // the AI lab / headless sims alternate the two-tank team's pick map by map (deterministic, both get exercised)
   const seed = [...mapId].reduce((s, c) => s + c.charCodeAt(0), 0) % 2;

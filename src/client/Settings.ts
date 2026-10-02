@@ -16,7 +16,7 @@ export const PRESETS: Record<Preset, Quality & { antialias: boolean; fxCap: numb
 
 // ------------------------------------------------------------------ controls
 export type Action = 'forward' | 'back' | 'left' | 'right' | 'jump' | 'crouch' | 'fire' | 'alt' | 'a1' | 'a2' | 'ult' | 'reload' | 'melee'
-  | 'swoop' | 'grind' | 'view' | 'score' | 'swap' | 'perf';
+  | 'swoop' | 'grind' | 'view' | 'score' | 'swap' | 'range' | 'perf';
 export const ACTIONS: { id: Action; label: string; group: 'MOVEMENT' | 'WEAPONS & ABILITIES' | 'HERO' | 'INTERFACE'; hero?: string }[] = [
   { id: 'forward', label: 'Move Forward', group: 'MOVEMENT' }, { id: 'back', label: 'Move Backward', group: 'MOVEMENT' },
   { id: 'left', label: 'Move Left', group: 'MOVEMENT' }, { id: 'right', label: 'Move Right', group: 'MOVEMENT' },
@@ -28,13 +28,13 @@ export const ACTIONS: { id: Action; label: string; group: 'MOVEMENT' | 'WEAPONS 
   { id: 'swoop', label: 'Starwing Swoop (Mirei)', group: 'HERO', hero: 'mirei' },
   { id: 'grind', label: 'Mag-Grind: hold to wall-ride & climb (Hibiki)', group: 'HERO', hero: 'hibiki' },
   { id: 'view', label: 'Toggle First / Third Person', group: 'INTERFACE' }, { id: 'score', label: 'Scoreboard / Stats', group: 'INTERFACE' },
-  { id: 'swap', label: 'Change Hero (Training)', group: 'INTERFACE' }, { id: 'perf', label: 'Cycle Performance Stats', group: 'INTERFACE' },
+  { id: 'swap', label: 'Change Hero (Training)', group: 'INTERFACE' }, { id: 'range', label: 'Hero Range / Spar Console (Training)', group: 'INTERFACE' }, { id: 'perf', label: 'Cycle Performance Stats', group: 'INTERFACE' },
 ];
 export type Binds = Record<Action, string[]>;
 export const DEFAULT_BINDS: Binds = {
   forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   jump: ['Space'], crouch: ['ControlLeft'], fire: ['Mouse0'], alt: ['Mouse2'], a1: ['ShiftLeft', 'ShiftRight'], a2: ['KeyE'],
-  ult: ['KeyQ'], reload: ['KeyR'], melee: ['KeyC'], swoop: ['KeyF'], grind: ['Space'], view: ['KeyV'], score: ['Tab'], swap: ['KeyH'], perf: ['F8'],
+  ult: ['KeyQ'], reload: ['KeyR'], melee: ['KeyC'], swoop: ['KeyF'], grind: ['Space'], view: ['KeyV'], score: ['Tab'], swap: ['KeyH'], range: ['KeyG'], perf: ['F8'],
 };
 /** per-hero defaults (Overwatch keeps hero-specific control sets): Hibiki rides walls on the left mouse button */
 export const HERO_DEFAULT_BINDS: Record<string, Partial<Binds>> = { hibiki: { grind: ['Mouse0'] } };

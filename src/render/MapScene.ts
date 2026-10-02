@@ -5,6 +5,7 @@ import type { Box, MapDef, Mat } from '../data/maps';
 import { Level } from '../engine/Physics';
 import { propModel, texture, hasTexture } from './Assets';
 import { FULL } from '../edition';
+import { ULT_PACK } from '../game/World';
 import { applySurfaces, boxAttrs, noBoxAttrs } from './Surfaces';
 
 /** the texture set a map paints with: its own when the manifest has it, else the closest sibling's (a map whose textures
@@ -91,6 +92,8 @@ export class MapScene {
   pads: THREE.Object3D[] = [];
   /** health pack stations (glowing cross while ready, a dim base with a refill ring while respawning) */
   packs: { g: THREE.Group; cross: THREE.Object3D; ring: THREE.Mesh; big: boolean }[] = [];
+  /** ultimate charge packs (Training Grounds, desktop edition): a gold pedestal with a spinning cube of light */
+  ultPacks: { cube: THREE.Object3D; ring: THREE.Mesh }[] = [];
   /** Mikoshi Rush: the festival float and its route */
   float: THREE.Group | null = null;
   /** the float's model in its own space: while the viewer's camera is inside it (the float has no collision - a
@@ -296,6 +299,28 @@ export class MapScene {
       this.group.add(g);
       this.packs.push({ g, cross, ring, big: !!p.big });
     }
+    // ---------------- ultimate charge packs: the health pack's pedestal in gold, a cube of light turning on a corner
+    if (FULL) for (const p of m.ultPacks ?? []) {
+      const y = p.y ?? Math.max(0, level.groundAt(p.x, p.z, 0.3));
+      const g = new THREE.Group(); g.position.set(p.x, y, p.z);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.72, 0.22, 20), new THREE.MeshStandardMaterial({ color: '#2b2a33', roughness: 0.45, metalness: 0.6 }));
+      base.position.y = 0.11; base.castShadow = true;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.05, 6, 28), new THREE.MeshBasicMaterial({ color: '#ffc83a' }));
+      rim.rotation.x = Math.PI / 2; rim.position.y = 0.23;
+      const cube = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), new THREE.MeshStandardMaterial({ color: '#ffb300', emissive: new THREE.Color('#ff8a00'), emissiveIntensity: 1.25, roughness: 0.3, metalness: 0.2 }));
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.56, 0.56, 0.56)), new THREE.LineBasicMaterial({ color: '#ffd23f', toneMapped: false }));
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), new THREE.MeshBasicMaterial({ color: '#ffc83a', transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const tilt = new THREE.Group(); tilt.add(core, edges);
+      tilt.rotation.set(Math.atan(Math.SQRT1_2), 0, Math.PI / 4);       // standing on a corner (the outer group spins)
+      cube.add(tilt, halo);
+      cube.position.y = 1.0;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.78, 32, 1, 0, Math.PI * 2), new THREE.MeshBasicMaterial({ color: '#ffc83a', transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.25;
+      g.add(base, rim, cube, ring);
+      this.group.add(g);
+      this.ultPacks.push({ cube, ring });
+    }
     // ---------------- Mikoshi Rush: the float (a generated model when available) and its lit route
     if (m.objective === 'push' && m.path) {
       const pts = m.path.map(([x, z]) => new THREE.Vector3(x, Math.max(0, level.groundAt(x, z, 20)) + 0.06, z));
@@ -387,7 +412,7 @@ export class MapScene {
 
   update(time: number, point: { owner: string | null; capture: number; capTeam: string | null; contested: boolean }, viewerTeam: string,
     packs?: { readyAt: number }[], push?: { pos: { x: number; y: number; z: number }; owner: string | null; contested: boolean; d: number } | null,
-    cam?: THREE.Vector3) {
+    cam?: THREE.Vector3, ultPacks?: { readyAt: number }[]) {
     this.pUniforms.t.value = time;
     this.cloudU.t.value = time;
     // health packs: bob and spin while ready; dim, with a ring filling back up, while they respawn
@@ -399,6 +424,13 @@ export class MapScene {
       p.ring.visible = true;
       (p.ring.material as THREE.MeshBasicMaterial).opacity = ready ? 0.8 : 0.35;
       p.ring.scale.setScalar(ready ? 1 : Math.max(0.05, 1 - left / total));
+    });
+    this.ultPacks.forEach((p, i) => {
+      const left = ultPacks?.[i] ? ultPacks[i].readyAt - time : 0, ready = left <= 0;
+      p.cube.visible = ready;
+      p.cube.position.y = 1.0 + Math.sin(time * 2.1 + i) * 0.09; p.cube.rotation.y = time * 1.7;
+      (p.ring.material as THREE.MeshBasicMaterial).opacity = ready ? 0.8 : 0.35;
+      p.ring.scale.setScalar(ready ? 1 : Math.max(0.05, 1 - left / ULT_PACK.respawn));
     });
     if (this.float && push) {
       const f = this.float, prev = f.position.clone();

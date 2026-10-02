@@ -31,6 +31,7 @@ export interface MapDef {
   killY: number;
   decor?: Box[];               // render-only detail: trim, frames, awnings, lit window panes (no collision)
   packs?: Pack[];              // health packs
+  ultPacks?: Pack[];           // ultimate charge packs: touch one and your ultimate is ready (Training Grounds, desktop edition)
   /** objective: 'control' (the capture point, best of 3 rounds) or 'push' (escort the float along `path`) */
   objective?: 'control' | 'push';
   path?: [number, number][];   // push: the float's route from the Zenith end (-X) to the Umbra end (+X), centre = start

@@ -168,6 +168,8 @@ export const LITE_MAPS: MapDef[] = [
       { id: 'prop_training_target', x: 34, z: -16, s: 3 }, { id: 'prop_training_target', x: 34, z: 16, s: 3 },
     ],
     pads: [{ x: -26, z: 0, vx: 0, vy: 16, vz: 0 }],
+    // (desktop edition: by the spawn, and behind the Hero Range's firing line - herorange.ts LANE)
+    ultPacks: [{ x: -27, z: -7 }, { x: -27, z: 7 }, { x: -19, z: -24.5 }],
     spawns: { zenith: [-32, 0], umbra: [32, 0] }, point: [0, 0, 0],
     sun: { color: '#ffffff', intensity: 2.8, dir: [-0.4, 1, 0.3] }, ambient: ['#dff1ff', '#b8c4d0', 1.2],
     fog: ['#d8ecff', 70, 200], tint: '#4fc3ff', particles: 'none', killY: -20,
