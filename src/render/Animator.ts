@@ -112,6 +112,8 @@ export interface AnimState {
   tide?: { age: number };   // Tomoe's Crescent Warpath: seconds into the dash (her axe and her Fang wheel round her)
   deflect?: { age: number; x: number; y: number; z: number };   // a shot just turned on the blade: its age and where it came from (model space)
   skyward?: boolean;        // Raijin's Susanoo calling the thunder: planted, both arms raised to the sky
+  skyRise?: number;         // ...seconds since it rose (the arms come up as it does)
+  skyStrike?: number;       // ...seconds since its last bolt (-1: none yet): the sword arm hurls each one down at the foe
   rebirth?: number;         // Mirei singing the fallen back: seconds since the cast (the pose below)
   rising?: number;          // a hero just called back: seconds since they rose (a crouch coming up to standing)
   leap?: boolean;           // Gantetsu's Shiko leap (status 'stompair'): knees wide, both guns hauled overhead for the slam
@@ -1429,8 +1431,19 @@ export class Animator {
           : up.clone().lerp(relaxed.clone().multiplyScalar(Lr).add(shoulder), ez(k(1.9, 2.4)));
         over = { hand, w: 1, pole: new THREE.Vector3(side * 0.9, r > 0.6 ? 0.3 : -0.6, 0.4) };
       } else if (s.skyward) {
-        // both arms up to the sky, palms open, a slow sway (the Storm Sovereign's first half)
-        over = { hand: shoulder.clone().add(new THREE.Vector3(side * (0.45 + 0.04 * Math.sin(s.time * 1.3)), 0.92, 0.12).multiplyScalar(l1 + l2).applyQuaternion(Dc)), w: 1, pole: new THREE.Vector3(side * 0.9, 0.1, 0.5) };
+        // the Storm Sovereign's first half, Zeus hurling the thunderbolt: the free (left) hand open to the sky the whole
+        // time; the sword arm raised straight up while the storm gathers in the blade, snapped down and forward at the
+        // foe as each bolt lands (the giant turns to face the nearest one), held through the follow-through, then wound
+        // back up for the next; both arms come up as it rises
+        const Lr = l1 + l2, ez = (u: number) => u * u * (3 - 2 * u), cl = (u: number) => Math.min(1, Math.max(0, u));
+        const at = (x: number, y: number, z: number) => shoulder.clone().add(new THREE.Vector3(side * x, y, z).normalize().multiplyScalar(Lr * 0.98).applyQuaternion(Dc));
+        const k = s.skyStrike ?? -1;
+        const hurl = k < 0 ? 0 : k < 0.08 ? ez(k / 0.08) : k < 0.3 ? 1 : 1 - ez(cl((k - 0.3) / 0.45));
+        const hand = i === 1
+          ? at(0.16 + 0.03 * Math.sin(s.time * 31) * (1 - hurl), 1, -0.06).lerp(at(0.12, 0.05, 1), hurl)
+          : at(0.45 + 0.04 * Math.sin(s.time * 1.3), 0.92, 0.12).lerp(at(0.6, 0.5, 0.35), hurl * 0.6);
+        const raise = ez(cl((s.skyRise ?? 1) / 0.5));
+        over = { hand: relaxed.clone().multiplyScalar(Lr).add(shoulder).lerp(hand, raise), w: 1, pole: new THREE.Vector3(side * 0.9, 0.1, i === 1 ? 0.5 - 0.6 * hurl : 0.5) };
       } else if (i === 1 && s.move === 'tide') {
         // Crescent Warpath: the right arm up as the hub the weapons wheel round (Junker Queen's Rampage); the left swings
         // with the run

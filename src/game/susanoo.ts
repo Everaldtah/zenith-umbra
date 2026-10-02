@@ -1,6 +1,8 @@
-// Raijin - Storm Sovereign: a holographic giant of himself in the robes of a thunder god rises where he stands. For five
-// seconds every enemy inside its perimeter is struck by lightning from the sky; for the next five the giant cuts down
-// whoever is still standing in it; then it fades. Raijin fights on freely the whole time.
+// Raijin - Storm Sovereign: a holographic giant of himself in the robes of a thunder god rises at his back. For five
+// seconds every enemy inside the perimeter around the spot he cast it is struck by lightning from the sky - the giant
+// facing the nearest of them and hurling each bolt down at it with its sword arm; for the next five the giant strides
+// after every enemy in that perimeter or around Raijin himself and cuts them down (with no one to cut it keeps to his
+// side); then it fades. Raijin fights on freely the whole time.
 //
 // The giant is an Actor from the same summon plumbing as Hex's puppets (def.summoned -> isSummon: no kill feed, no ult
 // charge for hitting it, no respawn), untouchable ('phased') and drawn by its own view (HeroDef.model / holo / scale, the
@@ -20,6 +22,13 @@ export const STRIKE_EVERY = 1, STRIKE_DMG = 40, STRIKE_STUN = 0.4, STRIKE_FIRST 
 /** the blade: a sweep this far around the giant (m) for this much, at this cadence (s); it walks at SPEED */
 export const SLASH_R = 5.5, SLASH_DMG = 60, SLASH_EVERY = 1, SUSANOO_SPEED = 5;
 export const SUSANOO_COLOR = '#8ad8ff';
+/** where it rises (m): this far to his right and ahead (or behind him where walls are in the way) - in sight, and never
+ *  with the camera inside it */
+export const SUSANOO_SIDE = 3.5, SUSANOO_AHEAD = 4, SUSANOO_BEHIND = 3;
+/** first person: the camera pulls out to third person this long after the cast (s) - the rise and the first bolt hurled */
+export const SUSANOO_SHOWCASE = 1.5;
+/** the blade half, with no one left to cut: it strides back to within this much of his side (m) */
+export const SUSANOO_FOLLOW = 6;
 
 const none = (id: string): AbilityDef => ({ id, name: '-', key: '-', cooldown: 999, desc: '' });
 export const SUSANOO_DEF: HeroDef = {
@@ -48,18 +57,35 @@ class SusanooBrain {
     i.fire = i.alt = i.a1 = i.a2 = i.ult = i.melee = i.reload = i.swoop = false; i.jump = false; i.jumpHeld = false;
     i.mx = i.mz = 0;
     const owner = a.owner!, anchor: V3 = { x: a.sv.ax, y: a.sv.ay, z: a.sv.az };
-    // the first half: it stands over the anchor, arms to the sky, and the thunder does the work (sv.phase 0 -> 1)
-    if (t < a.sv.bladeAt) { a.sv.phase = 0; return; }
+    const foes = w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon && !x.has('phased', t));
+    const nearest = (xs: Actor[]) => { let b: Actor | null = null, bd = Infinity; for (const x of xs) { const d = dist3(x.pos, a.pos); if (d < bd) { bd = d; b = x; } } return [b, bd] as const; };
+    const face = (p: V3) => { i.yaw = Math.atan2(p.x - a.pos.x, p.z - a.pos.z); i.pitch = 0; };
+    // the first half: it stands planted, its free hand to the sky, and hurls the thunder down at the nearest foe it is
+    // striking (tickSusanoo keeps it in place; sv.phase 0 -> 1)
+    if (t < a.sv.bladeAt) {
+      a.sv.phase = 0;
+      const [tgt] = nearest(foes.filter(x => dist3(x.pos, anchor) <= SUSANOO_R + x.radius));
+      if (tgt) face(tgt.pos); else i.yaw = owner.yaw;
+      this.target = tgt;
+      return;
+    }
     a.sv.phase = 1;
-    const inside = w.actors.filter(x => x.alive && x.team !== a.team && !x.isSummon && !x.has('phased', t) && dist3(x.pos, anchor) <= SUSANOO_R + x.radius);
-    if (!inside.length) { this.target = null; return; }
-    let best = inside[0], bd = Infinity;
-    for (const x of inside) { const d = dist3(x.pos, a.pos); if (d < bd) { bd = d; best = x; } }
+    // the second half hunts the perimeter around the spot he cast it AND the ground around Raijin himself: the giant
+    // fights at his side wherever the fight has moved, instead of standing guard over an empty circle
+    const hunted = (x: Actor) => dist3(x.pos, anchor) <= SUSANOO_R + x.radius || (owner.alive && dist3(x.pos, owner.pos) <= SUSANOO_R + x.radius);
+    const inside = foes.filter(hunted);
+    const [best, bd] = nearest(inside);
     this.target = best;
-    i.yaw = Math.atan2(best.pos.x - a.pos.x, best.pos.z - a.pos.z); i.pitch = 0;
-    // close to blade reach, never past the perimeter
+    if (!best) {
+      // no one to cut: stride back to his side and stand ready, facing where he looks
+      const f = owner.forward(), spot: V3 = { x: owner.pos.x - f.x * SUSANOO_BEHIND, y: owner.pos.y, z: owner.pos.z - f.z * SUSANOO_BEHIND };
+      if (Math.hypot(spot.x - a.pos.x, spot.z - a.pos.z) > SUSANOO_FOLLOW) { face(spot); i.mz = 1; } else i.yaw = owner.yaw;
+      return;
+    }
+    face(best.pos);
+    // close to blade reach (it walks wherever its quarry goes inside the hunting ground)
     const reach = a.radius + best.radius + SLASH_R * 0.6;
-    if (bd > reach && dist3(a.pos, anchor) < SUSANOO_R) { i.mz = 1; }
+    if (bd > reach) i.mz = 1;
     if (t >= this.nextSlash) {
       this.nextSlash = t + SLASH_EVERY;
       a.anim.attackAt = t; a.anim.attackKind = 'primary'; a.anim.attackSide = (a.sv.swings = (a.sv.swings ?? 0) + 1) % 2;
@@ -104,6 +130,10 @@ function thunder(w: World, owner: Actor, s: Actor, first: boolean) {
   }
   owner.stats.thunderHits = (owner.stats.thunderHits ?? 0) + n;
   s.sv.strikes = (s.sv.strikes ?? 0) + 1;
+  // the giant calls each bolt: the sky strikes its raised blade as it hurls the thunder down (the renderer's hurl is
+  // timed off sv.strikeAt)
+  s.sv.strikeAt = t;
+  w.fx('stormcall', s.center, { color: SUSANOO_COLOR, actor: s });
   return n;
 }
 
@@ -119,7 +149,16 @@ export function raiseSusanoo(w: World, a: Actor) {
     w.actors.push(s);
   }
   s.team = a.team;
-  s.pos = { ...a.pos }; s.vel = { x: 0, y: 0, z: 0 };
+  // it rises at his right shoulder, a few steps ahead - in the right of a first-person view and beside him in third person,
+  // never with the camera inside its robes (the perimeter stays centred on the spot he cast it). A wall there: the left
+  // shoulder, then his back, then where he stands
+  const f = a.forward(), rt = { x: -f.z, z: f.x }, [X, Z] = w.level.size, eye = a.pos.y + 1.4;
+  const spots = [[SUSANOO_SIDE, SUSANOO_AHEAD], [-SUSANOO_SIDE, SUSANOO_AHEAD], [0, -SUSANOO_BEHIND], [0, 0]].map(([r, fw]) => ({
+    x: Math.max(-X + 2, Math.min(X - 2, a.pos.x + rt.x * r + f.x * fw)), y: a.pos.y, z: Math.max(-Z + 2, Math.min(Z - 2, a.pos.z + rt.z * r + f.z * fw)) }));
+  const p: V3 = spots.find(q => w.level.lineOfSight({ x: a.pos.x, y: eye, z: a.pos.z }, { x: q.x, y: eye, z: q.z })) ?? spots[3];
+  const g = w.level.groundAt(p.x, p.z, a.pos.y + 1.5);
+  if (g !== -Infinity && Math.abs(g - a.pos.y) < 2) p.y = g;
+  s.pos = p; s.vel = { x: 0, y: 0, z: 0 };
   s.yaw = s.input.yaw = a.yaw; s.pitch = 0;
   s.hp = SUSANOO_DEF.hp; s.armor = 0; s.scale = 1;
   s.shields = []; s.wounds = []; s.st = {}; s.sv = {}; s.forced = null;
@@ -127,6 +166,7 @@ export function raiseSusanoo(w: World, a: Actor) {
   s.set('phased', t, SUSANOO_THUNDER + SUSANOO_BLADE + 1);          // a hologram: nothing touches it, it touches nothing
   s.set('ccimmune', t, SUSANOO_THUNDER + SUSANOO_BLADE + 1);
   s.sv.ax = a.pos.x; s.sv.ay = a.pos.y; s.sv.az = a.pos.z; s.sv.risenAt = t;
+  s.sv.gx = p.x; s.sv.gz = p.z;                        // where it stands planted through the thunder
   // (the renderer's contract, shared with the Enra effigy: when it rose, when it is fully up, when it goes)
   s.sv.riseAt = t; s.sv.riseUntil = t + 0.6; s.sv.until = t + SUSANOO_THUNDER + SUSANOO_BLADE; s.sv.bladeAt = t + SUSANOO_THUNDER; s.sv.fadeAt = t + SUSANOO_THUNDER + SUSANOO_BLADE;
   s.sv.nextStrike = t + STRIKE_FIRST; s.sv.strikes = 0; s.sv.phase = 0;
@@ -144,7 +184,7 @@ export function tickSusanoo(w: World) {
     if (!s.alive || !s.isSummon || s.def.id !== 'susanoo' || !s.owner) continue;
     if (!s.owner.alive) { dismissSusanoo(w, s.owner); continue; }
     // the giant stays planted over its anchor through the thunder, whatever shoves come its way
-    if (t < s.sv.bladeAt) { s.pos.x = s.sv.ax; s.pos.z = s.sv.az; s.vel.x = s.vel.z = 0; }
+    if (t < s.sv.bladeAt) { s.pos.x = s.sv.gx; s.pos.z = s.sv.gz; s.vel.x = s.vel.z = 0; }
     if (t < s.sv.bladeAt && t >= s.sv.nextStrike && s.sv.strikes < Math.round(SUSANOO_THUNDER / STRIKE_EVERY)) {
       s.sv.nextStrike = t + STRIKE_EVERY;
       thunder(w, s.owner, s, s.sv.strikes === 0);

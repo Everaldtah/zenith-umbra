@@ -770,6 +770,8 @@ export class CharacterView {
       landAge: time - an.landAt, jumpAge: time - an.jumpAt, stunned: a.has('stun', time), charging: a.charging, parry: a.has('parry', time) || a.has('deflect', time), climb: a.has('wallclimb', time),
       deflect: this.deflectState(time),
       skyward: a.def.id === 'susanoo' && (a.sv.phase ?? 0) === 0,
+      skyRise: a.def.id === 'susanoo' ? time - (a.sv.riseAt ?? time) : undefined,
+      skyStrike: a.def.id === 'susanoo' && (a.sv.strikes ?? 0) > 0 ? time - (a.sv.strikeAt ?? time) : -1,
       rebirth: a.def.id === 'mirei' && a.sv.rebirthAt !== undefined && time - a.sv.rebirthAt < 2.4 ? time - a.sv.rebirthAt : undefined,
       rising: a.has('rising', time) && a.sv.rebornAt !== undefined ? time - a.sv.rebornAt : undefined, charge: a.charge, beam: a.beamOn || a.flameOn,
       barrier: a.barrier.up, rooted: a.has('root', time), scale: this.scaleFit * a.scale, pos: new THREE.Vector3(a.pos.x, a.pos.y, a.pos.z),

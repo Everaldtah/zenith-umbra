@@ -43,6 +43,7 @@ import { Hud } from './Hud';
 import { AiLab } from './AiLab';
 import { PRESETS, IS_DESKTOP, quality, type Settings } from './Settings';
 import { UI_COLORS, GIANT_SWORD } from '../render/CharacterView';
+import { SUSANOO_SHOWCASE } from '../game/susanoo';
 
 /** Image Sharpening (Settings > Video): a light unsharp mask after tone mapping */
 const SHARPEN = {
@@ -125,9 +126,11 @@ export class Game {
     // Tomoe's Crescent Warpath: the flight and its spin are seen from behind (Overwatch cuts to third person for
     // Junker Queen's Rampage the same way)
     tomoe: a => a.forced?.kind === 'tide',
+    // Raijin's Storm Sovereign: the camera pulls out for the giant's rise and its first thunderbolt, then back to his eyes
+    raijin: (a, t) => a.has('sovereign', t) && t - (a.sv.susanooCast ?? -9) < SUSANOO_SHOWCASE,
   };
   /** ...and how long the camera stays out after the ability ends (Gantetsu: to see the slam land and its victims fall) */
-  static readonly THIRD_HOLD: Record<string, number> = { gantetsu: 0.45, tomoe: 0.3 };
+  static readonly THIRD_HOLD: Record<string, number> = { gantetsu: 0.45, tomoe: 0.3, raijin: 0.2 };
   private abilityCamUntil = 0;
   specIdx = 0; specNextSwitch = 0; freeCam = false;
   camPos = new THREE.Vector3();

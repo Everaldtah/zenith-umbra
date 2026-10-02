@@ -107,7 +107,7 @@ export async function warmObject(renderer: THREE.WebGLRenderer, obj: THREE.Objec
 
 // ---------------------------------------------------------------- 4. effects
 /** one of every combat effect the Fx system draws, for the shader warm-up (spawned out of sight, then expired) */
-export const FX_KINDS = ['hit', 'impact', 'healhit', 'burst', 'tracer', 'slash', 'swing', 'hammer', 'shatter', 'lightning', 'parry', 'deflect', 'susanoocast', 'skybolt', 'susanooslash', 'susanoofade', 'effigyfade', 'rebirthcast', 'rebirth', 'rebirthring', 'sealstorm', 'sealshield', 'sealstrike', 'sealburst', 'sealmend', 'decoy',
+export const FX_KINDS = ['hit', 'impact', 'healhit', 'burst', 'tracer', 'slash', 'swing', 'hammer', 'shatter', 'lightning', 'parry', 'deflect', 'susanoocast', 'skybolt', 'stormcall', 'susanooslash', 'susanoofade', 'effigyfade', 'rebirthcast', 'rebirth', 'rebirthring', 'sealstorm', 'sealshield', 'sealstrike', 'sealburst', 'sealmend', 'decoy',
   'undying', 'death', 'dust', 'step', 'doublejump', 'pad', 'spawn', 'barrierhit', 'barrierbreak', 'ultflash', 'sunburst', 'nova', 'slam',
   'implode', 'link', 'strings', 'chainline', 'wish', 'voidshield', 'papers', 'smoke', 'flash', 'chargetrail', 'lance', 'soundcone', 'cut',
   'arrowhit', 'immune', 'zonebreak', 'singularity', 'swoop', 'swoopburst', 'healthpack', 'wound', 'warcall', 'reaping', 'crossmix', 'amp',

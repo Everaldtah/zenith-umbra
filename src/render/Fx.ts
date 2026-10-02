@@ -447,6 +447,16 @@ export class Fx {
         this.shake = Math.max(this.shake, 0.35 / (1 + near / 10));
         break;
       }
+      // ...and each bolt it calls: the sky strikes the giant's raised blade as it hurls the thunder down
+      case 'stormcall': {
+        const g = e.actor, h = (g?.def.height ?? 5.4) * (g?.scale ?? 1), base = g?.pos ?? p;
+        const tip = { x: base.x, y: base.y + h * 1.22, z: base.z };
+        const top = { x: tip.x + (Math.random() - 0.5) * 2, y: tip.y + 30, z: tip.z + (Math.random() - 0.5) * 2 };
+        this.bolt(top, tip, '#ffffff', now, 0.12, 0.2); this.bolt(top, tip, '#8ad8ff', now, 0.35, 0.45);
+        this.light(tip, '#dff4ff', 60, now, 0.4);
+        P.emit(tip, n(18), new THREE.Color('#bfe8ff'), { speed: 4, life: 0.4, size: 0.35, spread: 0.8 });
+        break;
+      }
       // ...the giant's blade: a wide arc of storm light round it
       case 'susanooslash': { const R = e.r ?? 5.5; this.ring(p, R, '#8ad8ff', now, 0.35); this.ring(p, R * 0.6, '#ffffff', now, 0.22); this.light(p, '#8ad8ff', 30, now); P.emit(p, n(24), new THREE.Color('#bfe8ff'), { speed: 9, life: 0.4, size: 0.3, spread: 2 }); break; }
       // ...and its end (and Enra's effigy's): the hologram breaks into motes and a last flicker of light
