@@ -288,6 +288,8 @@ interface Snap { seq: number; time: number; recv: number; ackInput: number; tier
 export class FastClient {
   map = new Map<number, Actor>();
   me: Actor | null = null;
+  /** my hero's id on the host (snapshot rows are keyed by host ids, not by this world's) */
+  private meHost: number | null = null;
   fakeDirector: any = null;
   /** the host's update tier for this link, the measured snapshot rate and loss, the interpolation delay (ms) */
   tier: Tier = 'medium';
@@ -372,7 +374,7 @@ export class FastClient {
   /** the host's view of my own hero vs my prediction for the input it last applied */
   private reconcile(s: Snap) {
     const me = this.me; if (!me) return;
-    const h = s.actors.get(me.id); if (!h) return;
+    const h = this.meHost !== null ? s.actors.get(this.meHost) : undefined; if (!h) return;
     const i = this.hist.findIndex(x => x.seq === s.ackInput);
     if (!this.predicting(me) || i < 0) return;
     const e = this.hist[i];
@@ -426,10 +428,10 @@ export class FastClient {
       }
       if (c) this.applyActorCold(a, c);
       const mine = !!a.netId && a.netId === this.s.me;
-      if (mine) { if (this.me !== a) { this.me = a; this.hist.length = 0; } a.isPlayer = true; }
+      if (mine) { if (this.me !== a) { this.me = a; this.hist.length = 0; } this.meHost = id; a.isPlayer = true; }
       this.applyVitals(a, h, mine);
     }
-    for (const [id, a] of this.map) if (!seen.has(id)) { this.map.delete(id); w.actors = w.actors.filter(x => x !== a); if (this.me === a) this.me = null; }
+    for (const [id, a] of this.map) if (!seen.has(id)) { this.map.delete(id); w.actors = w.actors.filter(x => x !== a); if (this.me === a) { this.me = null; this.meHost = null; } }
     // remote heroes between snapshots
     let s0: Snap | null = null, s1: Snap | null = null;
     for (let i = this.buf.length - 1; i >= 0; i--) if (this.buf[i].time <= rt) { s0 = this.buf[i]; s1 = this.buf[i + 1] ?? null; break; }
@@ -459,7 +461,7 @@ export class FastClient {
         me.pos.x += this.corr.x * k; me.pos.y += this.corr.y * k; me.pos.z += this.corr.z * k;
         this.corr.x -= this.corr.x * k; this.corr.y -= this.corr.y * k; this.corr.z -= this.corr.z * k;
       } else {
-        const h = newest.actors.get(me.id);
+        const h = this.meHost !== null ? newest.actors.get(this.meHost) : undefined;
         if (h) { const k = Math.min(0.1, Math.max(0, hostNow - newest.time)); me.pos = { x: h.x + h.vx * k, y: h.y + h.vy * k, z: h.z + h.vz * k }; me.vel = { x: h.vx, y: h.vy, z: h.vz }; }
         this.hist.length = 0; this.corr = { x: 0, y: 0, z: 0 };
         if (myInput) { me.yaw = myInput.yaw; me.pitch = myInput.pitch; }

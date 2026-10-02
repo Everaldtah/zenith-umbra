@@ -142,7 +142,9 @@ export class Soundscape {
     // ---- loops
     sfx.loop('amb', `amb_${w.map.id}`, null, 0.85);
     for (const a of w.actors) {
-      if (!a.alive || a.isRobot) continue;
+      // the dead are noted (a hero coming back to life says so: the respawn line), then skipped
+      if (!a.alive) { const p = this.prev.get(a.id); if (p) p.alive = false; continue; }
+      if (a.isRobot) continue;
       const rel = this.rel(a), o: PlayOpts = { actor: a, rel };
       const at = rel === 'self' ? null : a.center;
       if (a.flameOn) sfx.loop(`fl${a.id}`, 'flame', at, 0.9, o);

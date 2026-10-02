@@ -954,8 +954,10 @@ export class CharacterView {
     // animation
     this.anim.update(this.animState(dt, time));
     if (this.anim.impact) this.onImpact?.(a);
-    this.lids?.update(time, a.anim.hitAt, false);
-    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, false);
+    // the face fades with a cloaked body (the lids and the masked eye glow aren't among this.mats)
+    const faceA = stealth && !this.holo ? alpha : 1;
+    this.lids?.update(time, a.anim.hitAt, false, faceA);
+    this.eyeGlow?.update(time, a.anim.castAt, a.anim.hitAt, false, faceA);
     // performance layer: squash & stretch (about the feet) and the whole-body tilt (about the hips)
     const an2 = this.anim, piv = a.height * 0.55;
     this.inner.scale.set(a.scale * an2.sqXZ, a.scale * an2.sqY, a.scale * an2.sqXZ);

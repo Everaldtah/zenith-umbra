@@ -71,11 +71,15 @@ export class Eyelids {
     return c;
   }
 
-  update(time: number, hitAt: number, dead: boolean) {
+  /** alpha: how opaque the body is drawn (a cloaked hero's lids fade with it) */
+  update(time: number, hitAt: number, dead: boolean, alpha = 1) {
     const c = this.closed(time, hitAt, dead);
     for (const l of this.lids) {
-      l.visible = c > 0.03;
+      l.visible = c > 0.03 && alpha > 0.01;
       l.scale.y = l.userData.sy * Math.max(0.03, c);
+      const m = l.material as THREE.MeshStandardMaterial, tr = alpha < 1;
+      if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; }
+      m.opacity = alpha;
     }
   }
 
@@ -119,7 +123,8 @@ export class EyeGlow {
     }
   }
 
-  update(time: number, castAt: number, hitAt: number, dead: boolean) {
+  /** alpha: how opaque the body is drawn (a cloaked hero's eyes fade with it) */
+  update(time: number, castAt: number, hitAt: number, dead: boolean, alpha = 1) {
     if (castAt > this.lastCast) { this.lastCast = castAt; this.flare = 1; }
     if (hitAt > this.lastHit) { this.lastHit = hitAt; this.flare = Math.max(this.flare, 0.5); }
     this.flare = Math.max(0, this.flare - 0.04);
@@ -127,8 +132,8 @@ export class EyeGlow {
     for (const sp of this.sprites) {
       const s = sp.userData.s0 * (0.9 + 0.35 * k);
       sp.scale.set(s, s, 1);
-      (sp.material as THREE.SpriteMaterial).opacity = Math.min(1, k);
-      sp.visible = k > 0.01;
+      (sp.material as THREE.SpriteMaterial).opacity = Math.min(1, k) * alpha;
+      sp.visible = k * alpha > 0.01;
     }
   }
 
