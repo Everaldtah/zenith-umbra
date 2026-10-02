@@ -160,6 +160,7 @@ async function matchmake(now) {
         let changed = false;
         for (const e of [...live]) {
           if (m.players.length >= 10) break;
+          if (m.players.some(x => x.id === e.id) || m.left?.includes(e.id)) continue;      // (already in it / walked out of it)
           const p = placeInto(m, e); if (!p) continue;
           m.players.push(p); live.splice(live.indexOf(e), 1); changed = true;
           await store.dequeue(e.id);
@@ -187,6 +188,7 @@ async function leaveForming(id, matchId) {
   const m = (await store.forming()).find(x => x.match === matchId); if (!m) return;
   if (m.host === id) { await store.dropForming(matchId); return; }
   m.players = m.players.filter(p => p.id !== id);
+  m.left = [...(m.left ?? []), id];
   await store.putForming(m);
 }
 
@@ -265,6 +267,7 @@ export default async function handler(req, res) {
       else if (mm.op === 'join' || mm.op === 'stay') {
         const qn = QUEUES.includes(mm.q) ? mm.q : 'qp';
         const role = ['tank', 'damage', 'support', 'flex'].includes(mm.role) ? mm.role : 'flex';
+        if (mm.op === 'join' && mm.left) await leaveForming(id, clean(mm.left));
         const prev = mm.op === 'stay' ? (await store.queue(qn)).find(e => e.id === id) : null;
         if (mm.op === 'join' || prev) {
           await store.enqueue({ id, name: clean(b.me?.name) || 'Hero', q: qn, role: qn === 'comp' && role === 'flex' ? 'damage' : role, mmr: num(mm.mmr, 0, 3999, 1800), score: num(mm.score, 0, 1000, 50),

@@ -54,6 +54,8 @@ export class OnlineSession implements NetSession {
   /** a queue join / leave waiting for the next poll to carry it */
   private pendingMm: Record<string, unknown> | null = null;
   private tick = 0;
+  /** when this client was put in a forming match (the watchdog below) */
+  private matchedAt = 0;
   private sids = new Map<string, string>();
   private startTimer = 0;
   private maps: string[] = [];
@@ -71,7 +73,23 @@ export class OnlineSession implements NetSession {
       if (!j.mm.in && !j.inbox?.some((m: any) => m.t === 'mm_match') && Date.now() - this.queueSince > 4000) this.rejoin();
     };
     // the host refreshes everyone's roster (link state, ping) once a second while the match assembles
-    this.tick = window.setInterval(() => { if (this.role === 'host' && this.phase === 'assemble' && this.links.size) this.pushRoster(); }, 1000);
+    this.tick = window.setInterval(() => {
+      if (this.role === 'host' && this.phase === 'assemble' && this.links.size) this.pushRoster();
+      // watchdog: a matchmade host that never links up (closed the game, crashed) or never starts - back to the queue
+      if (this.role === 'client' && this.phase === 'assemble' && this.q !== 'custom' && this.matchedAt) {
+        const l = this.links.get(this.hostId), now = Date.now();
+        const noLink = !l && now - this.matchedAt > 20_000;
+        const noStart = this.startAt && now > this.startAt + 25_000;
+        if (noLink || noStart) {
+          const q = this.q as 'qp' | 'comp', match = this.match;
+          this.leave(true);
+          this.onNotice?.('The host stopped responding - back in the queue.');
+          this.queue(q, this.queueRole, this.mmr);
+          // (leave that match on the node too, so the queue doesn't slot us straight back into it)
+          this.pendingMm = { ...this.pendingMm, left: match };
+        }
+      }
+    }, 1000);
     this.lobby.extra = () => this.extra();
     const pr = profile();
     this.lobby.me = { ...this.lobby.me, lvl: pr.lvl, rank: pr.rank, ...(this.speed ? { ping: this.speed.rtt, score: this.speed.score } : {}) };
@@ -194,6 +212,7 @@ export class OnlineSession implements NetSession {
       this.map = this.maps[this.seed % this.maps.length];
       this.seats = ((m as any).players as any[]).map(p => ({ id: p.id, name: p.name, team: p.team, role: p.role, mmr: p.mmr, hero: '', ready: false, platform: p.platform }));
       this.startAt = this.local(+(m as any).startAt || Date.now() + 60_000);
+      this.matchedAt = Date.now();
       this.lobby.setStatus('online', this.q);
       if (this.hostId === this.me) {
         this.role = 'host';
@@ -285,7 +304,7 @@ export class OnlineSession implements NetSession {
   private reset() {
     clearTimeout(this.startTimer);
     for (const l of this.links.values()) l.close();
-    this.links.clear(); this.role = null; this.seats = []; this.match = ''; this.phase = 'idle'; this.startAt = 0; this.late = false;
+    this.links.clear(); this.role = null; this.seats = []; this.match = ''; this.phase = 'idle'; this.startAt = 0; this.late = false; this.matchedAt = 0;
     this.onMessage = null; this.onBinary = null;
   }
   /** leave whatever we're in (queue, forming match, custom game, a finished match) */
