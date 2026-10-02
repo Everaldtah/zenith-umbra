@@ -106,6 +106,9 @@ export class World {
   /** per-tick scratch values */
   sv: Record<string, number> = { puppetPaths: 0 };
   director: { update(dt: number): void; onKill?(a: Actor, src: Actor | null): void } | null = null;
+  /** online host: lag compensation - moves everyone else back to where a remote shooter saw them while that shooter's
+   *  weapons and abilities run; returns the undo (src/net/FastSync.ts) */
+  rewind: ((shooter: Actor) => (() => void) | null) | null = null;
   /** Stadium mode: rounds, the Armory, cash (null in every other mode) */
   stadium: Stadium | null = null;
   stats = { counters: 0, casts: {} as Record<string, number>, sfx: {} as Record<string, number>, fx: {} as Record<string, number> };
@@ -828,6 +831,7 @@ export class World {
     if (!a.alive) return;
     const stunned = a.has('stun', t) || a.has('reborn', t);       // (the reborn can't fight until their guard ends)
     if (!stunned && !a.has('phased', t)) {
+      const undo = a.netId && this.rewind ? this.rewind(a) : null;
       updateWeapons(this, a, dt);
       // Crescent Warpath: a click drops her out of the flight where she is
       if (a.forced?.kind === 'tide' && (this.pressed(a, 'fire') || this.pressed(a, 'alt')) && t - (a.sv.tideT0 ?? t) > TIDE_HOLD) a.forced.until = t;
@@ -844,6 +848,7 @@ export class World {
         const S = a.def.secondary;
         if (isAbility(S) && !S.hold && this.pressed(a, 'alt')) castAbility(this, a, S.id, 'alt');
       }
+      undo?.();
     } else { a.barrier.up = false; a.beamOn = false; a.flameOn = false; a.charging = false; }
     const i = a.input;
     this.prevIn.set(a.id, { a1: i.a1, a2: i.a2, ult: i.ult, alt: i.alt, jump: i.jump, fire: i.fire, melee: i.melee, swoop: !!i.swoop, descend: i.descend });

@@ -1,0 +1,49 @@
+/* CAREER PROFILE (CareerUI.ts) - every selector under .cp */
+.cp { position: absolute; inset: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse at 50% 0, #1b2140, #05060a 70%); padding: 24px 40px 0; overflow: hidden; }
+.cp .head { display: flex; align-items: center; gap: 18px; }
+.cp .medal { width: 74px; height: 74px; border-radius: 50%; display: grid; place-content: center; text-align: center; background: radial-gradient(circle at 35% 30%, #3a4a7a, #141a30); border: 3px solid var(--gold); box-shadow: 0 0 18px rgba(255,215,106,.25); }
+.cp .medal b { font: 900 24px Orbitron; line-height: 1; } .cp .medal small { font: 700 9px Orbitron; letter-spacing: .2em; opacity: .7; }
+.cp .who h2 { font: 800 30px Orbitron; margin: 0; } .cp .who span { opacity: .75; letter-spacing: .05em; }
+.cp .chips { margin-left: auto; display: flex; gap: 14px; } .cp .chip { display: flex; align-items: center; gap: 6px; } .cp .chip small { font-size: 12px; line-height: 1.15; opacity: .85; }
+.cp .tabs { display: flex; gap: 4px; margin: 16px 0 10px; border-bottom: 1px solid var(--line); }
+.cp .tab { clip-path: none; background: none; border: 0; padding: 10px 18px; font: 800 14px Orbitron; letter-spacing: .14em; opacity: .6; border-bottom: 3px solid transparent; }
+.cp .tab:hover { transform: none; opacity: .9; background: rgba(255,255,255,.04); } .cp .tab.on { opacity: 1; border-bottom-color: var(--gold); color: var(--gold); }
+.cp .body { flex: 1; overflow: auto; padding: 4px 4px 20px; }
+.cp .bar { margin: 0 -40px; }
+.cp h3 { font: 800 15px Orbitron; letter-spacing: .14em; margin: 18px 0 10px; opacity: .85; display: flex; align-items: center; gap: 12px; }
+.cp .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; } .cp .filters button { padding: 8px 16px; font-size: 14px; } .cp .filters button.on { background: var(--gold); color: #1a1206; }
+.cp .empty { opacity: .6; padding: 20px 0; } .cp .note { opacity: .7; max-width: 900px; } .cp .dim { opacity: .5; }
+.cp .strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.cp .strip div { background: rgba(255,255,255,.05); border: 1px solid var(--line); padding: 10px 12px; } .cp .strip b { display: block; font: 800 24px Orbitron; } .cp .strip small { letter-spacing: .14em; opacity: .65; font-size: 12px; }
+.cp .cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 30px; }
+.cp .mbar { display: grid; grid-template-columns: 160px 1fr 80px; gap: 10px; align-items: center; margin: 5px 0; } .cp .mbar em { font-style: normal; text-align: right; opacity: .8; }
+.cp .mbar i, .cp .top i, .cp .pcard i, .cp .xp { display: block; height: 6px; background: rgba(255,255,255,.1); position: relative; }
+.cp .mbar u, .cp .top u, .cp .pcard u, .cp .xp u { position: absolute; inset: 0 auto 0 0; background: var(--gold); }
+.cp .rolecards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cp .rc { display: flex; flex-direction: column; align-items: center; gap: 2px; background: rgba(255,255,255,.05); border: 1px solid var(--line); padding: 10px; } .cp .rc .ri { width: 26px; height: 26px; } .cp .rc span { font-size: 14px; opacity: .8; }
+.cp .top { display: grid; grid-template-columns: 44px 1fr 110px; gap: 12px; align-items: center; padding: 6px 8px; cursor: pointer; transition: .15s; }
+.cp .top:hover { background: rgba(255,255,255,.06); } .cp .top img { object-fit: cover; object-position: top; } .cp .top b { display: block; margin-bottom: 4px; } .cp .top em { font: 700 16px Rajdhani; font-style: normal; text-align: right; }
+.cp select.cmp { font-size: 14px; padding: 4px 8px; }
+.cp .herohead { display: flex; gap: 16px; align-items: center; background: rgba(255,255,255,.04); border: 1px solid var(--line); padding: 12px 16px; margin-bottom: 12px; }
+.cp .herohead img.big { object-fit: cover; object-position: top; } .cp .herohead h3 { margin: 0 0 4px; font-size: 22px; }
+.cp .herohead .lvl { display: inline-block; font: 800 13px Orbitron; letter-spacing: .1em; padding: 3px 10px; border: 2px solid var(--b); border-radius: 12px; margin-right: 10px; }
+.cp .herohead .srs { margin-left: auto; display: grid; grid-template-columns: auto auto; gap: 4px 12px; align-items: center; } .cp .herohead .srs small { opacity: .6; letter-spacing: .1em; font-size: 11px; }
+.cp .sr { display: flex; align-items: center; gap: 6px; font: 800 16px Orbitron; }
+.cp .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.cp .scard { background: rgba(255,255,255,.04); border: 1px solid var(--line); padding: 10px 14px; } .cp .scard h4 { margin: 0 0 6px; font: 800 13px Orbitron; letter-spacing: .14em; color: var(--gold); }
+.cp table { width: 100%; border-collapse: collapse; } .cp th { text-align: right; font: 700 11px Orbitron; letter-spacing: .1em; opacity: .55; padding: 3px 6px; } .cp th:first-child { text-align: left; }
+.cp td { padding: 4px 6px; text-align: right; border-top: 1px solid rgba(255,255,255,.05); font-size: 15px; } .cp td:first-child { text-align: left; opacity: .85; }
+.cp .rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cp .rcard { display: flex; flex-direction: column; align-items: center; gap: 3px; background: rgba(255,255,255,.05); border: 1px solid var(--line); padding: 10px; cursor: pointer; text-align: center; }
+.cp .rcard img { object-fit: cover; object-position: top; } .cp .rcard small { font-size: 12px; opacity: .8; } .cp .rcard .srv { font: 900 26px Orbitron; font-style: normal; }
+.cp .rcard.dim { cursor: default; opacity: .4; } .cp .pips { display: flex; gap: 4px; } .cp .pips i { width: 12px; height: 12px; border: 1px solid var(--gold); transform: rotate(45deg); } .cp .pips i.on { background: var(--gold); }
+.cp .pbig { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.cp .pcard { display: flex; flex-direction: column; align-items: center; gap: 4px; background: rgba(255,255,255,.05); border: 1px solid var(--line); padding: 12px; cursor: pointer; }
+.cp .pcard .ring { border-radius: 50%; padding: 4px; background: var(--r); box-shadow: 0 0 14px var(--r); } .cp .pcard .ring img { border-radius: 50%; object-fit: cover; object-position: top; display: block; }
+.cp .pcard em { font: 800 18px Orbitron; font-style: normal; } .cp .pcard i { width: 100%; } .cp .pcard small { opacity: .7; font-size: 12px; }
+.cp .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.cp .pmini { display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,.04); padding: 6px 10px; cursor: pointer; } .cp .pmini img { object-fit: cover; object-position: top; }
+.cp .pmini div { flex: 1; display: flex; flex-direction: column; gap: 2px; } .cp .pmini span { font-size: 13px; opacity: .8; display: flex; align-items: center; gap: 6px; } .cp .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.cp .hist2 td.h { display: flex; align-items: center; gap: 6px; justify-content: flex-end; } .cp .hist2 td.h img { object-fit: cover; object-position: top; }
+.cp .hist2 b.w { color: #7dff9a; } .cp .hist2 b.l { color: #ff6b81; } .cp em.gain { color: #7dff9a; font-style: normal; } .cp em.loss { color: #ff6b81; font-style: normal; }
+@media (max-width: 1100px) { .cp .strip { grid-template-columns: repeat(3, 1fr); } .cp .cols { grid-template-columns: 1fr; } .cp .pbig { grid-template-columns: repeat(3, 1fr); } }

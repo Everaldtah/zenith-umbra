@@ -11,8 +11,12 @@ export const BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.
 const STALE_MS = 50_000;   // a presence we haven't heard from in this long is dropped (crashed clients)
 
 export type Platform = 'web' | 'desktop';
-export type Status = 'lobby' | 'squad' | 'playing';
-export interface Presence { id: string; name: string; status: Status; platform: Platform; mission?: string; v: number }
+export type Status = 'lobby' | 'squad' | 'playing' | 'queue' | 'custom' | 'online';
+export interface Presence {
+  id: string; name: string; status: Status; platform: Platform; mission?: string; v: number;
+  /** online play (Vercel node only): a custom game's line, ping to the node, profile level, best rank, host score */
+  info?: string; ping?: number; lvl?: number; rank?: string; score?: number;
+}
 export interface LobbyMsg { t: string; from: string; mid: string; [k: string]: unknown }
 
 const rid = (n = 10) => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => 'abcdefghijkmnpqrstuvwxyz23456789'[b % 32]).join('');

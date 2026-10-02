@@ -15,6 +15,8 @@ import { playStory } from '../campaign/Cinematic';
 import { Coop } from '../net/Coop';
 import { HeroViewer } from './HeroViewer';
 import { startUltShowcase } from './UltShowcase';
+import { OnlineUI, recordCareerMatch, progressHtml } from './OnlineUI';
+import { showCareer } from './CareerUI';
 
 const h = (html: string) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild as HTMLElement; };
 const HEROES = rosterFor(FULL);
@@ -46,11 +48,15 @@ export class Menu {
   opp = 1800;
   lastChange: RankChange | null = null;
 
+  /** PLAY ONLINE: the online lobby, matchmaking, hero select and online results */
+  online: OnlineUI;
+
   constructor(public host: HTMLElement, public game: Game) {
+    this.online = new OnlineUI({ root: this.root, game, show: html => this.show(html), close: () => this.close(), title: () => this.title(), emblem, name: () => this.name() });
     host.append(this.root);
     game.onPause = p => p ? this.pause() : this.close();
     game.onEnd = () => this.results();
-    game.onExit = () => { game.stop(); this.title(); };
+    game.onExit = () => { this.abandon(); game.stop(); this.title(); };
     (window as any).__zu = { ...(window as any).__zu, openSwap: () => this.heroSelect(true), menu: this };
     this.root.addEventListener('mouseover', e => { if ((e.target as HTMLElement).closest('button,.hc')) sfx.play('ui_hover'); });
     this.root.addEventListener('click', e => { sfx.unlock(); if ((e.target as HTMLElement).closest('button,.hc')) sfx.play('ui_click'); });
@@ -73,13 +79,14 @@ export class Menu {
       <p class="tag">Eleven heroes. Two oaths. One eclipse.</p>
       ${mobile ? '<p class="warn">ZENITH//UMBRA needs a PC with a keyboard and mouse.</p>' : ''}
       <div class="btns two">
+        <button data-m="online" class="primary">PLAY ONLINE <small>with other players</small></button>
         <button data-q="quickplay" class="primary">QUICK PLAY</button>
         <button data-q="competitive">COMPETITIVE <small>${rankOf(best.rating, best.games).label}</small></button>
         <button data-q="practice">AI QUICK MATCH</button>
         <button data-m="stadium">STADIUM</button>
         <button data-m="campaign">CAMPAIGN · STARFALL</button>
         <button data-m="training">TRAINING GROUNDS</button>
-        <button data-m="career">CAREER &amp; RANKS</button>
+        <button data-m="career">CAREER PROFILE</button>
         <button data-m="heroes">HERO VIEWER &amp; SKINS</button>
         <button data-m="spectate">WATCH AI VS AI</button>
         <button data-m="aitest">AI TEST LAB</button>
@@ -96,6 +103,7 @@ export class Menu {
       if (m === 'quit') return window.close();
       if (m === 'campaign') return this.campaign();
       if (m === 'career') return this.career();
+      if (m === 'online') return this.online.open();
       this.queue = null;
       this.mode = m as Mode;
       if (m === 'spectate' || m === 'aitest') return this.mapSelect();
@@ -198,24 +206,13 @@ export class Menu {
     setTimeout(tick, 250);
   }
 
-  /** career: a rank per role, Quick Play record, recent matches */
-  career() {
-    const c = loadCareer();
-    const card = (r: RankRole) => {
-      const rr = c.roles[r], rk = rankOf(rr.rating, rr.games);
-      return `<div class="card rank"><i class="ri ${r}"></i><b>${ROLE_NAME[r]}</b>${emblem(rr.rating, rr.games, 88)}
-        <span class="rl" style="color:${rk.placed ? rk.color : '#aab'}">${rk.label}</span>
-        ${rk.placed ? `<div class="pbar"><i style="width:${rk.pct}%;background:${rk.color}"></i></div><small>${rk.pct}% to ${rk.division > 1 ? `${rk.name} ${rk.division - 1}` : 'the next tier'}</small>` : `<small>${PLACEMENTS - rr.games} placement matches left</small>`}
-        <span class="rec">${rr.wins}W - ${rr.losses}L${rr.games ? ` · ${Math.round(rr.wins / rr.games * 100)}%` : ''}</span></div>`;
-    };
-    this.show(`<div class="modes career">
-      <h2>CAREER &amp; RANKS <small>Season ${c.season} · ranks per role (Bronze to Champion, divisions 5 to 1) · Quick Play ${c.qp.wins}W - ${c.qp.games - c.qp.wins}L</small></h2>
-      <div class="roles">${card('tank')}${card('damage')}${card('support')}</div>
-      <h3>RECENT MATCHES</h3>
-      <table class="hist"><tr><th>Mode</th><th>Map</th><th>Hero</th><th>Result</th><th>Score</th><th>Rank change</th></tr>
-        ${[...c.history].reverse().slice(0, 12).map(m => `<tr class="${m.won ? 'w' : 'l'}"><td>${m.mode === 'competitive' ? `COMP · ${ROLE_NAME[m.role ?? 'damage']}` : 'QUICK PLAY'}</td><td>${MAP.get(m.map)?.name ?? m.map}</td><td>${HERO[m.hero]?.name ?? m.hero}</td><td>${m.won ? 'VICTORY' : 'DEFEAT'}</td><td>${m.score}</td><td>${m.delta !== undefined ? `${m.delta >= 0 ? '+' : ''}${m.delta}% <small>${(m.mods ?? []).join(' · ')}</small>` : '-'}</td></tr>`).join('') || '<tr><td colspan="6">No matches yet - queue up.</td></tr>'}</table>
-      <div class="bar"><button class="back">BACK</button></div></div>`);
-    (this.root.querySelector('.back') as HTMLElement).onclick = () => this.title();
+  /** the Career Profile (CareerUI.ts): overview, statistics, Hero Skill Ratings, hero levels, match history */
+  career() { this.root.style.display = ''; showCareer(this.root, { back: () => this.title(), emblem, name: this.name() }); }
+
+  /** a match left before its end still counts its time on each hero (no result) */
+  private abandon() {
+    recordCareerMatch(this.game, 'none');
+    if (this.online.ctx) { this.online.ctx = null; this.online.session?.leave(true); }
   }
 
   /** PLAY VS AI: the two ways to play, as in Overwatch 2 - NORMAL (first person) and STADIUM (third person, rounds + Armory) */
@@ -396,7 +393,7 @@ export class Menu {
     if (lv2) lv2.onclick = () => { this.coop!.leave(); this.campaign(); };
     this.refreshCoop();
   }
-  private name() { try { return localStorage.getItem('zu-name') ?? ''; } catch { return ''; } }
+  name() { try { return localStorage.getItem('zu-name') ?? ''; } catch { return ''; } }
   private refreshCoop() {
     const c = this.coop; if (!c) return;
     const st = this.root.querySelector('.coop .st'); if (st) st.innerHTML = c.lobby.brokers ? `<span class="ok">● online</span>` : `<span class="bad">● connecting</span>`;
@@ -417,6 +414,7 @@ export class Menu {
     const prologue = idx === 0 ? [{ img: 'img/cine_02.webp', text: 'The night the Colossus fell on Neo-Kurogane, nobody had ever seen a machine that large.' }, { img: 'img/cine_04.webp', text: 'The Vanguard launched before sunrise.' }] : [];
     if (new URLSearchParams(location.search).get('story') !== '0') await playStory([...L.intro, ...prologue], { music: 'umbra' });
     this.game.onCampaignEnd = async won => {
+      recordCareerMatch(this.game, won ? 'win' : 'loss');
       this.game.stop();
       if (won) {
         this.unlock(idx + 1);
@@ -442,16 +440,19 @@ export class Menu {
     (this.root.querySelector('.res') as HTMLElement).onclick = () => { this.close(); this.game.setPaused(false); };
     const sw = this.root.querySelector<HTMLElement>('.swap'); if (sw) sw.onclick = () => this.heroSelect(true);
     (this.root.querySelector('.set') as HTMLElement).onclick = () => this.settings(() => this.pause());
-    (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.game.stop(); this.title(); };
+    (this.root.querySelector('.quit') as HTMLElement).onclick = () => { this.abandon(); this.game.stop(); if (this.online.session?.phase === 'idle' && this.online.session.online) this.online.open(); else this.title(); };
   }
 
   results() {
+    if (this.online.results()) return;
     const w = this.game.match?.world, me = this.game.match?.player;
     if (FULL && w && me && this.queue) return this.queueResults();
     const S = w?.stadium;
+    const rec = w && me ? recordCareerMatch(this.game, w.winner === me.team ? 'win' : 'loss') : recordCareerMatch(this.game, 'none');
     // Stadium: the round score and what you built
     const stadium = S ? `<p class="sres">STADIUM · ${S.wins.zenith} - ${S.wins.umbra} in rounds${me ? ` · ${me.items.length} items, ${me.powers.length} powers` : ''}</p>` : '';
     this.show(`<div class="pause results"><h2 class="${w?.winner}">${w?.winner === 'zenith' ? 'ZENITH VANGUARD' : 'UMBRA SYNDICATE'} WINS</h2>${stadium}
+      ${progressHtml(rec, emblem)}
       <div class="btns"><button class="primary again">PLAY AGAIN</button><button class="hero">CHANGE HERO</button><button class="quit">MAIN MENU</button></div></div>`);
     (this.root.querySelector('.again') as HTMLElement).onclick = () => this.launch();
     (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };   // keeps Normal / Stadium
@@ -488,12 +489,13 @@ export class Menu {
       rankHtml = `<p class="qp">Quick Play record ${c.qp.wins}W - ${c.qp.games - c.qp.wins}L</p>`;
     }
     if (q !== 'practice') saveCareer(c);
+    const rec = recordCareerMatch(this.game, won ? 'win' : 'loss', this.opp, r => c.roles[r].rating);
     const acc = me.shots ? Math.round(me.hits / me.shots * 100) : 0;
     this.show(`<div class="pause results queue-res"><h2 class="${won ? 'win' : 'loss'}">${won ? 'VICTORY' : 'DEFEAT'}</h2>
       <p class="sres">${QUEUE_NAME[q]} · ${w.map.name} · ${w.rules === 'push' ? 'MIKOSHI RUSH' : 'CONTROL'} · ${score}</p>
       <div class="mystats"><div><b>${me.kills + me.assists}</b><small>ELIMINATIONS</small></div><div><b>${me.deaths}</b><small>DEATHS</small></div><div><b>${Math.round(me.dmgDone).toLocaleString('en-US')}</b><small>DAMAGE</small></div>
         <div><b>${Math.round(me.healDone).toLocaleString('en-US')}</b><small>HEALING</small></div><div><b>${Math.round(me.mitigated).toLocaleString('en-US')}</b><small>MITIGATED</small></div><div><b>${acc}%</b><small>ACCURACY</small></div></div>
-      ${rankHtml}
+      ${rankHtml}${progressHtml(rec, emblem)}
       <div class="btns"><button class="primary again">${q === 'practice' ? 'PLAY AGAIN' : 'QUEUE AGAIN'}</button><button class="hero">CHANGE HERO</button><button class="quit">MAIN MENU</button></div></div>`);
     (this.root.querySelector('.again') as HTMLElement).onclick = () => { this.game.stop(); if (q === 'practice') this.launchPractice(); else this.findMatch(); };
     (this.root.querySelector('.hero') as HTMLElement).onclick = () => { this.game.stop(); this.heroSelect(); };

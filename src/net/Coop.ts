@@ -1,14 +1,15 @@
 // Campaign co-op (up to 4): squads are advertised through the MQTT lobby; the host opens a PeerLink to every member.
-// The host runs the whole simulation; clients send their input and render the host's snapshots (see NetSync).
+// The host runs the whole simulation; clients send their input and render the host's snapshots (see FastSync).
 import { Lobby, type Presence, type LobbyMsg } from './lobby';
 import { PeerLink, type LinkState } from './link';
-import { NodeLobby } from './nodeLobby';
+import { NodeLobby, NET_URL } from './nodeLobby';
+import type { NetSession } from './session';
 
 export interface Member { id: string; name: string; hero: string; link?: LinkState; }
 
 const rid = () => Math.random().toString(36).slice(2, 10);
 
-export class Coop {
+export class Coop implements NetSession {
   lobby: Lobby | NodeLobby;
   role: 'host' | 'client' | null = null;
   links = new Map<string, PeerLink>();       // host: member id -> link ; client: host id -> link
@@ -19,6 +20,7 @@ export class Coop {
   onPlayers: ((p: Presence[]) => void) | null = null;
   onStart: ((level: string, squad: Member[]) => void) | null = null;
   onMessage: ((from: string, m: any) => void) | null = null;
+  onBinary: ((from: string, u: Uint8Array) => void) | null = null;
   onLeft: ((reason: string) => void) | null = null;
   onStatus: ((brokers: number) => void) | null = null;
 
@@ -79,13 +81,13 @@ export class Coop {
     } else if (m.t === 'sig') {
       const l = this.links.get(m.from); if (l && l.sid === m.sid) l.handleSignal(m as any);
     } else if (m.t === 'relay') {
-      const l = this.links.get(m.from); if (l && l.sid === m.sid) l.handleRelay((m as any).d);
+      const l = this.links.get(m.from); if (l && l.sid === m.sid) l.handleRelay(m as any);
     }
   }
 
   private link(peer: string, sid: string, initiator: boolean) {
     this.links.get(peer)?.close();
-    const l = new PeerLink(this.lobby, peer, sid, initiator);
+    const l = new PeerLink(this.lobby, peer, sid, initiator, { nodeUrl: this.transport === 'vercel' ? NET_URL : undefined });
     this.links.set(peer, l);
     this.updateFast();
     l.onState = s => {
@@ -98,6 +100,7 @@ export class Coop {
       } else if (this.role === 'host') this.emitSquad();
     };
     l.onMessage = msg => this.recv(peer, msg);
+    l.onBinary = u => this.onBinary?.(peer, u);
   }
 
   private recv(from: string, m: any) {

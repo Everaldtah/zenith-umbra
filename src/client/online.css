@@ -1,0 +1,50 @@
+/* PLAY ONLINE (desktop edition): lobby, queue, assemble, results extras */
+.online { overflow: auto; }
+.online h3 { font: 800 16px Orbitron; letter-spacing: .15em; margin: 18px 0 10px; opacity: .85; } .online h3 small { font: 600 14px Rajdhani; opacity: .6; letter-spacing: .05em; }
+.online .ostat { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; background: rgba(0,0,0,.35); border: 1px solid var(--line); padding: 10px 16px; }
+.online .ostat .ok { color: #7dff9a; font-weight: 700; letter-spacing: .1em; } .online .ostat .bad { color: #ffb347; font-weight: 700; letter-spacing: .1em; }
+.online .ostat label { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: .1em; }
+.online .ostat input { font: 600 16px Rajdhani; background: #111827; color: #fff; border: 1px solid var(--line); padding: 6px 10px; width: 170px; }
+.online .conn { display: flex; flex-direction: column; font-size: 14px; line-height: 1.25; margin-left: auto; } .online .conn b { font: 800 15px Orbitron; letter-spacing: .12em; }
+.online .ostat button { padding: 8px 16px; font-size: 15px; }
+.online .onotice { color: var(--gold); font-weight: 700; letter-spacing: .05em; margin: 10px 0 0; }
+.online .ogrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+.online .ocard { background: rgba(255,255,255,.05); border: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.online .ocard h3 { margin: 0; color: var(--gold); } .online .ocard p { margin: 0; opacity: .8; } .online .ocard small { opacity: .7; }
+.online .oroles { display: flex; gap: 8px; flex-wrap: wrap; }
+.online .oroles button { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 15px; } .online .oroles .ri { width: 20px; height: 20px; }
+.online .orole { flex: 1; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border: 1px solid var(--line); background: rgba(0,0,0,.25); cursor: pointer; transition: .15s; }
+.online .orole:hover { background: rgba(255,255,255,.1); } .online .orole .ri { width: 26px; height: 26px; } .online .orole small { font-size: 13px; }
+.online .row2 { display: flex; gap: 8px; align-items: center; } .online .row2 button { padding: 8px 16px; }
+.online .clist, .online .plist { list-style: none; margin: 0; padding: 0; }
+.online .clist li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.06); } .online .clist button { padding: 4px 12px; font-size: 14px; }
+.online .dim { opacity: .55; }
+.online .plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; }
+.online .plist li { display: flex; gap: 10px; align-items: baseline; padding: 4px 8px; background: rgba(255,255,255,.04); } .online .plist li.me { background: rgba(255,215,106,.1); }
+.online .plist span { opacity: .75; font-size: 14px; } .online .plist .st { margin-left: auto; opacity: .55; }
+/* assemble */
+.asm .asmhead { display: flex; justify-content: space-between; align-items: center; gap: 20px; background-size: cover; background-position: center; padding: 16px 20px; border: 1px solid var(--line); }
+.asm .asmhead h2 { margin: 0; } .asm .asmhead .tips { margin: 6px 0 0; max-width: 760px; opacity: .85; }
+.asm .clock { text-align: center; min-width: 140px; } .asm .clock small { display: block; letter-spacing: .3em; opacity: .7; } .asm .clock b { font: 900 46px Orbitron; color: var(--gold); }
+.asm .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+.asm .oteam ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.asm .oteam h3.zenith { color: var(--z); } .asm .oteam h3.umbra { color: var(--u); }
+.asm .oteam li { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.05); border-left: 4px solid var(--c, #556); padding: 6px 10px; }
+.asm .oteam li.me { background: rgba(255,215,106,.12); } .asm .oteam li.ai { opacity: .45; border-left-color: #333; }
+.asm .oteam li img { width: 40px; height: 40px; object-fit: cover; object-position: top; } .asm .oteam .q { width: 40px; height: 40px; display: grid; place-items: center; background: #1b2233; font: 800 14px Orbitron; font-style: normal; }
+.asm .oteam li div { display: flex; flex-direction: column; } .asm .oteam li b em { font: 800 11px Orbitron; color: var(--gold); font-style: normal; letter-spacing: .15em; margin-left: 6px; }
+.asm .oteam li small { display: flex; gap: 6px; align-items: center; opacity: .8; } .asm .oteam li small .ri { width: 14px; height: 14px; }
+.asm .oteam .lk { margin-left: auto; font-size: 13px; opacity: .8; } .asm .oteam .lk.connecting { color: #ffb347; } .asm .oteam .lk.closed { color: #ff6b81; }
+.asm .oteam .sw { padding: 2px 10px; font-size: 14px; }
+.asm .opick { display: flex; gap: 8px; flex-wrap: wrap; } .asm .opick .hc { width: 108px; } .asm .opick .hc.taken { opacity: .3; cursor: not-allowed; filter: grayscale(1); }
+.asm .bar label { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: .1em; }
+/* results: Hero Skill Rating + hero levels */
+.results .progress { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin: 14px 0; }
+.results .srs, .results .lvs { display: flex; flex-direction: column; gap: 6px; min-width: 300px; }
+.results .srch, .results .lvup { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.05); padding: 6px 10px; }
+.results .srch em.gain { color: #7dff9a; font-style: normal; } .results .srch em.loss { color: #ff6b81; font-style: normal; }
+.results .lvup img { width: 34px; height: 34px; object-fit: cover; object-position: top; } .results .lvup span { opacity: .85; font-size: 14px; }
+.results .lvup i { margin-left: auto; width: 80px; height: 5px; background: rgba(255,255,255,.12); position: relative; } .results .lvup u { position: absolute; inset: 0 auto 0 0; background: var(--gold); }
+/* in-match network readout */
+.netro { position: fixed; left: 10px; top: 24px; z-index: 6; font: 600 12px Rajdhani, sans-serif; letter-spacing: .04em; color: #dfe6ff; text-shadow: 0 1px 2px #000; pointer-events: none; opacity: .85; }
+.netro b { font-weight: 800; } .netro .d { display: block; opacity: .75; }

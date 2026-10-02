@@ -17,6 +17,12 @@ export class NodeLobby {
   onStatus: ((brokers: number) => void) | null = null;
   /** set by Coop while links are connecting / relaying: poll fast */
   fast = false;
+  /** extra fields for the next poll (matchmaking, profile card) */
+  extra: (() => Record<string, unknown> | null) | null = null;
+  /** every poll's answer (matchmaking status) */
+  onPoll: ((j: any) => void) | null = null;
+  /** the node's clock minus ours (ms) - match start times come in node time */
+  nodeOffset = 0;
   ok = false;
   failures = 0;
   private out: { to: string; msg: any }[] = [];
@@ -31,7 +37,7 @@ export class NodeLobby {
   private async loop() {
     if (this.closed) return;
     await this.poll();
-    const delay = this.fast ? 140 : this.me.status === 'playing' ? 2500 : 900;
+    const delay = this.fast ? 140 : this.me.status === 'playing' || this.me.status === 'online' ? 2500 : 900;
     this.timer = window.setTimeout(() => this.loop(), delay);
   }
 
@@ -40,9 +46,12 @@ export class NodeLobby {
     const out = this.out.splice(0, 64);
     const list = this.n++ % 3 === 0;
     try {
-      const r = await fetch(NET_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: this.id, me: bye ? undefined : this.me, out, list, bye }), keepalive: bye });
+      const x = bye ? null : this.extra?.() ?? null, t0 = Date.now();
+      const r = await fetch(NET_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: this.id, me: bye ? undefined : this.me, out, list, bye, ...x }), keepalive: bye });
       if (!r.ok) throw new Error(String(r.status));
       const j = await r.json();
+      if (typeof j.t === 'number') { const t1 = Date.now(); this.nodeOffset += ((j.t - (t0 + t1) / 2) - this.nodeOffset) * (this.n < 3 ? 1 : 0.2); }
+      this.onPoll?.(j);
       if (!this.ok) { this.ok = true; this.onStatus?.(1); }
       this.failures = 0;
       if (j.players) {
@@ -61,7 +70,9 @@ export class NodeLobby {
     } finally { this.busy = false; }
   }
 
-  setStatus(status: Status, mission?: string) { this.me = { ...this.me, status, mission }; }
+  setStatus(status: Status, mission?: string, info?: string) { this.me = { ...this.me, status, mission, info }; }
+  /** the poll right away (a queue join, a lobby change) */
+  now() { if (!this.closed && !this.busy) { clearTimeout(this.timer); this.timer = window.setTimeout(() => this.loop(), 0); } }
   setName(name: string) { this.me = { ...this.me, name: name.slice(0, 20) }; }
 
   send(to: string, msg: { t: string; [k: string]: unknown }, _reliable = true) {

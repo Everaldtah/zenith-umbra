@@ -14,12 +14,15 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PLAY_MAPS } from '../data/maps';
 import { HEROES, HERO, PILOTS } from '../data/heroes';
-import { createMatch, createCampaign, type Match } from '../game/setup';
+import { createMatch, createCampaign, createOnlineMatch, type Match, type OnlineSlot } from '../game/setup';
 import { bossCard } from '../campaign/Cinematic';
 import type { Director } from '../campaign/Director';
 import { ENEMIES, BOSSES, LEVEL } from '../campaign/data';
-import type { Coop } from '../net/Coop';
-import { HostSync, ClientSync } from '../net/NetSync';
+import type { NetSession } from '../net/session';
+import { FastHost, FastClient } from '../net/FastSync';
+import { cachedSpeed, TIER } from '../net/quality';
+import { Bot } from '../ai/Bot';
+import { CareerTracker, type CareerMode } from '../game/career';
 import { World as WorldCls } from '../game/World';
 import { Nav } from '../ai/Nav';
 import type { Mode, GameEvent } from '../game/World';
@@ -86,7 +89,11 @@ function colorBlindFilter(kind: string, strength: number): string {
 // physics rate: the desktop build simulates at 120 Hz (finer collisions, snappier input); the web build at 60 Hz
 const DT = 1 / (IS_DESKTOP ? 120 : 60);
 
-export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; net?: { coop: Coop; role: 'host' | 'client' }; skill?: number;
+export interface StartOpts { mode: Mode; map: string; hero: string | null; squad?: { hero: string; netId: string }[]; skill?: number;
+  /** a networked match: the session, this machine's part, and (online PvP) every human's seat */
+  net?: { coop: NetSession; role: 'host' | 'client'; slots?: OnlineSlot[] };
+  /** where the Career Profile files this match (default: the mode) */
+  career?: CareerMode;
   /** extra actors / controllers before the preload (the Hero Viewer's Ult Viewer: its dummies and routine) */
   setup?: (m: Match) => void; }
 
@@ -157,8 +164,13 @@ export class Game {
   /** dynamic render scale: the fraction of the chosen render scale being drawn right now */
   dynScale = 1;
   private dynAt = 0;
-  hostSync: HostSync | null = null;
-  clientSync: ClientSync | null = null;
+  hostSync: FastHost | null = null;
+  clientSync: FastClient | null = null;
+  /** follows the local player for the Career Profile (time per hero, accuracy, multikills...) */
+  career: CareerTracker | null = null;
+  /** online matches: the network readout (ping, update rate, loss, path) */
+  private netEl: HTMLDivElement | null = null;
+  private netAt = 0;
   onCampaignEnd: ((won: boolean) => void) | null = null;
   get director(): Director | null { return (this.match?.world.director as Director) ?? null; }
   onExit: (() => void) | null = null;
@@ -344,19 +356,35 @@ export class Game {
     if (this.composer) (this.composer.passes[0] as RenderPass).scene = this.scene;
     this.hostSync = null; this.clientSync = null;
     if (o.net?.role === 'client') {
-      // co-op client: an empty mirror world, filled from the host's snapshots
-      const w = new WorldCls(LEVEL[o.map].map, 'campaign');
-      Object.assign(w.extraDefs, ENEMIES, BOSSES);
+      // online / co-op client: an empty mirror world, filled from the host's snapshots (src/net/FastSync.ts)
+      const camp = o.mode === 'campaign';
+      const w = camp ? new WorldCls(LEVEL[o.map].map, 'campaign') : new WorldCls(o.map, o.mode);
+      if (camp) Object.assign(w.extraDefs, ENEMIES, BOSSES);
       this.match = { world: w, nav: new Nav(w.level), player: null, bots: [] };
       w.nav = this.match.nav;
-      this.clientSync = new ClientSync(w, o.net.coop, e => this.handleEvent(e), LEVEL[o.map]);
+      this.clientSync = new FastClient(w, o.net.coop, e => this.handleEvent(e), camp ? LEVEL[o.map] : null);
     } else {
+      const skill = o.skill ?? this.settings.difficulty;
       this.match = o.mode === 'campaign'
         ? createCampaign(o.map, o.squad ?? [{ hero: o.hero ?? 'tenkai', netId: 'local' }], this.settings.difficulty)
-        : createMatch(o.map, o.mode, o.hero, o.skill ?? this.settings.difficulty);
-      if (o.net?.role === 'host') this.hostSync = new HostSync(this.match.world, o.net.coop);
+        : o.net?.slots ? createOnlineMatch(o.map, o.mode, o.net.slots, skill)
+        : createMatch(o.map, o.mode, o.hero, skill);
+      if (o.net?.role === 'host') {
+        const hs = this.hostSync = new FastHost(this.match.world, o.net.coop);
+        hs.upKbps = cachedSpeed(60 * 60_000)?.upKbps ?? 0;
+        // a player who drops out mid-match: the AI takes over their hero (as Overwatch backfills)
+        hs.onPeerLost = a => {
+          const m = this.match; if (!m || m.world !== hs.w) return;
+          a.netId = '';
+          if (a.isRobot || m.world.mode === 'campaign' && a.team !== 'zenith') return;
+          const b = new Bot(m.world, a, m.nav, skill); a.controller = b; m.bots.push(b);
+          this.hud.event({ t: 'msg', text: 'A PLAYER LEFT - THE AI TAKES THEIR HERO', color: '#ffd76a' } as GameEvent, m.player, m.world.time);
+        };
+      }
       o.setup?.(this.match);
     }
+    const cm: CareerMode | null = o.career ?? (['quickplay', 'competitive', 'practice', 'skirmish', 'stadium', 'campaign', 'training'].includes(o.mode) ? o.mode as CareerMode : null);
+    this.career = cm ? new CareerTracker(cm, o.map) : null;
     this.bossCam = null;
     const w = this.match.world;
     CharacterView.level = w.level;                  // ragdolls land on this map's floors and walls
@@ -614,9 +642,25 @@ export class Game {
     this.swarm?.dispose(this.scene); this.swarm = null;
     this.scene.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
     this.match = null; this.mapScene = null; this.fx = null;
+    this.netEl?.remove(); this.netEl = null;
     this.hud.show(false);
     sfx.music(null);
     this.input.unlock();
+  }
+
+  /** the online readout, top left (Overwatch's network stats line): your link to the host, or the host's links */
+  private netReadout() {
+    if (!this.netEl) { this.netEl = document.createElement('div'); this.netEl.className = 'netro'; this.host.append(this.netEl); }
+    const c = this.clientSync, h = this.hostSync;
+    if (c) {
+      const l = c.link, t = TIER[c.tier];
+      this.netEl.innerHTML = l ? `<b style="color:${t.color}">● ${Math.round(l.stats.rtt)} ms</b> · ${c.snapHz.toFixed(0)} Hz ${t.label} · ${(Math.max(c.loss, l.stats.loss) * 100).toFixed(1)}% loss · ${l.stats.path === 'node' ? 'RELAY' : l.stats.path === 'turn' ? 'TURN' : l.stats.path === 'lan' ? 'LAN' : 'P2P'}<span class="d">interp ${c.interpMs.toFixed(0)} ms · ${(l.stats.kbpsIn).toFixed(0)} kbps in</span>`
+        : '<b style="color:#ff5d6d">● HOST LOST</b>';
+    } else if (h) {
+      const ids = [...h.s.links.keys()], info = ids.map(id => h.linkInfo(id)).filter(Boolean) as NonNullable<ReturnType<FastHost['linkInfo']>>[];
+      const worst = info.reduce((m, x) => Math.max(m, x.rtt), 0), out = info.reduce((m, x) => m + x.kbps, 0);
+      this.netEl.innerHTML = `<b style="color:#58ffb0">● HOSTING</b> · ${info.length} player${info.length === 1 ? '' : 's'} · worst ping ${worst} ms<span class="d">${info.map(x => `${TIER[x.tier as keyof typeof TIER].label} ${x.rtt}ms`).join(' · ')} · ${out.toFixed(0)} kbps out</span>`;
+    }
   }
 
   setPaused(p: boolean) {
@@ -664,7 +708,11 @@ export class Game {
     const m = this.match;
     if (!this.running || !m || !this.mapScene || !this.fx) { this.input.endFrame(); return; }
     const w = m.world;
-    if (this.clientSync) m.player = this.clientSync.me;
+    if (this.clientSync) {
+      // the first snapshot with our own hero: face where the host spawned it
+      if (this.clientSync.me && m.player !== this.clientSync.me) { this.camYaw = this.input.yaw = this.clientSync.me.yaw; this.camPitch = this.input.pitch = 0; }
+      m.player = this.clientSync.me;
+    }
     const me = m.player;
     const online = !!(this.clientSync || this.hostSync);
     // ---- input
@@ -700,20 +748,25 @@ export class Game {
         }
         if (!this.input.locked || this.paused) { me.input.fire = false; me.input.alt = false; me.input.mx = me.input.mz = 0; }
       }
+      const t0 = w.time;
       if (this.clientSync) {
+        // (predicts and moves its own hero, places everyone else between the host's snapshots)
         this.clientSync.apply(dt, me ? me.input : null);
-        if (me && me.alive) { w.time += 0; w.move(me, Math.min(dt, 0.05)); }
       } else {
         this.acc += dt * this.timeScale;
         let steps = 0;
         while (this.acc >= DT && steps < 16 * Math.max(1, this.timeScale)) {
           this.engine.beforeStep(w);
+          this.hostSync?.beforeStep();
           w.step(DT); this.acc -= DT; steps++;
+          this.hostSync?.afterStep();
           this.dispatch();
         }
         if (steps >= 16) this.acc = 0;
         this.hostSync?.flush();
       }
+      this.career?.frame(w, m.player, Math.max(0, Math.min(0.25, w.time - t0)));
+      if (online && performance.now() - this.netAt > 250) { this.netAt = performance.now(); this.netReadout(); }
     }
     // ---- views (from here to the HUD everything reads the poses at the shown instant, between the last two steps)
     this.engine.beginView(w, this.clientSync ? 1 : this.acc / DT, me);

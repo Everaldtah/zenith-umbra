@@ -16,12 +16,15 @@ export const TIER_COLOR = ['#b07a4a', '#c3ccd8', '#f2c14e', '#6fd6d0', '#7aa7ff'
 export const PLACEMENTS = 5;
 const DIV = 100, TIER_SPAN = DIV * 5, TOP = TIERS.length * TIER_SPAN - 1;   // 0 .. 3999
 
-export interface MatchLog { at: number; mode: 'competitive' | 'quickplay'; role?: RankRole; map: string; hero: string; won: boolean; delta?: number; mods?: string[]; score: string; }
+export interface MatchLog { at: number; mode: 'competitive' | 'quickplay' | 'online-comp' | 'online-qp'; role?: RankRole; map: string; hero: string; won: boolean; delta?: number; mods?: string[]; score: string; }
 export interface RoleRank { mmr: number; rating: number; games: number; wins: number; losses: number; streak: number; shield: number; }
-export interface Career { season: number; roles: Record<RankRole, RoleRank>; qp: { mmr: number; games: number; wins: number }; history: MatchLog[]; best: Partial<Record<RankRole, number>>; }
+export interface Career { season: number; roles: Record<RankRole, RoleRank>; qp: { mmr: number; games: number; wins: number }; history: MatchLog[]; best: Partial<Record<RankRole, number>>;
+  /** online play against other players: its own role ranks and Quick Play rating (matches vs AI lobbies don't move them) */
+  online: Record<RankRole, RoleRank>; oqp: { mmr: number; games: number; wins: number }; obest: Partial<Record<RankRole, number>>; }
 
 const fresh = (): RoleRank => ({ mmr: 1800, rating: 1800, games: 0, wins: 0, losses: 0, streak: 0, shield: 0 });
-export const newCareer = (): Career => ({ season: 1, roles: { tank: fresh(), damage: fresh(), support: fresh() }, qp: { mmr: 1800, games: 0, wins: 0 }, history: [], best: {} });
+export const newCareer = (): Career => ({ season: 1, roles: { tank: fresh(), damage: fresh(), support: fresh() }, qp: { mmr: 1800, games: 0, wins: 0 }, history: [], best: {},
+  online: { tank: fresh(), damage: fresh(), support: fresh() }, oqp: { mmr: 1800, games: 0, wins: 0 }, obest: {} });
 
 export interface RankView { tier: number; name: string; division: number; pct: number; color: string; placed: boolean; label: string; }
 /** the visible rank for a rating: tier, division (5..1), % through the division */
@@ -90,10 +93,11 @@ export function applyCompetitive(prev: RoleRank, won: boolean, opp: number, clos
   };
 }
 
-/** Quick Play: only a hidden matchmaking rating moves */
-export function applyQuickPlay(c: Career, won: boolean, opp: number) {
-  c.qp.mmr = Math.max(0, Math.min(TOP, c.qp.mmr + 24 * ((won ? 1 : 0) - expected(c.qp.mmr, opp))));
-  c.qp.games++; if (won) c.qp.wins++;
+/** Quick Play: only a hidden matchmaking rating moves (`online` = the online Quick Play rating) */
+export function applyQuickPlay(c: Career, won: boolean, opp: number, online = false) {
+  const q = online ? c.oqp : c.qp;
+  q.mmr = Math.max(0, Math.min(TOP, q.mmr + 24 * ((won ? 1 : 0) - expected(q.mmr, opp))));
+  q.games++; if (won) q.wins++;
 }
 
 // ---------------------------------------------------------------- the store (desktop profile, localStorage)

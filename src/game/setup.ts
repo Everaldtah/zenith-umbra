@@ -1,5 +1,5 @@
 // Match construction shared by the game client, the AI test lab and headless tests.
-import { rosterFor, type HeroDef } from '../data/heroes';
+import { rosterFor, HERO, type HeroDef, type TeamId } from '../data/heroes';
 import { FULL } from '../edition';
 import { Nav } from '../ai/Nav';
 import { Bot } from '../ai/Bot';
@@ -49,6 +49,47 @@ export function createMatch(mapId: string, mode: Mode, playerHero: string | null
     a.controller = b; bots.push(b);
   }
   if (mode === 'stadium') world.stadium = new Stadium(world);
+  return { world, nav, player, bots };
+}
+
+/** a seat in an online match: a hero, a side, and who plays it ('local' = this machine, a peer id, '' = AI) */
+export interface OnlineSlot { hero: string; team: TeamId; netId: string; }
+/**
+ * Online match (the host's world): the humans' heroes, and AI for every seat still empty - each side is filled to five
+ * (one tank, two damage, two support; roles the humans already cover are skipped, a side never fields the same hero
+ * twice). Few people online = a mostly-AI match; every extra player replaces a bot.
+ */
+export function createOnlineMatch(mapId: string, mode: Mode, slots: OnlineSlot[], skill = 0.7, rnd: () => number = Math.random): Match {
+  const world = new World(mapId, mode);
+  const nav = new Nav(world.level);
+  world.nav = nav;
+  const bots: Bot[] = [];
+  let player: Actor | null = null;
+  const HEROES = rosterFor(FULL);
+  const seats: { def: HeroDef; slot: OnlineSlot | null }[] = [];
+  for (const team of ['zenith', 'umbra'] as const) {
+    const humans = slots.filter(s => s.team === team && HERO[s.hero]?.team === team).slice(0, 5);
+    const used = new Set(humans.map(s => s.hero));
+    for (const s of humans) seats.push({ def: HERO[s.hero], slot: s });
+    const need: Record<string, number> = { tank: 1, dps: 2, support: 2 };
+    for (const s of humans) need[HERO[s.hero].role]--;
+    let open = 5 - humans.length;
+    for (const role of ['tank', 'support', 'dps'] as const) {
+      const pool = HEROES.filter(h => h.team === team && h.role === role && !used.has(h.id));
+      for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+      for (const h of pool.slice(0, Math.max(0, Math.min(open, need[role])))) { seats.push({ def: h, slot: null }); used.add(h.id); open--; }
+    }
+    // a side whose humans doubled up on a role still gets five: any hero left
+    for (const h of HEROES.filter(h => h.team === team && !used.has(h.id)).slice(0, open)) { seats.push({ def: h, slot: null }); used.add(h.id); }
+  }
+  // the roster order keeps spawn slots and the scoreboard stable
+  seats.sort((a, b) => HEROES.indexOf(a.def) - HEROES.indexOf(b.def));
+  for (const { def, slot } of seats) {
+    const a = world.addHero(def.id);
+    if (slot?.netId === 'local') { a.isPlayer = true; player = a; continue; }
+    if (slot?.netId) { a.netId = slot.netId; continue; }
+    const b = new Bot(world, a, nav, skill); a.controller = b; bots.push(b);
+  }
   return { world, nav, player, bots };
 }
 
