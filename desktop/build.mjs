@@ -40,7 +40,8 @@ if (process.argv.includes('--installer')) {
     targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), prepackaged: appDir,
     config: {
       appId: 'com.everaldtah.zenithumbra', productName: 'ZENITH UMBRA', directories: { output: path.join(HERE, 'out', 'installer') },
-      win: { icon: path.join(HERE, 'icon.ico'), signAndEditExecutable: false },
+      // executableName: shortcuts must point at the real exe (otherwise NSIS assumes '<productName>.exe', which doesn't exist)
+      win: { icon: path.join(HERE, 'icon.ico'), signAndEditExecutable: false, executableName: 'ZenithUmbra' },
       nsis: {
         oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, createStartMenuShortcut: true,
         shortcutName: 'ZENITH UMBRA', artifactName: 'ZenithUmbra-Setup.exe',
