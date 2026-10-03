@@ -91,6 +91,8 @@ const store = REST && TOKEN ? {
 };
 
 const clean = s => String(s ?? '').replace(/[^\w .\-']/g, '').slice(0, 24);
+/** a player's display name: clean() plus '#', so a Zenith.net name#tag stays whole in lobby lists and the queue */
+const cleanName = s => String(s ?? '').replace(/[^\w .\-'#]/g, '').slice(0, 24);
 /** free text shown in lobby lists (no markup characters) */
 const text = (s, n = 60) => String(s ?? '').replace(/[<>&"`\\]/g, '').slice(0, n);
 const num = (v, lo, hi, d = 0) => { const n = +v; return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
@@ -247,7 +249,7 @@ export default async function handler(req, res) {
     if (b.me) {
       const m = b.me;
       await store.hello({
-        id, name: clean(m.name) || 'Hero', status: STATUS.includes(m.status) ? m.status : 'lobby', mission: clean(m.mission),
+        id, name: cleanName(m.name) || 'Hero', status: STATUS.includes(m.status) ? m.status : 'lobby', mission: clean(m.mission),
         platform: m.platform === 'desktop' ? 'desktop' : 'web', v: +m.v || 1,
         ...(m.party ? { party: String(m.party).replace(/[^\w:-]/g, '').slice(0, 80) } : {}),   // Zenith.net launcher party
         ...(m.info ? { info: text(m.info) } : {}), ...(m.ping ? { ping: Math.round(num(m.ping, 0, 9999)) } : {}),
@@ -271,7 +273,7 @@ export default async function handler(req, res) {
         if (mm.op === 'join' && mm.left) await leaveForming(id, clean(mm.left));
         const prev = mm.op === 'stay' ? (await store.queue(qn)).find(e => e.id === id) : null;
         if (mm.op === 'join' || prev) {
-          await store.enqueue({ id, name: clean(b.me?.name) || 'Hero', q: qn, role: qn === 'comp' && role === 'flex' ? 'damage' : role, mmr: num(mm.mmr, 0, 3999, 1800), score: num(mm.score, 0, 1000, 50),
+          await store.enqueue({ id, name: cleanName(b.me?.name) || 'Hero', q: qn, role: qn === 'comp' && role === 'flex' ? 'damage' : role, mmr: num(mm.mmr, 0, 3999, 1800), score: num(mm.score, 0, 1000, 50),
             platform: b.me?.platform === 'desktop' ? 'desktop' : 'web', at: prev?.at ?? now, seen: now });
         }
         await matchmake(now);
