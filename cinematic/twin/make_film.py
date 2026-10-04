@@ -35,6 +35,7 @@ spec = importlib.util.spec_from_file_location('script', os.path.join(HERE, 'scri
 SC = importlib.util.module_from_spec(spec); spec.loader.exec_module(SC)
 
 FPS, RW, RH, SR = 24, 1920, 1080, 48000
+THREADS = '4'                                                 # shared PC: keep each encode to a few cores
 DRAFT = '--draft' in sys.argv
 ONLY = set(sys.argv[sys.argv.index('--only') + 1].split(',')) if '--only' in sys.argv else None
 NAMES = SC.NAMES
@@ -53,7 +54,7 @@ def probe_secs(p):
 
 
 def enc(out, crf=15):
-    return ['-an', '-r', str(FPS), '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-crf', str(crf), '-preset', 'medium', out]
+    return ['-an', '-r', str(FPS), '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-crf', str(crf), '-preset', 'medium', '-threads', THREADS, out]
 
 
 # ------------------------------------------------------------------ particle layers (black background, screened on)
@@ -264,6 +265,17 @@ def clip_bed(sid, secs):
     return a
 
 
+LUFS_TARGET = -16.0
+
+
+def loudness(f32):
+    """integrated loudness (EBU R128) of a raw stereo f32 mix"""
+    r = subprocess.run(['ffmpeg', '-v', 'info', '-f', 'f32le', '-ar', str(SR), '-ac', '2', '-i', f32, '-af', 'ebur128', '-f', 'null', '-'],
+                       capture_output=True, text=True).stderr
+    vals = [l.split('I:')[1].split('LUFS')[0] for l in r.splitlines() if l.strip().startswith('I:')]
+    return float(vals[-1]) if vals else None
+
+
 def soft_limit(x, t=0.72, ceil=0.95):
     m = np.abs(x) > t
     x[m] = np.sign(x[m]) * (t + (ceil - t) * np.tanh((np.abs(x[m]) - t) / (ceil - t)))
@@ -392,6 +404,11 @@ def main():
     audio, subs, total = mix(shots, vo)
     wav = os.path.join(W, 'mix.f32')
     audio.astype(np.float32).tofile(wav)
+    lufs = loudness(wav)                                      # level the whole mix to LUFS_TARGET, then limit again
+    if lufs is not None:
+        audio = soft_limit(audio * 10 ** ((LUFS_TARGET - lufs) / 20))
+        audio.astype(np.float32).tofile(wav)
+        print(f'loudness {lufs:.1f} -> {loudness(wav):.1f} LUFS', flush=True)
     master = os.path.join(W, 'twin_master.mp4')
     run(['ffmpeg', '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', lst, '-f', 'f32le', '-ar', str(SR), '-ac', '2', '-i', wav,
          '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-t', f'{total:.3f}', '-movflags', '+faststart', master])
@@ -403,7 +420,7 @@ def main():
     kbps = int(WEB_MB * 8e3 / total) - 128
     passlog = os.path.join(W, 'x264pass')
     common = ['-vf', 'scale=1280:720:flags=lanczos', '-c:v', 'libx264', '-b:v', f'{kbps}k', '-maxrate', f'{int(kbps * 2.5)}k',
-              '-bufsize', f'{kbps * 4}k', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-passlogfile', passlog]
+              '-bufsize', f'{kbps * 4}k', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-passlogfile', passlog, '-threads', THREADS]
     run(['ffmpeg', '-y', '-v', 'error', '-i', master, *common, '-pass', '1', '-an', '-f', 'mp4', os.devnull])
     run(['ffmpeg', '-y', '-v', 'error', '-i', master, *common, '-pass', '2', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
          os.path.join(film, 'twin_dragons.mp4')])
