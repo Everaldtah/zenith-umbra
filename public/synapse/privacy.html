@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy - Synapse Notes</title>
+  <meta name="description" content="Privacy policy for the Synapse Notes app for iPhone and iPad by Everald Tah." />
+  <style>
+    :root { --bg: #0b0d14; --fg: #e6e8ef; --muted: #9aa1b5; --line: #232838; --accent: #a78bfa; }
+    @media (prefers-color-scheme: light) { :root { --bg: #f7f7fa; --fg: #161821; --muted: #555b6e; --line: #dcdfe8; --accent: #6d28d9; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 4px; letter-spacing: .02em; }
+    h2 { font-size: 21px; margin: 40px 0 8px; padding-top: 24px; border-top: 1px solid var(--line); }
+    p, li { color: var(--fg); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    ul { padding-left: 20px; }
+    code { font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="muted">Synapse Notes for iPhone and iPad, by Everald Tah. Last updated 24 November 2026.</p>
+
+  <p>Synapse is a notes, documents and databases app with optional AI features. It has no accounts, no analytics,
+  no advertising, no tracking and no crash-reporting SDKs. The developer runs no server that receives your data and
+  never sees your notes, recordings, files or API keys.</p>
+
+  <h2>Stored on your device</h2>
+  <ul>
+    <li>Your workspace: pages, databases, comments, attachments, recordings, transcripts and files made by agents. They
+      are kept in the app's container, which you can open in the Files app under Synapse.</li>
+    <li>API keys and the Synapse Bridge pairing token, in the iOS Keychain.</li>
+    <li>Your settings, including which AI services you have allowed.</li>
+    <li>AI models you download and the Linux system, if you install it.</li>
+  </ul>
+  <p>Deleting the app removes all of this. You can also export your workspace as Markdown at any time
+  (Settings &gt; Export Markdown vault).</p>
+
+  <h2>Processed on your device</h2>
+  <p>By default, AI features run on the device with Apple Intelligence or with an open model you download.
+  Recordings are transcribed on the device with Apple's speech recognition. None of this leaves the device.</p>
+
+  <h2>When data leaves your device</h2>
+  <p>Synapse connects to the internet only when you, or an agent you asked to do something, start a request:</p>
+  <ul>
+    <li><strong>Cloud AI services you choose.</strong> If you pick a cloud model, your request goes to that service:
+      what you type, the page text and files you include, and any images or audio you attach. This can be an
+      OpenAI-compatible provider (for example NVIDIA NIM, Groq, Google Gemini, OpenRouter or Mistral, or a server of
+      your own), Anthropic's Claude API with your own key, or Synapse Bridge on your own computer, which passes the
+      request to Claude Code or Codex under your own Anthropic or OpenAI account. <strong>Before the first request to each
+      service, Synapse asks your permission and names the service.</strong> Nothing is sent if you decline. The
+      service's own privacy policy applies, and some free services may keep or log prompts. You can make Synapse ask
+      again under Settings &gt; Privacy.</li>
+    <li><strong>The web.</strong> When you or an agent search the web or open a page, the search terms go to the search
+      service (DuckDuckGo, Wikipedia or Google) and the page is loaded from its website, as in any browser.</li>
+    <li><strong>Downloads.</strong> AI models are downloaded from Hugging Face (huggingface.co). The Linux system is
+      downloaded from the project's GitHub releases, and packages you install in it come from their own
+      repositories.</li>
+    <li><strong>Synapse Bridge.</strong> If you pair the app with Synapse Bridge, it connects only to the computer you
+      paired, over your own network.</li>
+  </ul>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><strong>Camera:</strong> to scan the bridge's pairing QR code, take photos for your pages and scan documents.</li>
+    <li><strong>Microphone and speech recognition:</strong> to record meetings and voice notes and transcribe them on the
+      device.</li>
+    <li><strong>Local network:</strong> to reach Synapse Bridge on your computer.</li>
+  </ul>
+  <p>Each permission is requested only when you first use the feature, and can be changed in the iOS Settings app.</p>
+
+  <h2>Children</h2>
+  <p>Synapse is not directed at children and does not knowingly collect data from anyone.</p>
+
+  <h2>Changes and contact</h2>
+  <p>If a future version changes what is described here, this page will be updated before that version is released.
+  Questions about privacy: see the <a href="/synapse/support.html">support page</a>.</p>
+</main>
+</body>
+</html>
