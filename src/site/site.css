@@ -112,6 +112,6 @@ figcaption { padding: 10px 14px; } figcaption b { display: block; font: 800 18px
 .cin { position: relative; max-width: 900px; } .cin p { font-size: 21px; } .bosses { display: flex; gap: 10px; margin-top: 20px; } .bosses img { width: 19%; aspect-ratio: 16/9; object-fit: cover; border: 1px solid var(--line); }
 /* ---------------- download */
 .download .dl { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; } .download .dl > div { border: 1px solid var(--line); padding: 24px; background: rgba(255,255,255,.03); }
-.download small { display: block; margin-top: 12px; opacity: .6; } .src { margin-top: 24px; opacity: .8; }
+.download small { display: block; margin-top: 12px; opacity: .6; }
 footer { text-align: center; padding: 40px; opacity: .5; font-size: 14px; }
 @media (max-width: 900px) { .hgrid { grid-template-columns: repeat(2, 1fr); } .mgrid, .download .dl { grid-template-columns: 1fr; } .rival { grid-template-columns: 1fr; } .rival .vs { padding: 4px; } .nav nav { display: none; } .hmodal .mc { grid-template-columns: 1fr; } }

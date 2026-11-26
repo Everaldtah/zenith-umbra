@@ -68,8 +68,7 @@ ${FILMS.map(filmBlock).join('\n')}
   <div class="dl"><div><h3>Windows desktop app</h3><p>GPU-accelerated build with Ultra graphics, higher-resolution textures and uncapped frame rate. Windows 10/11, 64-bit, any DirectX 11 GPU (tested on an RTX 3050).</p>
     ${mobile ? '<p class="warn">Downloads are for PC only.</p>' : `<a class="btn primary" href="${INSTALLER}">⬇ DOWNLOAD ZenithUmbra-Setup.exe</a>`}<small>Unsigned indie build: if Windows SmartScreen appears, choose "More info → Run anyway".</small></div>
   <div><h3>Online co-op</h3><p>Host a squad from the campaign menu and friends running the Windows app (or the web version) see it in the lobby and join. The game's own online node on Vercel finds players and connects everyone peer-to-peer, relaying through the node when a direct link isn't possible.</p></div>
-  <div><h3>Play in the browser</h3><p>The web build auto-tunes graphics for your GPU. Chrome or Edge on a PC with a keyboard and mouse.</p>${mobile ? '' : `<a class="btn" href="${B}play.html">LAUNCH WEB VERSION</a>`}</div></div>
-  <p class="src">Source code: <a href="${REPO}">${REPO.replace('https://', '')}</a></p></section>
+  <div><h3>Play in the browser</h3><p>The web build auto-tunes graphics for your GPU. Chrome or Edge on a PC with a keyboard and mouse.</p>${mobile ? '' : `<a class="btn" href="${B}play.html">LAUNCH WEB VERSION</a>`}</div></div></section>
 <footer>ZENITH//UMBRA · an original game · characters, art and audio generated for this project</footer>`;
 
 // ---------------- hero modal
